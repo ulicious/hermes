@@ -46,15 +46,15 @@ def create_conversion_solutions(solution, commodities, benchmark, final_solution
     return new_solutions, benchmark, final_solution, c_num
 
 
-def iterate_through_means_of_transport(solution, means_of_transport,
-                                       destination_continent, destination_location, ports,
+def iterate_through_means_of_transport(data, solution, means_of_transport,
+                                       destination_continent, destination_location,
                                        benchmark, final_solution, r_num, configuration):
     s_commodity = solution.get_current_commodity_object()
 
     # Reachable locations are those which are within a certain tolerance, meaning, that we don't have
     # to do another road step but just assume that we are already there. Gap is closed with
     # transportation with current mean of transport
-    locations_within_tolerance = find_locations_within_tolerance(solution, configuration['tolerance_distance'])
+    locations_within_tolerance = find_locations_within_tolerance(data, solution, configuration['tolerance_distance'])
 
     new_solutions = []
     for mean_of_transport in means_of_transport:
@@ -68,7 +68,7 @@ def iterate_through_means_of_transport(solution, means_of_transport,
                     continue
 
             road_and_direct_transportation_solutions, benchmark, final_solution, r_num \
-                = find_routes_based_on_road_and_direct_transportation(solution, benchmark,
+                = find_routes_based_on_road_and_direct_transportation(data, solution, benchmark,
                                                                       final_solution, r_num, configuration)
 
             if road_and_direct_transportation_solutions:
@@ -84,7 +84,7 @@ def iterate_through_means_of_transport(solution, means_of_transport,
                 if mean_of_transport in ['Railroad', 'Pipeline_Gas', 'Pipeline_Liquid']:
 
                     new_network_solutions, benchmark, final_solution, r_num\
-                        = find_routes_through_network(solution, mean_of_transport,
+                        = find_routes_through_network(data, solution, mean_of_transport,
                                                       reachable_locations_for_mean_of_transport,
                                                       benchmark, final_solution, r_num, configuration)
 
@@ -94,9 +94,9 @@ def iterate_through_means_of_transport(solution, means_of_transport,
                 else:  # Shipping
 
                     new_shipping_solutions, benchmark, final_solution, r_num \
-                        = find_routes_based_on_shipping(solution, mean_of_transport,
+                        = find_routes_based_on_shipping(data, solution, mean_of_transport,
                                                         reachable_locations_for_mean_of_transport,
-                                                        ports, destination_continent, destination_location,
+                                                        destination_continent, destination_location,
                                                         benchmark, final_solution, r_num, configuration)
 
                     if new_shipping_solutions:
@@ -105,7 +105,7 @@ def iterate_through_means_of_transport(solution, means_of_transport,
     return new_solutions, benchmark, final_solution, r_num
 
 
-def find_routes_based_on_road_and_direct_transportation(solution, benchmark, final_solution, r_num, configuration):
+def find_routes_based_on_road_and_direct_transportation(data, solution, benchmark, final_solution, r_num, configuration):
     s_commodity = solution.get_current_commodity_object()
     final_destination = solution.get_destination()
     final_commodity = solution.get_final_commodity()
@@ -113,7 +113,7 @@ def find_routes_based_on_road_and_direct_transportation(solution, benchmark, fin
     new_solutions = []
 
     # Find routes to existing infrastructure (ports, feed-in and railroad stations)
-    target_data = find_routes_road_transportation(solution, benchmark,
+    target_data = find_routes_road_transportation(data, solution, benchmark,
                                                   configuration)
     for target in target_data:
 
@@ -250,7 +250,7 @@ def build_new_network_segments(solution, target_system, target_point, road_dista
     return new_solutions, benchmark, final_solution, r_num
 
 
-def find_routes_through_network(solution, mean_of_transport, reachable_locations_for_mean_of_transport,
+def find_routes_through_network(data, solution, mean_of_transport, reachable_locations_for_mean_of_transport,
                                 benchmark, final_solution, r_num, configuration):
 
     """
@@ -277,21 +277,33 @@ def find_routes_through_network(solution, mean_of_transport, reachable_locations
         graph_id = reachable_locations_for_mean_of_transport.loc[n_start, 'graph']
 
         if mean_of_transport == 'Railroad':
-            graph = solution.get_railroad_networks()[graph_id]['Graph']
-            graph_data = solution.get_railroad_networks()[graph_id]['GraphData']
-            graph_object = solution.get_railroad_networks()[graph_id]['GraphObject']
-            geodata = solution.get_railroad_networks()[graph_id]['GeoData']
+
+            if graph_id in solution.get_used_railroad_networks():
+                continue
+
+            graph = data['Railroad'][graph_id]['Graph']
+            graph_data = data['Railroad'][graph_id]['GraphData']
+            graph_object = data['Railroad'][graph_id]['GraphObject']
+            geodata = data['Railroad'][graph_id]['GeoData']
 
         elif mean_of_transport in ['Pipeline_Gas', 'Pipeline_Gas_New']:
-            graph = solution.get_pipeline_gas_networks()[graph_id]['Graph']
-            graph_data = solution.get_pipeline_gas_networks()[graph_id]['GraphData']
-            graph_object = solution.get_pipeline_gas_networks()[graph_id]['GraphObject']
-            geodata = solution.get_pipeline_gas_networks()[graph_id]['GeoData']
+
+            if graph_id in solution.get_used_pipeline_gas_networks():
+                continue
+
+            graph = data['Pipeline_Gas'][graph_id]['Graph']
+            graph_data = data['Pipeline_Gas'][graph_id]['GraphData']
+            graph_object = data['Pipeline_Gas'][graph_id]['GraphObject']
+            geodata = data['Pipeline_Gas'][graph_id]['GeoData']
         else:
-            graph = solution.get_pipeline_liquid_networks()[graph_id]['Graph']
-            graph_data = solution.get_pipeline_liquid_networks()[graph_id]['GraphData']
-            graph_object = solution.get_pipeline_liquid_networks()[graph_id]['GraphObject']
-            geodata = solution.get_pipeline_liquid_networks()[graph_id]['GeoData']
+
+            if graph_id in solution.get_used_pipeline_liquid_networks():
+                continue
+
+            graph = data['Pipeline_Liquid'][graph_id]['Graph']
+            graph_data = data['Pipeline_Liquid'][graph_id]['GraphData']
+            graph_object = data['Pipeline_Liquid'][graph_id]['GraphObject']
+            geodata = data['Pipeline_Liquid'][graph_id]['GeoData']
 
         # Check if n_start is already in graph or is new node based on shortest distance
         # Update geodata, graph_data and graph_object if new node
@@ -355,11 +367,11 @@ def find_routes_through_network(solution, mean_of_transport, reachable_locations
                     # Remove the graph from the new solution
                     # as graph cannot be used twice from same or following solutions
                     if mean_of_transport == 'Railroad':
-                        s_new.remove_railroad_network(graph_id)
+                        s_new.add_used_railroad_network(graph_id)
                     elif mean_of_transport in ['Pipeline_Gas']:
-                        s_new.remove_pipeline_gas_network(graph_id)
+                        s_new.add_used_pipeline_gas_network(graph_id)
                     else:
-                        s_new.remove_pipeline_liquid_network(graph_id)
+                        s_new.add_used_pipeline_liquid_network(graph_id)
 
                     # Don't add solutions which have already higher costs than benchmark
                     if s_new.get_total_costs() < benchmark:
@@ -382,9 +394,11 @@ def find_routes_through_network(solution, mean_of_transport, reachable_locations
     return new_solutions, benchmark, final_solution, r_num
 
 
-def find_routes_based_on_shipping(solution, mean_of_transport, reachable_locations_for_mean_of_transport,
-                                  ports, destination_continent, destination_location,
+def find_routes_based_on_shipping(data, solution, mean_of_transport, reachable_locations_for_mean_of_transport,
+                                  destination_continent, destination_location,
                                   benchmark, final_solution, r_num, configuration):
+
+    ports = data['Shipping']
 
     s_commodity = solution.get_current_commodity_object()
     final_destination = solution.get_destination()
@@ -394,8 +408,7 @@ def find_routes_based_on_shipping(solution, mean_of_transport, reachable_locatio
     transportation_costs \
         = s_commodity.get_transportation_costs_specific_mean_of_transport(mean_of_transport)
 
-    ports_of_solution = solution.get_ports().copy()
-    ports_of_solution = remove_and_sort_ports(ports_of_solution.copy(),
+    ports_of_solution = remove_and_sort_ports(data, solution,
                                               destination_continent,
                                               destination_location,
                                               transportation_costs,
@@ -442,6 +455,8 @@ def find_routes_based_on_shipping(solution, mean_of_transport, reachable_locatio
                                                             distance_to_target,
                                                             line_to_target, r_num)
 
+            s_new.add_used_port(port_start)
+
             # Don't add solutions which have already higher costs than benchmark
             if s_new.get_total_costs() < benchmark:
                 new_solutions.append(s_new)
@@ -459,8 +474,6 @@ def find_routes_based_on_shipping(solution, mean_of_transport, reachable_locatio
                     final_solution = s_new
 
                 r_num += 1
-
-            s_new.remove_port(port_start)
 
     return new_solutions, benchmark, final_solution, r_num
 

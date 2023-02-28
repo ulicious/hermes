@@ -9,9 +9,6 @@ from shapely.ops import unary_union
 
 from methods_plotting import plot_lines, plot_lines_and_show_specific
 
-path_data = 'C:/Users/mt5285/Desktop/Transportmodel/Daten/'
-path_railway_data = 'C:/Users/mt5285/Desktop/Transportmodel/Daten/railway_data/'
-
 if False:
 
     with open(path_data + 'seaports.geojson') as f:
@@ -47,7 +44,7 @@ def get_geodata_and_graph_from_network_data(path_network_data, name_network):
 
     existing_nodes = []
 
-    for file in os.listdir(path_railway_data):
+    for file in os.listdir(path_network_data):
 
         railway_data = pd.read_csv(path_network_data + file, index_col=0, sep=';')
         lines = [shapely.wkt.loads(line) for line in railway_data['geometry']]
@@ -108,8 +105,12 @@ def get_geodata_and_graph_from_network_data(path_network_data, name_network):
             existing_lines_dict[edge_number] = result
             coords = result.coords
 
-            beeline_distance = vincenty((round(coords.xy[0][0], 5), round(coords.xy[1][0], 5)),
-                        (round(coords.xy[0][-1], 5), round(coords.xy[1][-1], 5)))
+            try:
+                beeline_distance = vincenty((round(coords.xy[0][0], 5), round(coords.xy[1][0], 5)),
+                                            (round(coords.xy[0][-1], 5), round(coords.xy[1][-1], 5)))
+            except Exception:
+                # Seems like some linestring are only a point. Skip
+                continue
 
             if beeline_distance < 1000:
                 continue
@@ -164,19 +165,16 @@ def get_geodata_and_graph_from_network_data(path_network_data, name_network):
                                                                                            'graph'])
     line_data = pd.DataFrame.from_dict(existing_lines_dict, orient='index', columns=['geometry'])
 
-    line_data.to_csv(path_network_data + name_network + '_graphs_objects.csv')
-    railway_graphs.to_csv(path_network_data + name_network + '_graphs.csv')
-    railway_geodata.to_csv(path_network_data + name_network + '_geodata.csv')
+    line_data.to_csv(path_data + name_network + '_graphs_objects.csv')
+    railway_graphs.to_csv(path_data + name_network + '_graphs.csv')
+    railway_geodata.to_csv(path_data + name_network + '_geodata.csv')
 
 
-def get_networks_from_data(data, use_intersections_as_nodes=False):
+path_data = '/home/localadmin/Dokumente/Daten_Transportmodell/'
+path_railway_data = '/home/localadmin/Dokumente/Daten_Transportmodell/railway_data/'
+path_gas_pipeline_data = '/home/localadmin/Dokumente/Daten_Transportmodell/gas_pipeline_data/'
+path_oil_pipeline_data = '/home/localadmin/Dokumente/Daten_Transportmodell/oil_pipeline_data/'
 
-    for ind in data.index:
-
-        network = data.loc[ind, 'geometry']
-
-        x, y = network.coords.xy
-        stations = pd.DataFrame(list(zip(x, y)), columns=['LAT', 'LON'])
-
-
-get_geodata_and_graph_from_network_data(path_railway_data, 'railroad')
+# get_geodata_and_graph_from_network_data(path_railway_data, 'railroad')
+get_geodata_and_graph_from_network_data(path_gas_pipeline_data, 'gas_pipeline')
+get_geodata_and_graph_from_network_data(path_oil_pipeline_data, 'oil_pipeline')

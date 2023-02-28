@@ -21,7 +21,7 @@ def find_searoute(start_coordinates, destination_coordinates, real_starting_poin
     return (Point(destination_coordinates), distance, line)
 
 
-def remove_and_sort_ports(ports, destination_continent, destination_point,
+def remove_and_sort_ports(data, solution, destination_continent, destination_point,
                           transportation_costs, current_costs, benchmark):
 
     """
@@ -36,6 +36,13 @@ def remove_and_sort_ports(ports, destination_continent, destination_point,
             destination_continent = ['Europe', 'Asia']
         else:
             destination_continent = [destination_continent]
+
+    ports = data['Shipping'].copy()
+
+    # Remove options which have been used already by solution
+    used_ports = solution.get_used_ports()
+    if used_ports:
+        ports = ports.drop(used_ports)
 
     considered_ports = []
     for p in ports.index:

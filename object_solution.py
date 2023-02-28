@@ -31,41 +31,41 @@ class Solution:
     def get_current_commodity_object(self):
         return self.current_commodity_object
 
-    def set_ports(self, ports):
-        self.ports = ports
+    def set_used_ports(self, used_ports):
+        self.used_ports = used_ports
 
-    def get_ports(self):
-        return self.ports
+    def get_used_ports(self):
+        return self.used_ports
 
-    def remove_port(self, port):
-        self.ports = self.ports.drop(port)
+    def add_used_port(self, port):
+        self.used_ports = self.used_ports.append(port)
 
-    def set_pipeline_gas_networks(self, pipeline_gas_networks):
-        self.pipeline_gas_networks = pipeline_gas_networks
+    def set_used_pipeline_gas_networks(self, used_pipeline_gas_networks):
+        self.used_pipeline_gas_networks = used_pipeline_gas_networks
 
-    def get_pipeline_gas_networks(self):
-        return self.pipeline_gas_networks
+    def get_used_pipeline_gas_networks(self):
+        return self.used_pipeline_gas_networks
 
-    def remove_pipeline_gas_network(self, pipeline_gas_network):
-        self.pipeline_gas_networks.pop(pipeline_gas_network)
+    def add_used_pipeline_gas_network(self, used_pipeline_gas_network):
+        self.used_pipeline_gas_networks.append(used_pipeline_gas_network)
 
-    def set_pipeline_liquid_networks(self, pipeline_liquid_networks):
-        self.pipeline_liquid_networks = pipeline_liquid_networks
+    def set_used_pipeline_liquid_networks(self, used_pipeline_liquid_networks):
+        self.used_pipeline_liquid_networks = used_pipeline_liquid_networks
 
-    def get_pipeline_liquid_networks(self):
-        return self.pipeline_liquid_networks
+    def get_used_pipeline_liquid_networks(self):
+        return self.used_pipeline_liquid_networks
 
-    def remove_pipeline_liquid_network(self, pipeline_liquid_network):
-        self.pipeline_liquid_networks.pop(pipeline_liquid_network)
+    def add_used_pipeline_liquid_network(self, used_pipeline_liquid_network):
+        self.used_pipeline_liquid_networks.append(used_pipeline_liquid_network)
 
-    def set_railroad_networks(self, railroad_networks):
-        self.railroad_networks = railroad_networks
+    def set_used_railroad_networks(self, used_railroad_networks):
+        self.used_railroad_networks = used_railroad_networks
 
-    def get_railroad_networks(self):
-        return self.railroad_networks
+    def get_used_railroad_networks(self):
+        return self.used_railroad_networks
 
-    def remove_railroad_network(self, railroad_network):
-        self.railroad_networks.pop(railroad_network)
+    def add_used_railroad_network(self, railroad_network):
+        self.used_railroad_networks.append(railroad_network)
 
     def get_destination(self):
         return self.destination
@@ -134,18 +134,19 @@ class Solution:
         used_transport_means = copy.deepcopy(self.used_transport_means)
         result_lines = copy.deepcopy(self.result_lines)
         previous_solutions = copy.deepcopy(self.previous_solutions)
-        ports = copy.deepcopy(self.ports)
-        pipeline_gas_networks = copy.deepcopy(self.pipeline_gas_networks)
-        pipeline_liquid_networks = copy.deepcopy(self.pipeline_liquid_networks)
-        railroad_networks = copy.deepcopy(self.railroad_networks)
+
+        used_ports = deepcopy(self.used_ports)
+        used_pipeline_gas_networks = deepcopy(self.used_pipeline_gas_networks)
+        used_pipeline_liquid_networks = deepcopy(self.used_pipeline_liquid_networks)
+        used_railroad_networks = deepcopy(self.used_railroad_networks)
 
         return Solution(name=self.name,
                         current_location=self.current_location, current_commodity=self.current_commodity,
                         current_commodity_object=self.current_commodity_object,
-                        ports=ports,
-                        pipeline_gas_networks=pipeline_gas_networks, pipeline_liquid_networks=pipeline_liquid_networks,
-                        railroad_networks=railroad_networks,
                         destination=self.destination, final_commodity=self.final_commodity,
+                        used_ports=used_ports, used_pipeline_gas_networks=used_pipeline_gas_networks,
+                        used_pipeline_liquid_networks=used_pipeline_liquid_networks,
+                        used_railroad_networks=used_railroad_networks,
                         total_cost=self.total_cost,
                         total_length=self.total_length,
                         used_transport_means=used_transport_means, result_lines=result_lines,
@@ -153,10 +154,9 @@ class Solution:
 
     def __init__(self, name,
                  current_location, current_commodity, current_commodity_object,
-                 ports,
-                 pipeline_gas_networks, pipeline_liquid_networks,
-                 railroad_networks,
                  destination, final_commodity,
+                 used_ports=None, used_pipeline_gas_networks=None,
+                 used_pipeline_liquid_networks=None, used_railroad_networks=None,
                  total_cost=0, total_length=0,
                  used_transport_means=None, result_lines=None, previous_solutions=None):
 
@@ -165,10 +165,25 @@ class Solution:
         self.current_commodity = current_commodity
         self.current_commodity_object = current_commodity_object
 
-        self.ports = ports
-        self.pipeline_gas_networks = pipeline_gas_networks
-        self.pipeline_liquid_networks = pipeline_liquid_networks
-        self.railroad_networks = railroad_networks
+        if used_ports is None:
+            self.used_ports = []
+        else:
+            self.used_ports = used_ports
+
+        if used_pipeline_gas_networks is None:
+            self.used_pipeline_gas_networks = []
+        else:
+            self.used_pipeline_gas_networks = used_pipeline_gas_networks
+
+        if used_pipeline_liquid_networks is None:
+            self.used_pipeline_liquid_networks = []
+        else:
+            self.used_pipeline_liquid_networks = used_pipeline_liquid_networks
+
+        if used_railroad_networks is None:
+            self.used_railroad_networks = []
+        else:
+            self.used_railroad_networks = used_railroad_networks
 
         self.destination = destination
         self.final_commodity = final_commodity

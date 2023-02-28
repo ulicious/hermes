@@ -119,7 +119,7 @@ def find_benchmark_solution(s, ports):
     return s_new
 
 
-def find_locations_within_tolerance(solution, tolerance_distance):
+def find_locations_within_tolerance(data, solution, tolerance_distance):
 
     """
     Method checks if infrastructure like ports, pipelines or railroads are reachable within tolerance
@@ -128,11 +128,16 @@ def find_locations_within_tolerance(solution, tolerance_distance):
     :return: All ports, feed-in and railroad stations within the tolerance
     """
 
-    def find_possible_options_based_on_location(options, mean_of_transport):
+    def find_possible_options_based_on_location(mean_of_transport):
 
         # todo: don't consider options which are not reachable --> not same continent
 
         if mean_of_transport == 'Shipping':  # Finds ports
+
+            options = data['Shipping'].copy()
+
+            # Don't use already used infrastructure again
+            used_ports = solution.get_used_ports()
 
             # Sort ports by distance to location
             options['distance'] = calc_distance_lists(options['latitude'], options['longitude'], location.y, location.x)
@@ -140,6 +145,10 @@ def find_locations_within_tolerance(solution, tolerance_distance):
 
             possible_options = []
             for option in options.index:
+
+                if used_ports:
+                    if option in used_ports:
+                        continue
 
                 option_location_lon = options.loc[option, 'longitude']
                 option_location_lat = options.loc[option, 'latitude']
@@ -158,9 +167,23 @@ def find_locations_within_tolerance(solution, tolerance_distance):
 
         else:  # Case networks (pipelines and railway)
 
+            options = data[mean_of_transport].copy()
+
+            # Don't use already used infrastructure again
+            if mean_of_transport == 'Railroad':
+                used_stations = solution.get_used_railroad_networks()
+            elif mean_of_transport == 'Pipeline_Liquid':
+                used_stations = solution.get_used_railroad_networks()
+            else:
+                used_stations = solution.get_used_railroad_networks()
+
             # Finds feed-in and railroad stations
             overall_geodata_df = pd.DataFrame(columns=['latitude', 'longitude', 'graph'])
             for g in [*options.keys()]:
+
+                if used_stations:
+                    if g in used_stations:
+                        continue
 
                 geo_data = options[g]['GeoData']
                 graph_object = options[g]['GraphObject']
@@ -239,26 +262,19 @@ def find_locations_within_tolerance(solution, tolerance_distance):
     commodity = solution.get_current_commodity_object()
     location = solution.get_current_location()
 
-    ports = solution.get_ports()
-    pipeline_gas_networks = solution.get_pipeline_gas_networks()
-    pipeline_liquid_networks = solution.get_pipeline_liquid_networks()
-    railroad_networks = solution.get_railroad_networks()
-
     means_of_transport = {}
 
     if 'Pipeline_Liquid' in commodity.get_transportation_options():
-        means_of_transport['Pipeline_Liquid'] = find_possible_options_based_on_location(pipeline_liquid_networks,
-                                                                                        'Pipeline_Liquid')
+        means_of_transport['Pipeline_Liquid'] = find_possible_options_based_on_location('Pipeline_Liquid')
 
     if 'Pipeline_Gas' in commodity.get_transportation_options():
-        means_of_transport['Pipeline_Gas'] = find_possible_options_based_on_location(pipeline_gas_networks,
-                                                                                     'Pipeline_Gas')
+        means_of_transport['Pipeline_Gas'] = find_possible_options_based_on_location('Pipeline_Gas')
 
     if 'Shipping' in commodity.get_transportation_options():
-        means_of_transport['Shipping'] = find_possible_options_based_on_location(ports, 'Shipping')
+        means_of_transport['Shipping'] = find_possible_options_based_on_location('Shipping')
 
     if 'Railroad' in commodity.get_transportation_options():
-        means_of_transport['Railroad'] = find_possible_options_based_on_location(railroad_networks, 'Railroad')
+        means_of_transport['Railroad'] = find_possible_options_based_on_location('Railroad')
 
     if False:
 

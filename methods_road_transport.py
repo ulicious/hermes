@@ -9,7 +9,7 @@ import json  # call the OSMR API
 from _helpers import calc_distance, calc_distance_lists
 
 
-def find_routes_road_transportation(solution, benchmark, configuration):
+def find_routes_road_transportation(data, solution, benchmark, configuration):
 
     """
 
@@ -91,19 +91,28 @@ def find_routes_road_transportation(solution, benchmark, configuration):
             except Exception:
                 pass
 
-    def find_possible_destinations_and_routes(options, target_network):
+    def find_possible_destinations_and_routes(target_network):
 
         """
         Finds all possible ports and feed-in / railroad stations which are reachable by road transport
         Finds road to destination of possible
         """
 
-        if isinstance(options, pd.DataFrame):  # ports
+        if target_network == 'Shipping':  # ports
+
+            options = data['Shipping'].copy()
+
+            # Don't use already used infrastructure again
+            used_ports = solution.get_used_ports()
 
             options['distance'] = calc_distance_lists(options['latitude'], options['longitude'], location.y, location.x)
             options.sort_values(['distance'], inplace=True)
 
             for option in options.index:
+
+                if used_ports:
+                    if option in used_ports:
+                        continue
 
                 option_location_lon = float(options.loc[option, 'longitude'])
                 option_location_lat = float(options.loc[option, 'latitude'])
@@ -121,11 +130,27 @@ def find_routes_road_transportation(solution, benchmark, configuration):
                     if configuration['find_only_closest']:
                         break
 
-        elif isinstance(options, dict):
+        else:
 
             # todo: get as close as possible with road transport
 
+            options = data[target_network].copy()
+
+            # Don't use already used infrastructure again
+            if target_network == 'Railroad':
+                used_stations = solution.get_used_railroad_networks()
+            elif target_network == 'Pipeline_Liquid':
+                used_stations = solution.get_used_railroad_networks()
+            else:
+                used_stations = solution.get_used_railroad_networks()
+
+            # Iterate through networks
             for g in [*options.keys()]:
+
+                if used_stations:
+                    if g in used_stations:
+                        continue
+
                 geo_data = options[g]['GeoData'].copy()
                 graph_object = options[g]['GraphObject']
 
@@ -174,10 +199,10 @@ def find_routes_road_transportation(solution, benchmark, configuration):
     if (total_costs + direct_path_destination / 1000 * transportation_costs) < benchmark:
         calculate_route(destination.y, destination.x, 'Destination')
 
-    find_possible_destinations_and_routes(solution.get_ports(), 'Shipping')
-    find_possible_destinations_and_routes(solution.get_pipeline_gas_networks(), 'Pipeline_Gas')
-    find_possible_destinations_and_routes(solution.get_pipeline_liquid_networks(), 'Pipeline_Liquid')
-    find_possible_destinations_and_routes(solution.get_railroad_networks(), 'Railroad')
+    find_possible_destinations_and_routes('Shipping')
+    find_possible_destinations_and_routes('Pipeline_Gas')
+    find_possible_destinations_and_routes('Pipeline_Liquid')
+    find_possible_destinations_and_routes('Railroad')
 
     return possible_destinations_and_routes
 
