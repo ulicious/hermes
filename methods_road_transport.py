@@ -1,210 +1,131 @@
-import openrouteservice
-from openrouteservice import convert
-from shapely.geometry import Point, LineString
-from shapely.ops import nearest_points
 import pandas as pd
 import requests
-import json  # call the OSMR API
+import json
+import time
 
-from _helpers import calc_distance, calc_distance_lists
 
+def get_road_distance_to_single_option(configuration, location, option, direct_distance=None):
+    # todo: The tool also uses direct transportation somehow. Needs to be avoided
 
-def find_routes_road_transportation(data, solution, benchmark, configuration):
+    successful = False
+    routes = None
+    while not successful:
 
-    """
-
-    :param solution: Currently processed solution
-    :param tolerance_distance: Distance, within road transport is excluded as it is assumed that
-    solution is at location. Used to avoid unnecessary road transport for very short distances
-    :param benchmark: Current benchmark of algorithm. Used to exclude road transport
-    if using the direct path is already more expensive than benchmark
-    :param configuration
-    :return: unique solutions
-    """
-
-    # todo 2: Direct path to network not just stations
-    # todo 1: implement the option that not every possible target (e.g., all ports) but only closest
-    # todo: could be further filtered that only solutions are processed which are, for example, on the same continent
-    #  as no road transportation exists of the landmass is not connected
-
-    def calculate_route(option_lat, option_lon, network):
-
-        if True:
-
-            # todo: Compare with openrouteservice
-            # todo: The tool also uses direct transportation somehow. Needs to be avoided
-
+        try:
             r = requests.get(
-                f"http://router.project-osrm.org/route/v1/car/{location.x},{location.y};{option_lon},{option_lat}?steps=true&geometries=geojson""")
+                f"http://router.project-osrm.org/route/v1/car/{location.x},{location.y};"
+                f"{option.x},{option.y}?steps=true&geometries=geojson""")
             routes = json.loads(r.content)
+            successful = True
 
-            if routes['code'] != 'NoRoute':
-                route = routes.get("routes")[0]
-                point_list = []
-                for point in route['geometry']['coordinates']:
-                    point_list.append(Point(point))
+        except Exception:
+            time.sleep(1)
 
-                additional_distance = 0
-                if point_list[0] != location:
-                    # Case, that initial starting point is not on street:
-                    # todo, hier gibt es anscheinend auch einen service
-                    #  http://project-osrm.org/docs/v5.5.1/api/?language=Python#nearest-service
-                    #  Wäre hilfreich für die Distanz zu Häfen, wenn kein direkter Weg hinführt
-                    #  (aber z.B. nur 500 m entfernt)
-                    point_list = [location] + point_list
-                    additional_distance = calc_distance(location.y, location.x, point_list[0].y, point_list[0].x)
+    if routes['code'] != 'NoRoute':
+        route = routes.get("routes")[0]
+        # Case, that initial starting point is not on street:
+        # todo, hier gibt es anscheinend auch einen service
+        #  http://project-osrm.org/docs/v5.5.1/api/?language=Python#nearest-service
+        #  Wäre hilfreich für die Distanz zu Häfen, wenn kein direkter Weg hinführt
+        #  (aber z.B. nur 500 m entfernt)
 
-                line = LineString(point_list)
-                distance = route['distance'] + additional_distance
+        return route['distance']
 
-                possible_destinations_and_routes.append((network, point_list[-1], distance, line))
+    else:
 
-        if False:
+        return direct_distance * configuration['no_road_multiplier']
 
-            coords = ((location.x, location.y), (option_lon, option_lat))
-            client = openrouteservice.Client(key='5b3ce3597851110001cf624899e56e0020834bdab4da20c23edad68f')
 
+def get_road_distance_to_options(configuration, location, options, step_size=200):
+
+    start_string = 'http://router.project-osrm.org/table/v1/driving/' + str(location.x) + ',' + str(
+        location.y)
+    end_string = '?sources=0&annotations=distance'
+
+    all_options = options.index.tolist()
+    all_distances = pd.DataFrame(index=options.index, columns=['road_distance'])
+
+    while all_options:
+        options_to_check = all_options[:step_size]
+        destination_string = ''
+        for option in options_to_check:
+            destination_string += ';' + str(options.loc[option, 'destination_longitude']) + ',' + str(
+                options.loc[option, 'destination_latitude'])
+
+        request_string = start_string + destination_string + end_string
+
+        successful = False
+        while not successful:
             try:
-
-                # todo: Important: utilization of openrouteservice is limited. As the application is wrapped in try,
-                #  problems with access might not be stated
-
-                routes = client.directions(coords, profile='driving-hgv')  # Route für LKW
-                geometry = client.directions(coords)['routes'][0]['geometry']
-                decoded = convert.decode_polyline(geometry)
-                point_list = []
-                for point in decoded['coordinates']:
-                    point_list.append(Point(point))
-
-                additional_distance = 0
-                if point_list[0] != location:
-                    # Case, that initial starting point is not on street:
-                    point_list = [location] + point_list
-                    additional_distance = calc_distance(location.y, location.x, point_list[0].y, point_list[0].x)
-
-                line = LineString(point_list)
-                distance = routes['routes'][0]['summary']['distance'] + additional_distance
-
-                possible_destinations_and_routes.append((network, name_network, name_option,
-                                                         point_list[-1], distance, line))
+                r = requests.get(request_string)
+                routes = json.loads(r.content)
+                all_distances.loc[options_to_check, 'road_distance'] = routes['distances'][0][1:]
+                successful = True
 
             except Exception:
-                pass
+                time.sleep(1)
 
-    def find_possible_destinations_and_routes(target_network):
+        all_options = all_options[step_size:]
 
-        """
-        Finds all possible ports and feed-in / railroad stations which are reachable by road transport
-        Finds road to destination of possible
-        """
+    # Set distance to road multiplier * direct distance as minimal value if None
+    for ind in all_distances.index:
+        if all_distances.loc[ind, 'road_distance'] is None:
+            all_distances.loc[ind, 'road_distance'] = options.loc[ind, 'direct_distance'] * configuration['no_road_multiplier']
 
-        if target_network == 'Shipping':  # ports
+    return all_distances['road_distance']
 
-            options = data['Shipping'].copy()
 
-            # Don't use already used infrastructure again
-            used_ports = solution.get_used_ports()
+def get_road_distances_between_options(options_start, options_destination, step_size=450):
 
-            options['distance'] = calc_distance_lists(options['latitude'], options['longitude'], location.y, location.x)
-            options.sort_values(['distance'], inplace=True)
+    distances = {}
 
-            for option in options.index:
+    start_string = 'http://router.project-osrm.org/table/v1/driving/'
+    end_string = '?sources='
 
-                if used_ports:
-                    if option in used_ports:
-                        continue
+    first = True
+    for i, s in enumerate(options_start):
 
-                option_location_lon = float(options.loc[option, 'longitude'])
-                option_location_lat = float(options.loc[option, 'latitude'])
+        if first:
+            start_string += str(round(s.x, 4)) + ',' + str(round(s.y, 4))
+            end_string += str(i)
 
-                # check if direct route already more expensive than benchmark
-                direct_path = options.loc[option, 'distance']
-                if (total_costs + direct_path / 1000 * transportation_costs) > benchmark:
-                    break  # as ports are sorted by distance, following ports have automatically higher costs
-
-                # Check if direct route is higher than tolerance
-                if direct_path > configuration['tolerance_distance']:
-                    calculate_route(option_location_lat, option_location_lon, target_network)
-
-                    # if system is set to find only the closest port
-                    if configuration['find_only_closest']:
-                        break
-
+            first = False
         else:
+            start_string += ';' + str(round(s.x, 4)) + ',' + str(round(s.y, 4))
+            end_string += ';' + str(i)
 
-            # todo: get as close as possible with road transport
+    end_string += '&annotations=distance'
 
-            options = data[target_network].copy()
+    while options_destination:
+        options_to_check = options_destination[:step_size]
+        destination_string = ''
+        for option in options_to_check:
+            destination_string += ';' + str(round(option.x, 4)) + ',' + str(round(option.y, 4))
 
-            # Don't use already used infrastructure again
-            if target_network == 'Railroad':
-                used_stations = solution.get_used_railroad_networks()
-            elif target_network == 'Pipeline_Liquid':
-                used_stations = solution.get_used_railroad_networks()
-            else:
-                used_stations = solution.get_used_railroad_networks()
+        request_string = start_string + destination_string + end_string
 
-            # Iterate through networks
-            for g in [*options.keys()]:
+        successful = False
+        while not successful:
+            try:
+                r = requests.get(request_string)
+                routes = json.loads(r.content)
 
-                if used_stations:
-                    if g in used_stations:
-                        continue
+                for i, s in enumerate(routes['distances']):
+                    distances[i] = s
 
-                geo_data = options[g]['GeoData'].copy()
-                graph_object = options[g]['GraphObject']
+                successful = True
 
-                closest_node = nearest_points(graph_object, location)[0]
-                direct_path = calc_distance(location.y, location.x, closest_node.y, closest_node.x)
-                # check if direct route already more expensive than benchmark
-                if (total_costs + direct_path / 1000 * transportation_costs) > benchmark:
-                    # Check if direct route is higher than tolerance
-                    continue
+            except Exception:
+                print(r)
+                time.sleep(5)
 
-                if direct_path < configuration['tolerance_distance']:
-                    continue
+        options_destination = options_destination[step_size:]
 
-                geo_data['distance'] = calc_distance_lists(geo_data['latitude'], geo_data['longitude'],
-                                                           location.y, location.x)
-                geo_data.sort_values(['distance'], inplace=True)
+    if False:
+        # Set distance to road multiplier * direct distance as minimal value if None
+        for ind in all_distances.index:
+            if all_distances.loc[ind, 'road_distance'] is None:
+                all_distances.loc[ind, 'road_distance'] = options.loc[ind, 'direct_distance'] * configuration[
+                    'no_road_multiplier']
 
-                for g_location in geo_data.index:
-
-                    g_location_lon = float(geo_data.loc[g_location, 'longitude'])
-                    g_location_lat = float(geo_data.loc[g_location, 'latitude'])
-
-                    # check if direct route already more expensive than benchmark
-                    direct_path = geo_data.loc[g_location, 'distance']
-                    if (total_costs + direct_path / 1000 * transportation_costs) > benchmark:
-                        break  # as stations are sorted by distance, following ports have automatically higher costs
-
-                    # Check if direct route is higher than tolerance
-                    if direct_path > configuration['tolerance_distance']:
-                        calculate_route(g_location_lat, g_location_lon, target_network)
-
-                        # if system is set to find only the closest node
-                        if configuration['find_only_closest']:
-                            break
-
-    location = solution.get_current_location()
-    destination = solution.get_destination()
-
-    total_costs = solution.get_total_costs()
-    commodity = solution.get_current_commodity_object()
-    transportation_costs = commodity.get_transportation_costs_specific_mean_of_transport('Road')
-
-    possible_destinations_and_routes = []
-
-    direct_path_destination = calc_distance(location.y, location.x, destination.y, destination.x)
-    if (total_costs + direct_path_destination / 1000 * transportation_costs) < benchmark:
-        calculate_route(destination.y, destination.x, 'Destination')
-
-    find_possible_destinations_and_routes('Shipping')
-    find_possible_destinations_and_routes('Pipeline_Gas')
-    find_possible_destinations_and_routes('Pipeline_Liquid')
-    find_possible_destinations_and_routes('Railroad')
-
-    return possible_destinations_and_routes
-
-
-
+    return distances

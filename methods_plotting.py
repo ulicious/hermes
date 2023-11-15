@@ -13,6 +13,9 @@ import pandas as pd
 from shapely.wkt import loads
 from textwrap import wrap
 
+import warnings
+warnings.filterwarnings('ignore')
+
 
 def plot_line(line, direct_plot=True):
     # Read world map
@@ -112,7 +115,7 @@ def plot_solution(s, direct_plot=True):
               'Pipeline_Liquid': 'green',
               'Pipeline_Liquid_New': 'turquoise'}
 
-    lines = s.get_result_lines()
+    lines = s.get_result_line()
     means_of_transport = s.get_used_transport_means()
 
     for i, line in enumerate(lines):
@@ -137,20 +140,9 @@ def plot_solution_path(k, path_plot, solutions_dict, final_solution):
     if not os.path.exists(path_plot + '/' + str(k) + '/'):
         os.makedirs(path_plot + '/' + str(k) + '/')
 
-    kept_solution = None
     all_past_solutions = []
 
-    colors = {'Road': 'red',
-              'Shipping': 'darkblue',
-              'Railroad': 'yellow',
-              'Pipeline_Gas': 'purple',
-              'Pipeline_Gas_New': 'indigo',
-              'Pipeline_Liquid': 'green',
-              'Pipeline_Liquid_New': 'turquoise'}
-
     for i in [*solutions_dict.keys()]:
-
-        print(solutions_dict[i])
 
         fig = plt.figure()
 
@@ -165,19 +157,12 @@ def plot_solution_path(k, path_plot, solutions_dict, final_solution):
         if all_past_solutions:
             for s in all_past_solutions:
 
-                lines = s.get_result_lines()
-                for j in lines:
+                result_line = s.get_result_line()
+
+                lines = []
+                for key in [*result_line.keys()]:
+                    lines.append(result_line[key]['line'])
                     colors_used.append('lightgrey')
-
-                line_gdf = gpd.GeoDataFrame(lines, index=range(len(lines)), columns=['geometry'])
-                map_plot = pd.concat([map_plot, line_gdf], ignore_index=True)
-
-            if kept_solution is not None:
-                lines = kept_solution.get_result_lines()
-                means_of_transport = kept_solution.get_used_transport_means()
-
-                for j, line in enumerate(lines):
-                    colors_used.append(colors[means_of_transport[j]])
 
                 line_gdf = gpd.GeoDataFrame(lines, index=range(len(lines)), columns=['geometry'])
                 map_plot = pd.concat([map_plot, line_gdf], ignore_index=True)
@@ -185,24 +170,29 @@ def plot_solution_path(k, path_plot, solutions_dict, final_solution):
         # Second, plot solutions of current iteration to show progress
         for s in solutions_dict[i]:
 
+            if s is None:
+                continue
+
             all_past_solutions.append(s)
 
-            lines = s.get_result_lines()
-            means_of_transport = s.get_used_transport_means()
+            result_line = s.get_result_line()
 
-            for j, line in enumerate(lines):
-                colors_used.append(colors[means_of_transport[j]])
+            lines = []
+            for key in [*result_line.keys()]:
+                lines.append(result_line[key]['line'])
+                colors_used.append(result_line[key]['color'])
 
             line_gdf = gpd.GeoDataFrame(lines, index=range(len(lines)), columns=['geometry'])
             map_plot = pd.concat([map_plot, line_gdf], ignore_index=True)
 
         # Third, always plot final solution
         kept_solution = final_solution[i]
-        lines = kept_solution.get_result_lines()
-        means_of_transport = kept_solution.get_used_transport_means()
+        result_line = kept_solution.get_result_line()
 
-        for j, line in enumerate(lines):
-            colors_used.append(colors[means_of_transport[j]])
+        lines = []
+        for key in [*result_line.keys()]:
+            lines.append(result_line[key]['line'])
+            colors_used.append(result_line[key]['color'])
 
         line_gdf = gpd.GeoDataFrame(lines, index=range(len(lines)), columns=['geometry'])
         map_plot = pd.concat([map_plot, line_gdf], ignore_index=True)
@@ -231,29 +221,23 @@ def plot_solution_path(k, path_plot, solutions_dict, final_solution):
         if all_past_solutions:
             for s in all_past_solutions:
 
-                lines = s.get_result_lines()
-                for j in lines:
+                result_line = s.get_result_line()
+
+                lines = []
+                for key in [*result_line.keys()]:
+                    lines.append(result_line[key]['line'])
                     colors_used.append('lightgrey')
 
                 line_gdf = gpd.GeoDataFrame(lines, index=range(len(lines)), columns=['geometry'])
                 map_plot = pd.concat([map_plot, line_gdf], ignore_index=True)
 
-            if kept_solution is not None:
-                lines = kept_solution.get_result_lines()
-                means_of_transport = kept_solution.get_used_transport_means()
-
-                for j, line in enumerate(lines):
-                    colors_used.append(colors[means_of_transport[j]])
-
-                line_gdf = gpd.GeoDataFrame(lines, index=range(len(lines)), columns=['geometry'])
-                map_plot = pd.concat([map_plot, line_gdf], ignore_index=True)
-
         # plot final solution
-        lines = kept_solution.get_result_lines()
-        means_of_transport = kept_solution.get_used_transport_means()
+        result_line = kept_solution.get_result_line()
 
-        for j, line in enumerate(lines):
-            colors_used.append(colors[means_of_transport[j]])
+        lines = []
+        for key in [*result_line.keys()]:
+            lines.append(result_line[key]['line'])
+            colors_used.append(result_line[key]['color'])
 
         line_gdf = gpd.GeoDataFrame(lines, index=range(len(lines)), columns=['geometry'])
         map_plot = pd.concat([map_plot, line_gdf], ignore_index=True)
