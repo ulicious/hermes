@@ -4,24 +4,17 @@ PtX transport is a multi-commodity multi mean of transport algorithm, capable to
 
 ![Graphical abstract of the approach](images/graphical_abstract.png)
 
-The algorithm is not dependend on a specific dataset. However, 
+To use the model, following project structure needs to be created.
 
-project-root/
-|   
-+---folder1/
-|   |   file1-1.md
-|   |   file1-2.md
-|   |   
-|   \---subfolder1/
-|           file1-3.md
-|           file1-4.md
-|   
-\---folder2/
-    |   file2-1.md
+    project folder/
     |   
-    \---subfolder2/
-            file2-2.md
+    +---data/
+    |   +---raw data/
+    |   +---processed data/
+    |   
+    +---results/
 
+If processed data is already available, it can be placed directly in the processed data folder. Otherwise, data for oil and gas infrastructure as well as ports can be downloaded and used (oil & gas pipelines: Global Energy Monitor | ports: World Port Index). This data needs to be placed in the raw data folder for further processing.
 
 Citation
 Big thanks to
