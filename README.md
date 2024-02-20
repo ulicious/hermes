@@ -6,19 +6,21 @@ PtX transport is a multi-commodity multi mean of transport algorithm, capable to
 
 The algorithm is not dependend on a specific dataset. However, 
 
-project-folder/
-│
-├── data/
-│   ├── file1-1.md
-│   ├── file1-2.md
-│   └── subfolder1/
-│       ├── file1-3.md
-│       └── file1-4.md
-│
-├── results/
-│   ├── file2-1.md
-│   └── subfolder2/
-│       └── file2-2.md
+project-root/
+|   
++---folder1/
+|   |   file1-1.md
+|   |   file1-2.md
+|   |   
+|   \---subfolder1/
+|           file1-3.md
+|           file1-4.md
+|   
+\---folder2/
+    |   file2-1.md
+    |   
+    \---subfolder2/
+            file2-2.md
 
 
 Citation
