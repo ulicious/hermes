@@ -4,12 +4,17 @@ from shapely.ops import nearest_points
 from shapely.geometry import LineString, MultiLineString, Point
 import geopandas as gpd
 import networkx as nx
+import numpy as np
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+from tables import *
+import h5py
 
 import searoute as sr
-from _helpers import calc_distance_list_to_single, check_if_reachable_by_road
+from _helpers import calc_distance_list_to_single, check_if_reachable_on_land
 
 
-def process_network_data(data, name, geo_data, graph_data, path_data):
+def process_network_data(data, name, geo_data, graph_data):
 
     """
     Function is used to create different data structures for the network data
@@ -25,7 +30,10 @@ def process_network_data(data, name, geo_data, graph_data, path_data):
     graph_data = gpd.GeoDataFrame(graph_data)
     graph_data['line'] = graph_data['line'].apply(shapely.wkt.loads)
 
-    for g in geo_data['graph'].unique():
+    # distances_dict = {}
+
+    print('Load ' + name + ' data')
+    for g in tqdm(geo_data['graph'].unique()):
         graph = nx.Graph()
         edges_graph = graph_data[graph_data['graph'] == g].index
         lines = []
@@ -42,30 +50,97 @@ def process_network_data(data, name, geo_data, graph_data, path_data):
         nodes_graph_original = geo_data[geo_data['graph'] == g].index
         graph_object = MultiLineString(lines)
 
-        # distance dataframe
-        distances = pd.read_csv(path_data + '/inner_infrastructure_distances/' + g + '.csv', index_col=0)
-        distances_index = distances.index.tolist()
+        if False:
 
-        if True:
+            # distance dataframe
+            # distances = pd.read_csv(path_data + '/inner_infrastructure_distances/' + g + '.csv', index_col=0).astype(np.float16)
+            # distances = pd.read_parquet(path_data + '/inner_infrastructure_distances/' + g + '.parquet', engine='fastparquet').astype(np.float16)
+
+            # distances_as_dict = distances.to_dict()
+
+            graph_dfs = []
+            graph_distance_df = pd.DataFrame()
+            for n in nodes_graph_original:
+                path_data = '/home/localadmin/Dokumente/Daten_Transportmodell/Daten/'
+                infrastructure_distances \
+                    = pd.read_hdf(path_data + '/inner_infrastructure_distances/' + n + '.h5', mode='r',
+                                  title=n)
+                infrastructure_distances = infrastructure_distances.transpose()
+                # graph_dfs.append(infrastructure_distances)
+
+                distances_dict.update(infrastructure_distances.to_dict())
+                # print(distances_dict)
+
+            # if len()
+            # graph_distance_df = pd.concat([graph_distance_df] + graph_dfs)
+
+
+            """filename = path_data + '/inner_infrastructure_distances/' + g + '.h5'
+
+            try:
+                d = pd.read_hdf(filename)
+                print(d)
+            except:
+                continue"""
+
+            """with h5py.File(filename, "r") as f:
+                if 's' in f.keys():
+                    print(f['s'])
+
+            distances = h5py.File(path_data + '/inner_infrastructure_distances/' + g + '.h5', mode='w')
+            print(distances)
+            print(distances.get(g))"""
+
+            """distances = open_file(path_data + '/inner_infrastructure_distances/' + g + '.h5', mode='w', title=g)
+            distances.get()
+            group = distances.create_group('/', 'detector', 'Detector information')
+            table = distances.create_table(group, 'readout', Particle, 'readout example')
+            print(table)"""
+
+        # distances_as_df = pd.DataFrame(distances_as_dict['PG_Node_0'], index=['PG_Node_0'])
+
+        if False: # '179' in g:
+
+            geoms = []
+            for s in graph_object.geoms:
+                geoms.append(LineString(s))
+
+            gpd.GeoDataFrame(geometry=geoms).plot()
+            print('')
+            plt.show()
+
+        if False:
             data[name][g] = {'Graph': graph,
                              'GraphData': graph_data,
                              'GraphObject': graph_object,
                              'GeoData': geo_data.loc[nodes_graph_original],
-                             'Distances': {'value': distances.to_numpy(),
-                                           'index': distances_index,
-                                           'columns': distances.columns}}
+                             'Distances': {'value': distances.to_numpy(dtype=np.float16),
+                                           'index': distances.index.tolist(),
+                                           'columns': distances.columns.tolist()}}
+        elif False:
+            data[name][g] = {'Graph': graph,
+                             'GraphData': graph_data,
+                             'GraphObject': graph_object,
+                             'GeoData': geo_data.loc[nodes_graph_original],
+                             'Distances': distances_as_dict}
+
+        elif False:
+            data[name][g] = {'Graph': graph,
+                             'GraphData': graph_data,
+                             'GraphObject': graph_object,
+                             'GeoData': geo_data.loc[nodes_graph_original],
+                             'Distances': graph_distance_df}
+
         else:
             data[name][g] = {'Graph': graph,
                              'GraphData': graph_data,
                              'GraphObject': graph_object,
-                             'GeoData': geo_data.loc[nodes_graph_original],
-                             'Distances': distances}
+                             'GeoData': geo_data.loc[nodes_graph_original]}
 
     return data
 
 
-def attach_new_ports(data, configuration, continent_start, location, continent_destination, final_destination,
-                     coastline):
+def attach_new_ports(data, configuration, continent_start, location, continent_destination, final_destination):
 
     """
     Method allows the implementation of new ports at the coastline. New ports are implemented based on the shortest
@@ -87,11 +162,13 @@ def attach_new_ports(data, configuration, continent_start, location, continent_d
         = calc_distance_list_to_single(options_shipping['latitude'], options_shipping['longitude'],
                                        final_destination.y, final_destination.x)
 
-    if configuration['Shipping']['build_new_infrastructure']:
+    coastline = data['Coastlines']
+
+    if False: # configuration['build_new_infrastructure']: # todo: adjust
 
         all_distances = data['all_distances_inner_infrastructure']
 
-        start_availability, start_polygon = check_if_reachable_by_road(Point([location.x,
+        start_availability, start_polygon = check_if_reachable_on_land(Point([location.x,
                                                                               location.y]),
                                                                        options_shipping['longitude'],
                                                                        options_shipping['latitude'],
@@ -150,7 +227,7 @@ def attach_new_ports(data, configuration, continent_start, location, continent_d
         if len(index_in_tolerance) == 0:
             # only new port is added if none of the existing is in tolerance distance to final destination
 
-            availability, destination_polygon = check_if_reachable_by_road(
+            availability, destination_polygon = check_if_reachable_on_land(
                 Point([final_destination.x, final_destination.y]),
                 options_shipping['longitude'], options_shipping['latitude'],
                 coastline)

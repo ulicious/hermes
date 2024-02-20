@@ -10,7 +10,6 @@ import time
 import pandas as pd
 
 from _helpers import calc_distance_single_to_single, get_country_and_continent_from_location
-from methods_checking import check_total_costs_of_solutions
 
 
 class Solution:
@@ -207,7 +206,13 @@ class Solution:
         self.iteration_data['used_transport_mean'] = used_transport_means
 
     def get_used_transport_means(self):
-        return self.iteration_data['used_transport_mean']
+        return list(self.iteration_data['used_transport_mean'].values())
+
+    def get_last_used_transport_mean(self):
+        if len(list(self.iteration_data['used_transport_mean'].values())) >= 2:
+            return list(self.iteration_data['used_transport_mean'].values())[-2]
+        else:
+            return None
 
     def get_used_transport_means_specific_iteration(self, iteration):
         return self.iteration_data['used_transport_mean'][iteration]
@@ -386,7 +391,6 @@ def create_new_solution_from_routing_result(s, scenario_count, s_commodity, mean
     s_new.add_used_node(iteration, used_node)
 
     route_costs = s_commodity.get_transportation_costs_specific_mean_of_transport(mean_of_transport) * distance / 1000
-    # route_efficiency = s_commodity.get_transportation_efficiency_specific_mean_of_transport(mean_of_transport) * distance / 1000
 
     s_new.increase_total_length(distance)
     s_new.increase_length_specific_iteration(iteration, distance)
@@ -511,13 +515,7 @@ def create_solution_linestring(solution, data, pipeline_gas_geodata, colors):
                     graph = data[i_mean_of_transport][graph_id]['Graph']
                     graph_data = data[i_mean_of_transport][graph_id]['GraphData']
 
-                    try:
-                        line = create_network_path(i_location_before, i_location)
-                    except:
-                        print(i)
-                        print(commodities)
-                        print(locations)
-                        print(means_of_transport)
+                    line = create_network_path(i_location_before, i_location)
                 else:
                     line = create_shipping_path(i_location_before, i_location)
 
@@ -541,38 +539,36 @@ def process_new_solution(s_new, new_solutions, final_solution,
                          current_commodity, used_node,
                          configuration, solutions_reaching_end):
 
-    # add solution to all successful solutions -> without checking benchmark to increase number of final solutions
+    """# add solution to all successful solutions -> without checking benchmark to increase number of final solutions
     if s_new.check_if_in_destination(final_destination,
                                      configuration['to_final_destination_tolerance']) \
             & (current_commodity.get_name() in final_commodity):
-        solutions_reaching_end.append(s_new)
+        solutions_reaching_end.append(s_new)"""
 
-    # Don't add solutions which have already higher costs than benchmark
-    if s_new.get_total_costs() <= benchmark:
-        # Check if solutions has arrived in destination and has right target commodity
-        # If so, update benchmark and remove solutions
-        
-        if s_new.check_if_in_destination(final_destination,
-                                         configuration['to_final_destination_tolerance']) \
-                & (current_commodity.get_name() in final_commodity):
+    # Check if solutions has arrived in destination and has right target commodity
+    # If so, update benchmark and remove solutions
 
-            benchmark = s_new.get_total_costs()
-            final_solution = s_new
+    if s_new.check_if_in_destination(final_destination,
+                                     configuration['to_final_destination_tolerance']) \
+            & (current_commodity.get_name() in final_commodity):
 
-            # throw out solutions which have been added before but with the new benchmark are too expensive
-            new_solutions = check_total_costs_of_solutions(new_solutions, benchmark)
-        else:
-            # if new solutions has not arrived at destination but has lower total costs than the benchmark,
-            # it will be further processed. But first check if solution is more expensive than others based on local
-            # benchmark
-            total_costs = s_new.get_total_costs()
-            location = s_new.get_current_location()
+        benchmark = s_new.get_total_costs()
+        final_solution = s_new
+    else:
+        # if new solutions has not arrived at destination but has lower total costs than the benchmark,
+        # it will be further processed. But first check if solution is more expensive than others based on local
+        # benchmark
+        total_costs = s_new.get_total_costs()
+        location = s_new.get_current_location()
+
+        if False:
 
             if (location, current_commodity.get_name()) not in local_benchmarks.keys():
                 # add solution to local benchmarks
                 local_benchmarks[location, current_commodity.get_name()] = {'total_costs': total_costs,
                                                                             'solution': s_new.get_name()}
                 new_solutions.append(s_new)
+
             else:
                 if local_benchmarks[location, current_commodity.get_name()]['total_costs'] > total_costs:
                     # add old solution to solutions to remove list
@@ -590,6 +586,36 @@ def process_new_solution(s_new, new_solutions, final_solution,
                     # local benchmark, but not associated with a solution. Therefore, add this solution now
                     if local_benchmarks[location, current_commodity.get_name()]['solution'] is None:
                         local_benchmarks[location, current_commodity.get_name()]['solution'] = s_new.get_name()
+
+                        new_solutions.append(s_new)
+        else:
+            if (location, current_commodity.get_name()) not in local_benchmarks.index:
+                # add solution to local benchmarks
+                new_location_benchmark = pd.DataFrame({'total_costs': total_costs,
+                                                       'solution': s_new.get_name()},
+                                                      index=[(location, current_commodity.get_name())])
+
+                local_benchmarks = pd.concat([local_benchmarks, new_location_benchmark])
+                new_solutions.append(s_new)
+
+            else:
+                if local_benchmarks.at[(location, current_commodity.get_name()), 'total_costs'] > total_costs:
+                    # add old solution to solutions to remove list
+
+                    if local_benchmarks.at[(location, current_commodity.get_name()), 'solution'] is not None:
+                        solutions_to_remove.append(
+                            local_benchmarks.at[(location, current_commodity.get_name()), 'solution'])
+
+                    # overwrite old solution with new one
+                    local_benchmarks.at[(location, current_commodity.get_name()), 'total_costs'] = total_costs
+                    local_benchmarks.at[(location, current_commodity.get_name()), 'solution'] = s_new.get_name()
+                    new_solutions.append(s_new)
+
+                elif local_benchmarks.at[(location, current_commodity.get_name()), 'total_costs'] == total_costs:
+                    # as we also update the local benchmark outside of this current method, we might have a value at the
+                    # local benchmark, but not associated with a solution. Therefore, add this solution now
+                    if local_benchmarks.at[(location, current_commodity.get_name()), 'solution'] is None:
+                        local_benchmarks.at[(location, current_commodity.get_name()), 'solution'] = s_new.get_name()
 
                         new_solutions.append(s_new)
 

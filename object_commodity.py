@@ -123,8 +123,7 @@ class Commodity:
         self.transportation_costs = transportation_costs
 
 
-def create_commodity_objects(production_costs,
-                             commodity_conversion_data, commodity_conversion_loss_of_product_data,
+def create_commodity_objects(commodity_conversion_data, commodity_conversion_loss_of_product_data,
                              commodity_transportation_data):
 
     """
@@ -180,11 +179,6 @@ def create_commodity_objects(production_costs,
             else:
                 transportation_options[mean_of_transport] = False
                 transportation_costs[mean_of_transport] = '-'
-
-        if source_commodity in [*production_costs.keys()]:
-            commodity = Commodity(source_commodity, production_costs[source_commodity],
-                                  conversion_options, conversion_costs, conversion_loss_of_product,
-                                  transportation_options, transportation_costs)
 
         else:
             commodity = Commodity(source_commodity, None,

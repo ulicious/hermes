@@ -1,721 +1,435 @@
-import time
+import math
 
-import networkx as nx
-import numpy as np
-from shapely.geometry import Point
+import pandas as pd
 
-from script_finding_potential_destinations import find_potential_destinations
-from object_solution import create_new_solution_from_routing_result, create_new_solution_from_conversion_result, \
-    process_new_solution
-from methods_road_transport import get_road_distances_between_options
-from _helpers import check_if_last_was_new_segment
-from methods_checking import remove_solution_duplications
+from _helpers import calc_distance_single_to_single, calc_distance_list_to_single
 
 
-def create_solutions_from_conversion(solution, scenario_count, commodities, benchmark, final_solution, configuration,
-                                     iteration, solutions_per_iteration, local_benchmarks, solutions_to_remove,
-                                     solutions_reaching_end):
-    s_commodity = solution.get_current_commodity_object()
-    final_destination = solution.get_destination()
-    final_commodity = solution.get_final_commodity()
+def adjust_production_costs_of_commodities(location_data, data):
 
-    historic_paths = {}
+    # load commodities, means of transport etc. already here
+    # Commodities at start depend on data given. Get production costs of they exist at start
+    commodities_at_start = [i for i in location_data.index
+                            if i not in ['start_lon', 'start_lat', 'destination_lat', 'destination_lon',
+                                         'target_commodity', 'country_start', 'continent_start',
+                                         'country_destination', 'continent_destination',
+                                         'distance_to_final_destination']
+                            if i != 'N/A']
 
-    new_solutions = []
-    for c in commodities:
-        if s_commodity.get_name() != c.get_name():
-            if s_commodity.get_conversion_options_specific_commodity(c.get_name()):
+    # set production costs based on location data
+    for c in commodities_at_start:
+        c_object = data['commodities']['commodity_objects'][c]
+        c_object.set_production_costs(float(location_data.at[c]))
 
-                used_node = list(solution.get_used_nodes().values())[-1]
+    for c in data['commodities']['commodity_objects'].keys():
+        c_object = data['commodities']['commodity_objects'][c]
+        if c_object.get_production_costs() is None:
+            lowest_costs = math.inf
+            for c_at_start in commodities_at_start:
+                c_at_start = data['commodities']['commodity_objects'][c_at_start]
+                if c_at_start.get_conversion_options_specific_commodity(c_object.get_name()):
+                    conversion_costs_to_c = c_at_start.get_conversion_costs_specific_commodity(c_object.get_name())
+                    conversion_loss_of_educt = c_at_start.get_conversion_loss_of_educt_specific_commodity(c_object.get_name())
+                    lowest_costs_commodity \
+                        = (c_at_start.get_production_costs() + conversion_costs_to_c) / conversion_loss_of_educt
 
-                s_new = create_new_solution_from_conversion_result(solution, scenario_count, c, iteration)
-                # solutions_per_iteration[iteration].append(s_new)
-                scenario_count += 1
+                    if lowest_costs_commodity < lowest_costs:
+                        lowest_costs = lowest_costs_commodity
 
-                current_commodity = s_new.get_current_commodity_object()
+            c_object.set_production_costs(lowest_costs)
+            data['commodities']['commodity_objects'][c] = c_object
 
-                # process the left solutions
-                final_solution, new_solutions, local_benchmarks, solutions_to_remove, benchmark, solutions_reaching_end \
-                    = process_new_solution(s_new, new_solutions, final_solution,
-                                           benchmark, local_benchmarks, solutions_to_remove,
-                                           final_destination, final_commodity,
-                                           current_commodity, used_node,
-                                           configuration, solutions_reaching_end)
-
-        else:  # keep original solution when solution commodity = c
-            s_new = create_new_solution_from_conversion_result(solution, scenario_count, c, iteration)
-            new_solutions.append(s_new)
-            scenario_count += 1
-
-            solutions_per_iteration[iteration].append(s_new)
-
-    return new_solutions, benchmark, final_solution, scenario_count, solutions_per_iteration, local_benchmarks, \
-        solutions_to_remove, solutions_reaching_end, historic_paths
+    return data
 
 
-def create_solutions_from_historic_paths(solution, scenario_count, new_node_count, benchmark, final_solution,
-                                         configuration, iteration, local_benchmarks,
-                                         solutions_to_remove, historic_path_costs, solutions_reaching_end):
+def create_solutions_based_on_commodities_at_start(data):
+    solutions = pd.DataFrame(columns=['starting_latitude', 'starting_longitude', 'previous_solution',
+                                        'latitude', 'longitude', 'current_commodity',
+                                        'all_previous_commodities', 'current_commodity_object', 'current_total_costs',
+                                        'all_previous_total_costs', 'current_transportation_costs',
+                                        'all_previous_transportation_costs', 'current_conversion_costs',
+                                        'all_previous_conversion_costs', 'all_previous_solutions',
+                                        'current_transport_mean',
+                                        'all_previous_transport_means', 'current_node',
+                                        'all_previous_nodes', 'current_infrastructure',
+                                        'all_previous_infrastructure', 'current_distance', 'all_previous_distances',
+                                        'current_continent', 'distance_to_final_destination', 'solution_index',
+                                        'comparison_index'])
 
-    # todo: Jede solution, die am Ziel ankommt, auswerten und analysieren, ob nachfolgende solutions Kosten reißen (umgekehrt von local benchmark)
-    # todo: Datenbanken mit Informationen zu Lösungen global verfügbar machen (umgekehrte Benchmark)
-    # todo: basierend auf umgekehrte Benchmark globale Benchmark neuer Start-Standorte berechnen --> nicht nur einfachste Lösung
+    starting_location = data['start']['location']
+    starting_continent = data['start']['continent']
+    destination_location = data['destination']['location']
+    commodities = data['commodities']['commodity_objects']
 
-    new_solutions = []
-    used_infrastructure = [element for inner_list in solution.get_used_infrastructure().values() for element in
-                           inner_list]
-    s_location = solution.get_current_location()
-    current_commodity = solution.get_current_commodity_object()
-    current_costs = solution.get_total_costs()
-    final_destination = solution.get_destination()
-    final_commodity = solution.get_final_commodity()
+    distance_to_final_destination = calc_distance_single_to_single(starting_location.y, starting_location.x,
+                                                                   destination_location.y, destination_location.x)
 
-    affected_keys = [k for k in [*historic_path_costs.keys()] if k[1] == s_location]
+    comparison_index = []
+    solution_number = 0
+    for c in commodities.keys():
+        c_object = commodities[c]
 
-    for k in affected_keys:
-        for target_infrastructure in [*historic_path_costs[k].keys()]:
-            target_commodity = target_infrastructure[0]
-            target_system = target_infrastructure[1]
-            target_node = target_infrastructure[2]
+        solution_index = 'S' + str(solution_number)
+        solution_number += 1
 
-            if target_commodity == current_commodity.get_name():
-                if target_node not in used_infrastructure:
-                    costs_of_segment = historic_path_costs[k][target_infrastructure]['costs']
-                    distance_to_target = historic_path_costs[k][target_infrastructure]['distance']
-                    target_point = historic_path_costs[k][target_infrastructure]['target_location']
-                    used_infrastructure = historic_path_costs[k][target_infrastructure]['used_infrastructure']
+        solutions.loc[solution_index, 'starting_latitude'] = starting_location.y
+        solutions.loc[solution_index, 'starting_longitude'] = starting_location.x
+        solutions.loc[solution_index, 'latitude'] = starting_location.y
+        solutions.loc[solution_index, 'longitude'] = starting_location.x
+        solutions.loc[solution_index, 'previous_solution'] = None
+        solutions.loc[solution_index, 'current_commodity'] = c_object.get_name()
+        solutions.loc[solution_index, 'current_commodity_object'] = c_object
+        solutions.loc[solution_index, 'current_continent'] = starting_continent
+        solutions.loc[solution_index, 'current_total_costs'] = c_object.get_production_costs()
+        solutions.loc[solution_index, 'current_transportation_costs'] = 0
+        solutions.loc[solution_index, 'current_conversion_costs'] = 0
+        solutions.loc[solution_index, 'current_transport_mean'] = None
+        solutions.loc[solution_index, 'current_infrastructure'] = None
+        solutions.loc[solution_index, 'current_node'] = 'Start'
+        solutions.loc[solution_index, 'current_distance'] = 0
+        solutions.loc[solution_index, 'solution_index'] = solution_index
+        solutions.loc[solution_index, 'all_previous_commodities'] = [c_object.get_name()]
+        solutions.loc[solution_index, 'all_previous_total_costs'] = [c_object.get_production_costs()]
+        solutions.loc[solution_index, 'taken_routes'] = [c_object.get_name()]
 
-                    solution.add_used_infrastructure(iteration, used_infrastructure)
+        comparison_index.append(('Start', c_object.get_name()))
 
-                    if costs_of_segment + current_costs <= benchmark:
-                        s_new = create_new_solution_from_routing_result(solution, scenario_count, current_commodity, target_system,
-                                                                        target_point, distance_to_target, used_infrastructure,
-                                                                        target_infrastructure, iteration)
+    solutions['comparison_index'] = comparison_index
 
-                        final_solution, new_solutions, local_benchmarks, solutions_to_remove, benchmark, solutions_reaching_end \
-                            = process_new_solution(s_new, new_solutions, final_solution,
-                                                   benchmark, local_benchmarks, solutions_to_remove,
-                                                   final_destination, final_commodity,
-                                                   current_commodity, target_infrastructure,
-                                                   configuration, solutions_reaching_end)
+    solutions['all_previous_solutions'] = [[s] for s in solutions.index]
+    solutions['all_previous_transportation_costs'] = [[] for s in solutions.index]
+    solutions['all_previous_conversion_costs'] = [[] for s in solutions.index]
+    solutions['all_previous_transport_means'] = [[None] for s in solutions.index]
+    solutions['all_previous_infrastructure'] = [[] for s in solutions.index]
+    solutions['all_previous_nodes'] = [['Start'] for s in solutions.index]
+    solutions['all_previous_distances'] = [[0] for s in solutions.index]
+    solutions['distance_to_final_destination'] = [distance_to_final_destination for s in solutions.index]
 
-    return solution, new_solutions, benchmark, final_solution, scenario_count, new_node_count, \
-        local_benchmarks, solutions_to_remove, solutions_reaching_end
+    return solutions, solution_number
 
 
-def create_solutions_from_routing(data, solution, scenario_count, new_node_count, benchmark, final_solution,
-                                  configuration, iteration_transportation, solutions_per_iteration, local_benchmarks,
-                                  solutions_to_remove, iteration, solutions_reaching_end):
+def check_for_inaccessibility_and_at_destination(data, configuration, complete_infrastructure, location_data, k,
+                                                 solutions):
 
-    historic_path_costs = {}
+    continue_processing = True
 
-    # Apply approach to filter potential destinations from all destinations
-    potential_destinations, road_transport_options_to_calculate, new_node_count, data \
-        = find_potential_destinations(data, configuration, solution, benchmark, local_benchmarks, new_node_count,
-                                      iteration_transportation)
+    starting_location = data['start']['location']
+    destination_location = data['destination']['location']
+    final_commodities = data['commodities']['final_commodities']
 
-    # Convert potential destinations into new solutions
-    s_commodity = solution.get_current_commodity_object()
-    final_destination = solution.get_destination()
-    final_commodity = solution.get_final_commodity()
+    # first, check if based on configuration infrastructure is reachable from start and destination
+    complete_infrastructure['distance_to_start'] \
+        = calc_distance_list_to_single(complete_infrastructure['latitude'], complete_infrastructure['longitude'],
+                                       starting_location.y, starting_location.x)
+    complete_infrastructure['distance_to_destination'] \
+        = calc_distance_list_to_single(complete_infrastructure['latitude'], complete_infrastructure['longitude'],
+                                       destination_location.y, destination_location.x)
 
-    if False:
+    max_length = max(configuration['max_length_road'],
+                     configuration['max_length_new_segment']) / configuration['no_road_multiplier']
 
-        # todo: potential improvement: implement bulk creation of new solutions and their assessment -> might reduce
-        #  time further if possible
+    distance_to_start = complete_infrastructure[complete_infrastructure['distance_to_start']
+                                                <= max_length].index
 
-        s_new = deepcopy(solution)
+    distance_to_destination = complete_infrastructure[complete_infrastructure['distance_to_destination']
+                                                      <= max_length].index
 
-        # fast way to implement new solutions
-        important_columns = ['mean_of_transport', 'distance', 'used_infrastructure']
-        target_locations = potential_destinations[["destination_longitude", "destination_latitude"]].apply(Point, axis=1)
-        scenarios = ['S' + str(scenario_count+i) for i in range(len(potential_destinations.index))]
-        used_nodes = potential_destinations.index.get_level_values(1)
-        old_solutions = [s_new for i in range(len(potential_destinations.index))]
+    distance_to_destination.drop(['Destination'])
 
-        for m in data['Means_of_Transport']:
+    if (len(distance_to_start) == 0) & (len(distance_to_destination) == 0):
+        print(str(k) + ': Parameters limit the access to infrastructure')
 
-            transport_costs = s_commodity.get_transportation_costs_specific_mean_of_transport(m)
+        result = pd.Series(['no benchmark', starting_location.y, starting_location.x],
+                           index=['status', 'latitude', 'longitude'])
+        result.to_csv(configuration['path_results'] + str(k) + '_no_benchmark.csv')
+        continue_processing = False
 
-            sub_pd = potential_destinations[potential_destinations['mean_of_transport'] == m].index
-            potential_destinations.loc[sub_pd, 'costs']\
-                = transport_costs * potential_destinations.loc[sub_pd, 'distance'] / 1000
+    reachable_from_start = complete_infrastructure[complete_infrastructure['reachable_from_start']].index
+    reachable_from_destination = complete_infrastructure[complete_infrastructure['reachable_from_destination']].index
 
-        country, continent = get_country_and_continent_from_location(target_location.x, target_location.y)
-        s_new.add_continent(iteration_transportation, continent)
+    if (len(reachable_from_start) == 0) | (len(reachable_from_destination) == 0):
+        print(str(k) + ': No infrastructure on same land mass as start or destination')
 
-        scenario_count += len(potential_destinations.index)
+        result = pd.Series(['no benchmark', starting_location.y, starting_location.x],
+                           index=['status', 'latitude', 'longitude'])
+        result.to_csv(configuration['path_results'] + str(k) + '_no_benchmark.csv')
+        continue_processing = False
 
-    else:
+    # if location is already at destination --> return cheapest solution if right commodity
+    location_data.at['distance_to_final_destination'] \
+        = calc_distance_single_to_single(location_data.at['start_lat'],
+                                         location_data.at['start_lon'],
+                                         complete_infrastructure.at['Destination', 'latitude'],
+                                         complete_infrastructure.at['Destination', 'longitude'])
 
-        new_solutions = []
-        for ind in potential_destinations.index:
+    if location_data.at['distance_to_final_destination'] < configuration['to_final_destination_tolerance']:
+        cheapest_option = math.inf
+        chosen_solution = None
+        for s in solutions:
+            if solutions.at[s, 'current_commodity'] in final_commodities:
+                if solutions.at[s, 'current_total_costs'] < cheapest_option:
+                    cheapest_option = solutions.at[s, 'current_total_costs']
+                    chosen_solution = solutions.loc[s, :].copy()
 
-            # The total_costs_to_final_destination holds as destinations do not change. But the benchmark changes.
-            # To avoid processing destination above benchmark, check regularly
-            if potential_destinations.loc[ind, 'total_costs_to_final_destination'] > benchmark:
-                continue
+        chosen_solution.at['status'] = 'complete'
+        chosen_solution.to_csv(configuration['path_results'] + str(k) + '_final_solution.csv')
+        print(str(k) + ' is already in tolerance to destination')
+        continue_processing = False
 
-            target_system = potential_destinations.loc[ind, 'mean_of_transport']
-            target_point = Point([potential_destinations.loc[ind, 'destination_longitude'],
-                                  potential_destinations.loc[ind, 'destination_latitude']])
-            distance_to_target = potential_destinations.loc[ind, 'distance']
-            delta_costs = potential_destinations.loc[ind, 'costs_to_destination']
+    return continue_processing
 
-            mean_of_transport = ind[2]
-            used_infrastructure = []
-            if mean_of_transport == 'Shipping':
-                # in case of shipping we need start and end harbor
-                used_infrastructure = [potential_destinations.loc[ind, 'used_infrastructure'], ind[1]]
-            elif mean_of_transport != 'Road':
-                isinstance([potential_destinations.loc[ind, 'graph']], str)
 
-                if isinstance([potential_destinations.loc[ind, 'graph']], str):
-                    # some new pipelines are not connected to a graph. Therefore also no graph id
-                    used_infrastructure = [potential_destinations.loc[ind, 'graph']]
+def create_new_solutions_based_on_conversion(solutions, data, solution_number, benchmark):
 
-            used_node = ind[1]
+    index = []
 
-            # add new path to historic path costs dictionary
+    total_costs = []
+    all_previous_total_costs = []
 
-            # new infrastructure and the utilization of roads might be limited to no consecutive utilization
-            # --> only new pipelines or only roads
-            # this is necessary to avoid solutions which build parallel networks to existing networks
-            # Therefore, we might not store such solutions to the global historic paths as we cannot assure that
-            # new pipeline infrastructure or road utilization applies to all solutions
-            if iteration >= 1:
+    current_conversion_costs = []
+    all_previous_conversion_costs = []
 
-                start = (solution.get_current_location(), solution.get_current_commodity_name())
-                end = (target_point, solution.get_current_commodity_name(), target_system)
+    all_previous_transportation_costs = []
 
-                if start not in list(historic_path_costs.keys()):
-                    historic_path_costs[start] = {end: delta_costs}
+    current_commodity = []
+    previous_commodity = []
+    all_previous_commodities = []
+    current_commodity_object = []
+
+    starting_latitude = []
+    starting_longitude = []
+    longitude = []
+    latitude = []
+
+    current_infrastructure = []
+    all_previous_infrastructure = []
+
+    current_transport_mean = []
+    all_previous_transport_means = []
+
+    current_node = []
+    all_previous_nodes = []
+
+    all_previous_solutions = []
+
+    current_distance = []
+    all_previous_distances = []
+
+    continent = []
+    distance_to_final_destination = []
+
+    previous_solutions = []
+
+    taken_route = []
+
+    for c_start in solutions['current_commodity'].unique():
+
+        c_start_df = solutions[solutions['current_commodity'] == c_start]
+
+        c_start_object = data['commodities']['commodity_objects'][c_start]
+        c_start_conversion_options = c_start_object.get_conversion_options()
+
+        # # if all conversions are higher than benchmark, ignore all conversions
+        # c_start_conversion_costs = c_start_object.get_conversion_costs()
+        # if all(i > benchmark for i in c_start_conversion_costs.values() if type(i) != str):
+        #     continue
+
+        for c_transported in [*data['commodities']['commodity_objects'].keys()]:
+            c_transported_object = data['commodities']['commodity_objects'][c_transported]
+            if c_start != c_transported:
+                if c_start_conversion_options[c_transported]:
+
+                    # if conversions costs are already higher than benchmark, ignore conversion
+                    if c_start_object.get_conversion_costs_specific_commodity(c_transported) > benchmark:
+                        continue
+
+                    len_index = len(c_start_df.index)
+
+                    costs = \
+                        (c_start_df['current_total_costs']
+                         + c_start_object.get_conversion_costs_specific_commodity(c_transported)) \
+                        / c_start_object.get_conversion_loss_of_educt_specific_commodity(c_transported) \
+
+                    total_costs += costs.tolist()
+                    previous_commodity += [c_transported] * len_index
+
+                    costs = costs - c_start_df['current_total_costs']
+                    current_conversion_costs += costs.tolist()
+
+                    taken_route += [(c_start, c_transported)] * len_index
                 else:
-                    if end not in list(historic_path_costs[start].keys()):
-                        historic_path_costs[start] = {end: delta_costs}
-                    else:
-                        if delta_costs < historic_path_costs[start][end]:
-                            historic_path_costs[start][end] = delta_costs
-
-            s_new = create_new_solution_from_routing_result(solution, scenario_count, s_commodity, target_system,
-                                                            target_point, distance_to_target, used_infrastructure,
-                                                            used_node, iteration_transportation)
-            scenario_count += 1
-
-            # solutions_per_iteration[iteration].append(s_new)
-
-            final_solution, new_solutions, local_benchmarks, solutions_to_remove, benchmark, solutions_reaching_end \
-                = process_new_solution(s_new, new_solutions, final_solution,
-                                       benchmark, local_benchmarks, solutions_to_remove,
-                                       final_destination, final_commodity,
-                                       s_commodity, used_node,
-                                       configuration, solutions_reaching_end)
-
-    return new_solutions, benchmark, final_solution, scenario_count, new_node_count, \
-        local_benchmarks, solutions_to_remove, road_transport_options_to_calculate, historic_path_costs, \
-        solutions_reaching_end
-
+                    continue
+            else:
+                len_index = len(c_start_df.index)
 
-def process_road_options_without_route(data, road_options_without_route, solution_to_road_option, benchmark,
-                                       local_benchmarks, scenario_count, solutions_per_iteration, iteration,
-                                       configuration, final_solution, solutions_to_remove):
-
-    options_to_process = road_options_without_route[~road_options_without_route.index.duplicated(keep='first')]
-
-    starts = {}
-    starts_locations = []
-    destinations = {}
-    destinations_locations = []
-    start_destination_combination = []
-    start_destination_combination_index = []
-    position_start = 0
-    position_destination = 0
-    for ind in options_to_process.index:
+                total_costs += c_start_df['current_total_costs'].tolist()
+                current_conversion_costs += [0] * len_index
 
-        if ind[0] not in starts:
-            starts[ind[0]] = {'position': position_start,
-                              'index': ind[0],
-                              'coordinates': (options_to_process.loc[ind, 'start_longitude'],
-                                              options_to_process.loc[ind, 'start_latitude'])}
-
-            starts_locations.append(Point([options_to_process.loc[ind, 'start_longitude'],
-                                           options_to_process.loc[ind, 'start_latitude']]))
-
-            chosen_start = position_start
-            position_start += 1
+                taken_route += [(c_start, c_start)] * len_index
 
-        else:
-            chosen_start = starts[ind[0]]['position']
-
-        if ind[1] not in destinations:
-
-            destinations[ind[1]] = {'position': position_destination,
-                                    'index': ind[1],
-                                    'coordinates': (options_to_process.loc[ind, 'destination_longitude'],
-                                                    options_to_process.loc[ind, 'destination_latitude'])}
-
-            destinations_locations.append(Point([options_to_process.loc[ind, 'destination_longitude'],
-                                                 options_to_process.loc[ind, 'destination_latitude']]))
-
-            chosen_destination = position_destination
-            position_destination += 1
-
-        else:
-            chosen_destination = destinations[ind[1]]['position']
-
-        if (chosen_start, chosen_destination) not in start_destination_combination:
-            start_destination_combination.append((chosen_start, chosen_destination))
-            start_destination_combination_index.append(ind)
-
-    if False:
-        distances = get_road_distances_between_options(starts_locations, destinations_locations,
-                                                       step_size=450)
-    else:
-        distances = options_to_process.loc[:, 'direct_distance'] * 1.5
-
-    for i, combination in enumerate(start_destination_combination):
-        start = combination[0]
-        destination = combination[1] + position_start
-        index_combination = start_destination_combination_index[i]
+            len_index = len(c_start_df.index)
 
-        distance_list = distances[start]
-        distance_combination = distance_list[destination]
+            all_previous_solutions += c_start_df['all_previous_solutions'].tolist()
 
-        road_options_without_route.loc[index_combination, 'distance'] = distance_combination
+            current_commodity += [c_transported] * len_index
+            current_commodity_object += [c_transported_object] * len_index
+            all_previous_commodities += c_start_df['all_previous_commodities'].tolist()
 
-    # Drop all rows with costs higher than benchmark
-    idx = np.ones(len(road_options_without_route.index), dtype=bool)
-    costs_to_destination_list = []
-    for i in range(len(road_options_without_route.index)):
+            continent += c_start_df['current_continent'].values.tolist()
 
-        solution_index = road_options_without_route.iloc[i]['solution_index']
-        solution = solution_to_road_option[solution_index]
-        total_costs = solution.get_total_costs()
+            starting_latitude += c_start_df['starting_latitude'].values.tolist()
+            starting_longitude += c_start_df['starting_longitude'].values.tolist()
+            latitude += c_start_df['latitude'].values.tolist()
+            longitude += c_start_df['longitude'].values.tolist()
+            distance_to_final_destination += c_start_df['distance_to_final_destination'].values.tolist()
 
-        transported_commodity = road_options_without_route.iloc[i]['transported_commodity']
-        transported_commodity_object = data['Commodities'][transported_commodity]
-        transportation_costs_road = transported_commodity_object.get_transportation_costs_specific_mean_of_transport('Road')
+            current_infrastructure += c_start_df['current_infrastructure'].values.tolist()
+            all_previous_infrastructure += c_start_df['all_previous_infrastructure'].values.tolist()
 
-        costs_to_destination \
-            = total_costs + road_options_without_route.iloc[i]['distance'] * transportation_costs_road / 1000
+            current_transport_mean += c_start_df['current_transport_mean'].values.tolist()
+            all_previous_transport_means += c_start_df['all_previous_transport_means'].values.tolist()
 
-        if costs_to_destination > benchmark:
-            idx[i] = False
-        else:
-            costs_to_destination_list.append(costs_to_destination)
+            current_node += c_start_df['current_node'].values.tolist()
+            all_previous_nodes += c_start_df['all_previous_nodes'].values.tolist()
 
-    road_options_without_route = road_options_without_route.iloc[idx].copy()
-    road_options_without_route['costs_to_destination'] = costs_to_destination_list
+            current_distance += [0] * len_index
+            all_previous_distances += c_start_df['all_previous_distances'].values.tolist()
 
-    # Based on the true costs, assess solution and throw out if other was cheaper
-    idx = np.ones(len(road_options_without_route.index), dtype=bool)
-    for i in range(len(road_options_without_route.index)):
-        transported_commodity = road_options_without_route.iloc[i]['transported_commodity']
-        direct_distance_costs = road_options_without_route.iloc[i]['costs_to_destination']
+            all_previous_transportation_costs += c_start_df['all_previous_transportation_costs'].values.tolist()
+            all_previous_conversion_costs += c_start_df['all_previous_conversion_costs'].values.tolist()
+            all_previous_total_costs += c_start_df['all_previous_total_costs'].values.tolist()
 
-        infrastructure = road_options_without_route.index[i][1]
+            previous_solutions += c_start_df.index.values.tolist()
 
-        sub_df\
-            = local_benchmarks[(local_benchmarks['infrastructure'] == infrastructure) &
-                               (local_benchmarks['commodity'] == transported_commodity)]
-        sub_df_index = sub_df[sub_df['total_costs'] < direct_distance_costs].index
+    current_transportation_costs = [0 for i in range(len(total_costs))]
+    comparison_index = [(current_node[n], current_commodity[n]) for n in range(len(current_node))]
+    index += ['S' + str(solution_number + i) for i in range(len(total_costs))]
+    solution_number += len(total_costs)
 
-        if len(sub_df_index) > 0:
-            idx[i] = False
+    solutions_dict = {'latitude': latitude,
+                      'longitude': longitude,
 
-    road_options_without_route = road_options_without_route.iloc[idx]
+                      'current_commodity': current_commodity,
+                      'current_commodity_object': current_commodity_object,
 
-    # Create solutions from rest of road options
-    new_solutions = []
-    for i in range(len(road_options_without_route.index)):
+                      'current_total_costs': total_costs,
 
-        # The total_costs_to_final_destination holds as destinations do not change. But the benchmark changes. To avoid
-        # processing destination above benchmark, check regularly
-        if road_options_without_route.iloc[i]['total_costs_to_final_destination'] > benchmark:
-            continue
+                      'current_transportation_costs': current_transportation_costs,
 
-        target_system = road_options_without_route.iloc[i]['mean_of_transport']
-        target_point = Point([road_options_without_route.iloc[i]['destination_longitude'],
-                              road_options_without_route.iloc[i]['destination_latitude']])
-        distance_to_target = road_options_without_route.iloc[i]['distance']
+                      'current_conversion_costs': current_conversion_costs,
 
-        used_infrastructure = road_options_without_route.iloc[i]['used_infrastructure']
-        used_node = road_options_without_route.index[i][1]
+                      'current_transport_mean': current_transport_mean,
 
-        solution_index = road_options_without_route.iloc[i]['solution_index']
-        solution = solution_to_road_option[solution_index]
-        s_commodity = solution.get_current_commodity_object()
-        final_destination = solution.get_destination()
-        final_commodity = solution.get_final_commodity()
+                      'current_node': current_node,
 
-        s_new = create_new_solution_from_routing_result(solution, scenario_count, s_commodity, target_system,
-                                                        target_point, distance_to_target, used_infrastructure,
-                                                        used_node, iteration)
-        scenario_count += 1
+                      'current_infrastructure': current_infrastructure,
 
-        # solutions_per_iteration[iteration].append(s_new)
+                      'current_distance': current_distance,
 
-        final_solution, new_solutions, local_benchmarks, solutions_to_remove \
-            = process_new_solution(s_new, new_solutions, final_solution,
-                                   benchmark, local_benchmarks, solutions_to_remove,
-                                   final_destination, final_commodity,
-                                   s_commodity, used_node,
-                                   configuration)
+                      'current_continent': continent,
+                      'distance_to_final_destination': distance_to_final_destination,
 
-    if False:
+                      'solution_index': index,
+                      'comparison_index': comparison_index,
 
-        for key in [*road_distances_to_calculate.keys()]:
-            indexes_to_analyze = road_distances_to_calculate[key]
+                      'previous_solution': previous_solutions,
 
-            distances = {}
+                      'taken_route': taken_route}
 
-            if len(indexes_to_analyze) > 5:  # bulk calculation of road distances
-                road_transport_options.loc[indexes_to_analyze, 'distance'] \
-                    = get_road_distance_to_options(configuration, location,
-                                                   road_transport_options.loc[indexes_to_analyze, :])
+    solutions = pd.DataFrame(solutions_dict, index=index)
 
-                for ind in indexes_to_analyze:
+    return solutions, solution_number
 
-                    if road_transport_options.loc[ind, 'distance'] is None:
-                        road_transport_options.drop([ind], inplace=True)
-                        indexes_to_analyze.remove(ind)
 
-                    else:
+def postprocessing_solutions(solutions, old_solutions):
+    # moves all current parameters to previous
 
-                        road_transport_options.loc[ind, 'costs_to_destination'] \
-                            = road_transport_options.loc[ind, 'distance'] * transportation_costs_road / 1000
+    if 'all_previous_infrastructure' in solutions.columns:
+        solutions = solutions.drop(columns=['all_previous_infrastructure'])
 
-                        if ind[0] != 'Start':  # Start does vary so don't store
-                            if ind[0] not in [*distances.keys()]:
-                                distances[ind[0]] = {}
-                            distances[ind[0]][ind[1]] = road_transport_options.loc[
-                                ind, 'distance']  # todo: might be dropped therefor error
+    columns_to_keep = ['all_previous_transport_means', 'all_previous_infrastructure',
+                       'all_previous_nodes', 'all_previous_solutions',
+                       'all_previous_distances', 'all_previous_transportation_costs', 'all_previous_conversion_costs',
+                       'all_previous_total_costs', 'all_previous_commodities', 'solution_index',
+                       'starting_latitude', 'starting_longitude', 'taken_routes']
+    old_solutions = old_solutions[columns_to_keep]
 
-                        if road_transport_options.loc[ind, 'costs_to_destination'] > benchmark:
-                            road_transport_options.drop([ind], inplace=True)
+    solutions = pd.merge(solutions, old_solutions, left_on='previous_solution', right_on='solution_index', how='left')
+    solutions.rename(columns={'solution_index_x': 'solution_index'}, inplace=True)
+    solutions.index = solutions['solution_index'].tolist()
 
-            # Update the all distances dataframe with newly calculated road distances
-            if key != 'Start':  # Start does vary so don't store
-                distances = pd.DataFrame.from_dict(distances)
-                not_in_index = []
-                for ind_distances in distances.index:
-                    if ind_distances not in all_distances_road.index:
-                        not_in_index.append(str(ind_distances))
+    solutions['all_previous_transport_means'] \
+        = solutions.apply(lambda row: row['all_previous_transport_means'] + [row['current_transport_mean']], axis=1)
 
-                new_distances = pd.DataFrame(math.nan, index=not_in_index, columns=not_in_index)
+    solutions['all_previous_infrastructure'] \
+        = solutions.apply(lambda row: row['all_previous_infrastructure'] + [row['current_infrastructure']], axis=1)
 
-                if distances.columns[0] not in all_distances_road.index:
-                    new_distances.loc[distances.columns[0], :] = math.nan
-                    new_distances.loc[:, distances.columns[0]] = math.nan
+    solutions['all_previous_nodes'] \
+        = solutions.apply(lambda row: row['all_previous_nodes'] + [row['current_node']], axis=1)
 
-                all_distances_road = pd.concat([all_distances_road, new_distances])
+    solutions['all_previous_solutions'] \
+        = solutions.apply(lambda row: row['all_previous_solutions'] + [row['solution_index']], axis=1)
 
-                all_distances_road.loc[distances.columns[0], distances.index] = distances[distances.columns[0]].tolist()
-                all_distances_road.loc[distances.index, distances.columns[0]] = distances[distances.columns[0]].tolist()
+    solutions['all_previous_distances'] \
+        = solutions.apply(lambda row: row['all_previous_distances'] + [row['current_distance']], axis=1)
 
-        # overwrite data with adjusted all distances road
-        data['all_distances_road'] = all_distances_road
+    solutions['all_previous_transportation_costs'] \
+        = solutions.apply(lambda row: row['all_previous_transportation_costs'] + [row['current_transportation_costs']], axis=1)
 
-    return final_solution, new_solutions, local_benchmarks, solutions_to_remove
+    solutions['all_previous_conversion_costs'] \
+        = solutions.apply(lambda row: row['all_previous_conversion_costs'] + [row['current_conversion_costs']], axis=1)
 
+    solutions['all_previous_total_costs'] \
+        = solutions.apply(lambda row: row['all_previous_total_costs'] + [row['current_total_costs']], axis=1)
 
-def process_solutions_reaching_end(solutions_reaching_end, costs_to_final_destination, final_solution):
-    for s in solutions_reaching_end:
+    solutions['previous_commodity'] = solutions['current_commodity']
+    solutions['all_previous_commodities'] \
+        = solutions.apply(lambda row: row['all_previous_commodities'] + [row['current_commodity']], axis=1)
 
-        iterations = s.get_iterations()
+    solutions['taken_routes'] \
+        = solutions.apply(lambda row: row['taken_routes'] + [row['taken_route']], axis=1)
 
-        iteration_data = s.get_iteration_data()
+    return solutions
 
-        total_costs_to_current_location = ''
-        for num, iteration in enumerate(reversed(iterations[2:])):
 
-            key = None
-            if iteration[1] == 'C':
-                commodity_before_conversion = iteration_data['commodity'][iterations[num-2]]
-                commodity_after_conversion = iteration_data['commodity'][iteration]
+def apply_local_benchmark(solutions, local_benchmarks, solutions_to_remove, update_local_benchmark=False):
 
-                if commodity_before_conversion.get_name() != commodity_after_conversion.get_name():
+    # update existing benchmarks
+    solutions['old_index'] = solutions.index
+    solutions.index = solutions['comparison_index']
+    common_index = solutions.index.intersection(local_benchmarks.index)
 
-                    conversion_costs \
-                        = commodity_before_conversion.get_conversion_costs_specific_commodity(commodity_after_conversion.get_name())
-                    loss_of_product\
-                        = commodity_before_conversion.get_conversion_loss_of_educt_specific_commodity(commodity_after_conversion.get_name())
+    solution_df_subset = solutions.loc[common_index, :].copy()
+    local_benchmarks_dict_subset = local_benchmarks.loc[common_index, :]
 
-                    if total_costs_to_current_location == '':
-                        total_costs_to_current_location = '((x' + '+' + str(
-                            conversion_costs) + ')/' + str(loss_of_product) + ')'
-                    else:
-                        total_costs_to_current_location = '((' + total_costs_to_current_location + '+' + str(conversion_costs) + ')/' + str(loss_of_product) + ')'
+    # find all places where solution is more expensive than local benchmark --> remove solutions
+    solutions_higher_benchmark = solution_df_subset[
+        solution_df_subset['current_total_costs'] > local_benchmarks_dict_subset['total_costs']].index
+    solutions.drop(index=solutions_higher_benchmark, inplace=True)
 
-                    location = iteration_data['location'][iteration]  # location BEFORE transportation
-                    key = (location, commodity_before_conversion.get_name())
+    if update_local_benchmark:
+        # find all places where solution is cheaper than local benchmark --> update local benchmark
+        solutions_lower_benchmark = solution_df_subset[
+            solution_df_subset['current_total_costs'] < local_benchmarks_dict_subset['total_costs']].index
 
-            elif iteration[1] == 'T':
+        solutions_to_remove += local_benchmarks.loc[solutions_lower_benchmark, 'solution'].tolist()
 
-                transportation_costs_at_iteration = iteration_data['transportation_costs'][iteration]
+        local_benchmarks.loc[common_index, 'total_costs'] \
+            = solutions.loc[solutions_lower_benchmark, 'current_total_costs']
+        local_benchmarks.loc[common_index, 'solution'] \
+            = solutions.loc[solutions_lower_benchmark, 'solution_index']
 
-                if total_costs_to_current_location == '':
-                    total_costs_to_current_location = '(x' + '+' + str(transportation_costs_at_iteration) + ')'
-                else:
-                    total_costs_to_current_location = '(' + total_costs_to_current_location + '+' + str(
-                        transportation_costs_at_iteration) + ')'
+        # add new benchmarks
+        new_benchmarks = solutions.index.difference(local_benchmarks.index)
+        new_benchmarks_df = pd.DataFrame(
+            {'total_costs': solutions.loc[new_benchmarks, 'current_total_costs'],
+             'solution': solutions.loc[new_benchmarks, 'solution_index']},
+            index=new_benchmarks)
+        local_benchmarks = pd.concat([local_benchmarks, new_benchmarks_df])
 
-                location = iteration_data['location'][iterations[num+1]]
-                commodity = iteration_data['commodity'][iteration].get_name()
+    solutions.index = solutions['old_index']
+    solutions.drop(columns=['old_index'], inplace=True)
 
-                key = (location, commodity)
+    return solutions, local_benchmarks, solutions_to_remove
 
-            is_final = False
-            if s == final_solution:
-                is_final = True
 
-            if key is not None:
-                if key in [*costs_to_final_destination.keys()]:
-
-                    # check if cost_addition <-> is_final combination already in costs_to_final_destination dictionary
-                    add = True
-                    for i, c in enumerate(costs_to_final_destination[key]['costs']):
-                        if (c == total_costs_to_current_location) & (is_final == costs_to_final_destination[key]['final'][i]):
-                            add = False
-                            break
-
-                    if add:
-                        if is_final:
-                            # always add final solutions to first positions
-                            # -- > they are cheaper as no other solution is better
-                            costs_to_final_destination[key]['costs'].insert(0, total_costs_to_current_location)
-                            costs_to_final_destination[key]['final'].insert(0, is_final)
-                        else:
-                            costs_to_final_destination[key]['costs'].append(total_costs_to_current_location)
-                            costs_to_final_destination[key]['final'].append(is_final)
-                else:
-                    costs_to_final_destination[key] = {'costs': [total_costs_to_current_location],
-                                                       'final': [is_final]}
-
-    return costs_to_final_destination
-
-
-def update_graph_data_based_on_parts(new_historic_parts, graph_data, graph_connector_data):
-
-    for start in new_historic_parts:
-        if start not in list(graph_data.keys()):
-            graph_data[start] = new_historic_parts[start]
-        else:
-            for end in list(new_historic_parts[start].keys()):
-                if end not in list(graph_data[start].keys()):
-                    graph_data[start][end] = new_historic_parts[start][end]
-                else:
-                    if new_historic_parts[start][end] < graph_data[start][end]:
-                        graph_data[start][end] = new_historic_parts[start][end]
-
-    return graph_data, graph_connector_data
-
-
-def create_graph_from_graph_data(graph_data):
-
-    if False:
-
-        graphs = {}
-        for commodity in list(graph_data.keys()):
-            graphs[commodity] = nx.Graph()
-
-            node_combinations = []
-            for i, ind in enumerate(graph_data[commodity].index):
-                start_node = ind[0]
-                end_node = ind[1]
-                costs = graph_data[commodity].iloc[i].values[0]
-
-                if ((start_node, end_node) not in node_combinations) & ((end_node, start_node) not in node_combinations):
-                    graphs[commodity].add_edge(start_node, end_node, weight=costs)
-
-                    node_combinations.append((start_node, end_node))
-                    node_combinations.append((end_node, start_node))
-
-    else:
-        graphs = {}
-        for commodity, data in graph_data.items():
-            graphs[commodity] = nx.Graph()
-            edge_set = set()  # Store edge combinations in a set
-
-            for i, row in data.iterrows():
-                start_node, end_node, costs = i[0], i[1], row[0]
-
-                if (start_node, end_node) not in edge_set and (end_node, start_node) not in edge_set:
-                    graphs[commodity].add_edge(start_node, end_node, weight=costs)
-                    edge_set.add((start_node, end_node))
-                    edge_set.add((end_node, start_node))
-
-        graph_dict = {}
-        for commodity, data in graph_data.items():
-
-            for i, row in data.iterrows():
-                start_node, end_node, costs = i[0], i[1], row[0]
-                key = (start_node, commodity)
-
-                if key in list(graph_dict.keys()):
-                    if end_node in list(graph_dict[key].keys()):
-                        if costs < graph_dict[key][end_node]:
-                            graph_dict[key][end_node] = costs
-                    else:
-                        graph_dict[key][end_node] = costs
-                else:
-                    graph_dict[key] = {end_node: costs}
-
-    return graphs, graph_dict
-
-
-def update_local_benchmark_based_on_graph(solutions, graph_dict, local_benchmark, global_benchmark):
-
-    import pandas as pd
-    import shapely
-
-    obsolete_solutions = []
-
-    final_destination = solutions[0].get_destination()
-
-    routing_costs = pd.DataFrame(graph_dict).transpose()
-
-    # change columns to get format (location, commodity). Before it was (location, commodity, transport mean) &
-    # reformulate to string (to allow groupby)
-    routing_costs.columns = [c[0].wkt + '*' + c[1] for c in routing_costs.columns]
-
-    # get minimum per column
-    routing_costs = routing_costs.groupby(routing_costs.columns, axis=1).min()
-
-    # reformulate it back to (point, commodity)
-    routing_costs.columns = [(shapely.wkt.loads(c.split('*')[0]), c.split('*')[1]) for c in routing_costs.columns]
-
-    # get costs of current solutions
-    costs_per_solution = {}
-    for s in solutions:
-        current_commodity = s.get_current_commodity_name()
-        current_location = s.get_current_location()
-        current_total_costs = s.get_total_costs()
-
-        costs_per_solution[(current_location, current_commodity)] = current_total_costs
-
-    common_solutions = list(set(costs_per_solution.keys()).intersection(routing_costs.index.tolist()))
-    routing_costs = routing_costs.loc[common_solutions, :]
-
-    # add total costs
-    total_costs = [costs_per_solution[location] for location in routing_costs.index]
-    routing_costs = routing_costs.add(total_costs, axis='index')
-
-    # remove columns which only consist of nan values --> these locations are not connected to graph
-    routing_costs.dropna(axis='columns', how='all', inplace=True)
-
-    # update benchmark --> if destination is in graph, then we are able to calculate a new benchmark
-    if final_destination in routing_costs.columns:
-        min_value_at_final_destination = routing_costs[final_destination].min()
-        if min_value_at_final_destination < global_benchmark:
-            global_benchmark = min_value_at_final_destination
-            print('updated benchmark')
-
-    # get common targets
-    common_targets = list(set(routing_costs.columns).intersection(set(list(local_benchmark.keys()))))
-
-    if common_targets:  # only if common targets exist
-
-        # get all target locations which the local benchmark and the routing costs have in common
-        routing_costs_common = routing_costs[common_targets]
-
-        # get values of local_benchmark based on routing costs columns
-        values_benchmark = {key: local_benchmark[key]['total_costs']
-                            for key in common_targets}
-        solutions_benchmark = {key: local_benchmark[key]['solution']
-                               for key in common_targets}
-
-        # create dataframes of local benchmark, and concat them to routing so they are comparable
-        df_local_benchmark = pd.DataFrame(values_benchmark, index=['local_benchmark'])
-        df_local_benchmark.columns = common_targets
-        comparison = pd.concat([df_local_benchmark, routing_costs_common])
-
-        # compare local benchmark and routing with each other --> get minimal value for each location
-        comparison_only_min_values = comparison.idxmin()
-
-        # get only such columns where local benchmark is not lower. Only such have to be considered
-        index_lower_than_benchmark \
-            = comparison_only_min_values[comparison_only_min_values != 'local_benchmark']
-
-        dict_updated_values \
-            = {ind: {'total_costs': routing_costs_common.at[index_lower_than_benchmark.at[ind], ind],
-                     'solution': None}
-               for ind in index_lower_than_benchmark.index}
-
-        # update local benchmark with the new values
-        local_benchmark.update(dict_updated_values)
-
-        # with the updated benchmark, some solutions might be obsolete as they achieve only higher costs
-        obsolete_solutions += [solutions_benchmark[key]
-                               for key in index_lower_than_benchmark.index
-                               if solutions_benchmark[key] is not None]
-
-    # not common keys are keys, which are not in local benchmark but in routing costs
-    not_common_targets = list(set(routing_costs.columns) - set(list(local_benchmark.keys())))
-
-    if not_common_targets:  # only if not common targets exist
-        # print(not_common_targets)
-
-        # get not common routing costs
-        routing_costs_not_common = routing_costs[not_common_targets]
-
-        # get start location / end location combinations with minimal costs
-        comparison_only_min_values = routing_costs_not_common.idxmin()
-
-        # create new dictionary with all new values
-        try:
-            dict_new_values \
-                = {ind: {'total_costs': routing_costs_not_common.at[comparison_only_min_values.at[ind], ind],
-                         'solution': None}
-                   for ind in comparison_only_min_values.index}
-        except:
-            print(routing_costs_not_common)
-            print(comparison_only_min_values)
-            for ind in comparison_only_min_values.index:
-                print(ind)
-                print(comparison_only_min_values.at[ind])
-                print(routing_costs_not_common.at[comparison_only_min_values.at[ind], ind])
-            dict_new_values \
-                = {ind: {'total_costs': routing_costs_not_common.at[comparison_only_min_values.at[ind], ind],
-                         'solution': None}
-                   for ind in comparison_only_min_values.index}
-
-        # attach created dictionary to local benchmark
-        local_benchmark.update(dict_new_values)
-
-    return local_benchmark, obsolete_solutions
-
-
-def update_benchmark_based_on_historic_paths(benchmark, historic_paths, solutions):
-
-    import math
-    from py_expression_eval import Parser
-
-    parser = Parser()
-
-    for s in solutions:
-
-        current_location = s.get_current_location()
-        current_commodity = s.get_current_commodity_name()
-        current_total_costs = s.get_total_costs()
-
-        key = (current_location, current_commodity)
-
-        if (current_location, current_commodity) in [*historic_paths.keys()]:
-
-            costs = historic_paths[key]['costs']
-            final = historic_paths[key]['final']
-
-            for i, cost_addition in enumerate(costs):
-
-                is_final = final[i]
-
-                expr = parser.parse(cost_addition.replace('x', str(current_total_costs)))
-                total_costs = expr.evaluate({})
-
-                if math.ceil(total_costs*100)/100 <= benchmark:
-                    # update benchmark based on projection of costs
-                    # --> allow some tolerance as it is not a real solution
-                    benchmark = math.ceil(total_costs*100)/100
-
-    return benchmark, solutions

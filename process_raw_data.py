@@ -49,15 +49,18 @@ warnings.filterwarnings('ignore')
 
 def process_seaport_data():
 
+    # todo: remove duplicate ports
+
     with open(path_data + 'seaports.geojson') as f:
         gj = geojson.load(f)
     features = gj['features']
 
     ports_local = pd.DataFrame(columns=['latitude', 'longitude', 'name', 'country', 'continent'])
+    ports_local.drop_duplicates(subset=['latitude', 'longitude'], keep='first')
 
     i = 0
     for port in features:
-        index = 'S' + str(i)
+        index = 'H' + str(i)
         ports_local.loc[index, 'longitude'] = port['geometry']['coordinates'][0] # round(port['geometry']['coordinates'][0], 4)
         ports_local.loc[index, 'latitude'] = port['geometry']['coordinates'][1] # round(port['geometry']['coordinates'][1], 4)
         ports_local.loc[index, 'name'] = port['properties']['name']
@@ -86,8 +89,14 @@ def process_seaport_data():
         start_location = [ports_local.loc[start_local, 'longitude'], ports_local.loc[start_local, 'latitude']]
         end_location = [ports_local.loc[end_local, 'longitude'], ports_local.loc[end_local, 'latitude']]
 
-        route = sr.searoute(start_location, end_location)
+        route = sr.searoute(start_location, end_location, append_orig_dest=True)
         distance_local = (round(float(format(route.properties['length'])), 2)) * 1000  # m
+
+        if distance_local == 0:
+            distance_local = calc_distance_single_to_single(ports_local.loc[start_local, 'latitude'],
+                                                            ports_local.loc[start_local, 'longitude'],
+                                                            ports_local.loc[end_local, 'latitude'],
+                                                            ports_local.loc[end_local, 'longitude'])
 
         return combination, distance_local
 
@@ -657,21 +666,20 @@ path_railroad_data = path_data + 'railway_data/'
 path_gas_pipeline_data = path_data + 'gas_pipeline_data/'
 path_oil_pipeline_data = path_data + 'oil_pipeline_data/'
 coastlines = pd.read_csv(path_data + 'coastlines.csv', index_col=0)
-coastlines = gpd.GeoDataFrame(coastlines)
-coastlines.geometry = coastlines.geometry.apply(loads)
+coastlines = gpd.GeoDataFrame(geometry=coastlines['geometry'].apply(loads))
 coastlines.set_geometry('geometry', inplace=True)
 
-if True:
+if False:
     if False:
         ports, port_distances = process_seaport_data()
         ports.to_excel(path_data + 'ports_processed.xlsx')
-        # port_distances.to_csv(path_data + 'port_distances.csv')
+        port_distances.to_csv(path_data + 'port_distances.csv')
     else:
         ports = pd.read_excel(path_data + 'ports_processed.xlsx', index_col=0)
         port_distances = pd.read_csv(path_data + 'port_distances.csv', index_col=0)
 
-if True:
-    if False:
+if False:
+    if True:
         gas_pipeline_line_data, gas_pipeline_graphs, gas_pipeline_geodata \
             = get_geodata_and_graph_from_network_data_with_intermediate_points(path_gas_pipeline_data, 'gas_pipeline')
         # gas_pipeline_shortest_paths = get_shortest_paths_through_networks(gas_pipeline_graphs, gas_pipeline_geodata)
@@ -693,7 +701,7 @@ if True:
 
 if True:
 
-    if False:
+    if True:
         oil_pipeline_line_data, oil_pipeline_graphs, oil_pipeline_geodata \
             = get_geodata_and_graph_from_network_data_with_intermediate_points(path_oil_pipeline_data, 'oil_pipeline')
         # oil_pipeline_shortest_paths = get_shortest_paths_through_networks(oil_pipeline_graphs, oil_pipeline_geodata)
@@ -756,14 +764,13 @@ if False:
 
 if False:
 
-
     df_distance = calculate_road_distances([gas_pipeline_geodata, oil_pipeline_geodata],
                                            [gas_pipeline_graphs, oil_pipeline_graphs],
                                            ['Pipeline_Gas', 'Pipeline_Liquid'],
                                            ports)
 
-    df_distance.to_csv(path_data + 'test_distances.csv')
+    # df_distance.to_csv(path_data + 'test_distances.csv')
 
-get_distances_within_networks(gas_pipeline_graphs, path_data)
-get_distances_within_networks(oil_pipeline_graphs, path_data)
+    get_distances_within_networks(gas_pipeline_graphs, path_data)
+    get_distances_within_networks(oil_pipeline_graphs, path_data)
 

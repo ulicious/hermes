@@ -3,12 +3,14 @@ import pandas as pd
 from shapely.geometry import Point
 from shapely.ops import nearest_points
 import networkx as nx
+import numpy as np
 import searoute as sr
+from tables import *
 
 import time
 
 from _helpers import calc_distance_single_to_single, calc_distance_list_to_single,\
-    calculate_cheapest_option_to_final_destination, check_if_reachable_by_road, check_if_last_was_new_segment
+    calculate_cheapest_option_to_final_destination, check_if_reachable_on_land
 from methods_road_transport import get_road_distance_to_single_option, get_road_distance_to_options
 from methods_networks import attach_new_node_to_graph
 
@@ -69,6 +71,10 @@ def _get_all_options(data, configuration, solution, benchmark, new_node_count, i
         # get all options of current mean of transport
         if m == 'Shipping':
 
+            if solution.get_used_transport_means().count('Shipping') == configuration['Shipping']['number_of_times_possible']:
+                # limit the number of times shipping can be used
+                continue
+
             # get all options of current mean of transport
             options_shipping = data[m]['ports']
             options_shipping['mean_of_transport'] = m
@@ -86,6 +92,7 @@ def _get_all_options(data, configuration, solution, benchmark, new_node_count, i
             for n in networks:
 
                 graph_object = data[m][n]['GraphObject']
+                geodata = data[m][n]['GeoData']
 
                 # Add node to each network which is closest to final destination
                 # This is done only once. Therefore, do it at the beginning (where no infrastructure was used)
@@ -93,39 +100,61 @@ def _get_all_options(data, configuration, solution, benchmark, new_node_count, i
                 #  useful
 
                 # Check if direct path to network does not already cost more than benchmark
-                closest_node = nearest_points(graph_object, location)[0]
-                distance_to_closest = calc_distance_single_to_single(location.y, location.x,
-                                                                     closest_node.y, closest_node.x)
+                geodata['direct_distance'] = calc_distance_list_to_single(geodata['latitude'],
+                                                                          geodata['longitude'],
+                                                                          location.y, location.x)
+                distance_to_closest = geodata['direct_distance'].min()
+                closest_node = geodata['direct_distance'].idxmin()
 
-                if not transportation_options['Road']:
-                    # if commodity cannot be transported to infrastructure via road, it is only possible if
-                    # a new infrastructure to the existing one is built
-                    if configuration[m]['build_new_infrastructure']:
-                        if distance_to_closest > configuration[m]['max_length_new_segment']:
+                # if distance is within tolerance, then distance is 0
+                if distance_to_closest <= configuration['tolerance_distance']:
+                    costs_to_closest = 0
+                else:
+                    distance_to_closest = distance_to_closest * configuration['no_road_multiplier']
+                    # if distance is not within tolerance, check if infrastructure can be reached
+                    if not transportation_options['Road']:
+                        # if commodity cannot be transported to infrastructure via road, it is only possible if
+                        # a new infrastructure to the existing one is built
+                        if configuration[m]['build_new_infrastructure']:
+                            if distance_to_closest > configuration[m]['max_length_new_segment']:
+                                # if this is not possible as well, than infrastructure not considered
+                                continue
+                            else:
+                                # if infrastructure can be build and is in distance
+                                # --> calculate based on new infrastructure costs
+                                costs_to_closest = total_costs + distance_to_closest / 1000 \
+                                    * commodity.get_transportation_costs_specific_mean_of_transport('New_' + m)
+
+                        else:
                             # if this is not possible as well, than infrastructure not considered
                             continue
-                        else:
-                            # if infrastructure can be build and is in distance
-                            # --> calculate based on new infrastructure costs
-                            costs_to_closest = total_costs + distance_to_closest / 1000 \
-                                * commodity.get_transportation_costs_specific_mean_of_transport('New_' + m)
-
                     else:
-                        # if this is not possible as well, than infrastructure not considered
-                        continue
-                else:
-                    costs_to_closest = total_costs + distance_to_closest / 1000 * transportation_costs_road
-                    costs_to_closest_new = math.inf
-                    if configuration[m]['build_new_infrastructure']:
-                        if distance_to_closest <= configuration[m]['max_length_new_segment']:
-                            # if infrastructure can be build and is in distance
-                            # --> calculate based on new infrastructure costs
-                            costs_to_closest_new = total_costs + distance_to_closest / 1000 \
-                                * commodity.get_transportation_costs_specific_mean_of_transport('New_' + m)
+                        # calculate road transportation
+                        costs_to_closest = total_costs + distance_to_closest / 1000 * transportation_costs_road
+                        costs_to_closest_new = math.inf
 
-                    # compare new infrastructure (if applicable) to road transport
-                    if costs_to_closest > costs_to_closest_new:
-                        costs_to_closest = costs_to_closest_new
+                        # if new infrastructure is possible, calculate costs and replace road transport if cheaper
+                        if configuration[m]['build_new_infrastructure']:
+                            if configuration[m]['build_consecutive_new_infrastructure']:
+                                if distance_to_closest <= configuration[m]['max_length_new_segment']:
+                                    # if infrastructure can be build and is in distance
+                                    # --> calculate based on new infrastructure costs
+                                    costs_to_closest_new = total_costs + distance_to_closest / 1000 \
+                                        * commodity.get_transportation_costs_specific_mean_of_transport('New_' + m)
+                            else:
+                                # if no consecutive new segments can be placed, calculate costs only based on
+                                # Road if last was newly built segment
+                                if solution.get_last_used_transport_mean() != 'New_' + m:
+                                    if distance_to_closest <= configuration[m]['max_length_new_segment']:
+                                        # if infrastructure can be build and is in distance
+                                        # --> calculate based on new infrastructure costs
+                                        costs_to_closest_new \
+                                            = total_costs + distance_to_closest / 1000 \
+                                              * commodity.get_transportation_costs_specific_mean_of_transport('New_' + m)
+
+                        # compare new infrastructure (if applicable) to road transport
+                        if costs_to_closest > costs_to_closest_new:
+                            costs_to_closest = costs_to_closest_new
 
                 if costs_to_closest <= benchmark:
 
@@ -166,7 +195,7 @@ def _get_all_options(data, configuration, solution, benchmark, new_node_count, i
     return options, new_node_count, data
 
 
-def _process_options(data, configuration, solution, options):
+def _process_options(data, configuration, solution, options, local_benchmarks, solutions_to_remove):
 
     # todo: move code which processes in or outside tolerance to specific method
 
@@ -181,20 +210,20 @@ def _process_options(data, configuration, solution, options):
     means_of_transport = data['Means_of_Transport']
 
     # first of all, there is no returning to old locations --> remove all options which have been visited
-    locations_visited = solution.get_locations()
-    locations_visited_list = list(locations_visited.keys())
-    if len(locations_visited_list) > 3:
-        # first three locations are always destination, first location (transport) and first location (conversion)
-        # Therefore, it doesn't make sense to look at these
-        for l_key in locations_visited_list[:-2]:
-            # then we don't look at the last two locations as sometimes two infrastructure points are at the same
-            # location and we would remove the possibility to switch between them
-            past_location = locations_visited[l_key]
-            if past_location != final_destination:  # we never remove the final destination
-                options = options[(options['latitude'] != past_location.y) & (options['longitude'] != past_location.x)].copy()
-
+    if True:
+        locations_visited = solution.get_locations()
+        locations_visited_list = list(locations_visited.keys())
+        if len(locations_visited_list) > 3:
+            # first three locations are always destination, first location (transport) and first location (conversion)
+            # Therefore, it doesn't make sense to look at these
+            for l_key in locations_visited_list[:-2]:
+                # then we don't look at the last two locations as sometimes two infrastructure points are at the same
+                # location and we would remove the possibility to switch between them
+                past_location = locations_visited[l_key]
+                if past_location != final_destination:  # we never remove the final destination
+                    options = options[(options['latitude'] != past_location.y) & (options['longitude'] != past_location.x)].copy()
     # store targets in column
-    options['target_infrastructure'] = options.index.tolist()
+    # options['target_infrastructure'] = options.index.tolist()
 
     # attach distance to final destination
     options['distance_to_final_destination'] \
@@ -217,18 +246,19 @@ def _process_options(data, configuration, solution, options):
     options.sort_values(['direct_distance'], inplace=True)
     local_infrastructure_local = options[options['direct_distance'] <= tolerance_distance].copy()
 
-    # If final destination is in tolerance, don't process other solutions. Only conversion needed
+    # If final destination is in tolerance, return nothing. Such solutions should not exist
     if 'Destination' in options.index:
         if options.loc['Destination', 'direct_distance'] <= configuration['to_final_destination_tolerance']:
-            options = options.loc[['Destination']]
-            options.loc['Destination', 'direct_distance'] = 0
+            return pd.DataFrame(), pd.DataFrame(), local_infrastructure_local, \
+                   local_benchmarks, solutions_to_remove
+
+            # options = options.loc[['Destination']]
+            # options.loc['Destination', 'direct_distance'] = 0
 
     # If last mean of transport was Road, it cannot use Road again and, therefore,
     # all destinations further away than tolerance are dropped
-    if list(solution.get_used_transport_means().values()):
-        if len(list(solution.get_used_transport_means().values())) > 1:
-            if list(solution.get_used_transport_means().values())[-2] == 'Road':
-                options = options[options['direct_distance'] <= tolerance_distance]
+    if solution.get_last_used_transport_mean() == 'Road':
+        options = options[options['direct_distance'] <= tolerance_distance]
 
     # Remove infrastructure which has been used already
     used_infrastructure = [element for inner_list in solution.get_used_infrastructure().values() for element in
@@ -241,9 +271,70 @@ def _process_options(data, configuration, solution, options):
         # remove infrastructure based on graph
         options = options[~options['graph'].isin(used_infrastructure)].copy()
 
+    if len(options.index) == 0:
+        return pd.DataFrame(), pd.DataFrame(), local_infrastructure_local, \
+               local_benchmarks, solutions_to_remove
+
     # Separate options regarding in tolerance or outside
     options_in_tolerance_local = options[options['direct_distance'] <= tolerance_distance]
     options_outside_tolerance_local = options[options['direct_distance'] > tolerance_distance]
+
+    # if option is in tolerance, than no costs from current location to option will occur. Therefore, we can
+    # set costs to option equal to costs to current location
+    if len(options_in_tolerance_local.index) > 0:
+
+        options_in_tolerance_local['local_benchmark'] = math.inf
+
+        old_index = options_in_tolerance_local.index
+
+        options_in_tolerance_local_adjusted_index = pd.Index([(Point([options_in_tolerance_local.at[ind, 'longitude'],
+                                                                      options_in_tolerance_local.at[ind, 'latitude']]),
+                                                               current_commodity.get_name())
+                                                              for ind in options_in_tolerance_local.index])
+        options_in_tolerance_local['adjusted_index'] = options_in_tolerance_local_adjusted_index
+
+        common_local_benchmarks = options_in_tolerance_local_adjusted_index.intersection(local_benchmarks.index)
+
+        if not common_local_benchmarks.empty:
+            benchmarks = []
+            for k in options_in_tolerance_local_adjusted_index:
+                if k in common_local_benchmarks:
+                    benchmarks.append(local_benchmarks.at[k, 'total_costs'])
+                else:
+                    benchmarks.append(math.inf)
+
+            options_in_tolerance_local['local_benchmark'] = benchmarks
+
+        options_in_tolerance_local['costs_for_benchmark_comparison'] = solution.get_total_costs()
+
+        if True:
+            # replace local benchmark where new options are below local benchmark
+            # possible because only options in tolerance --> equal to costs of current location, which are known
+            index_below_original \
+                = options_in_tolerance_local[options_in_tolerance_local['local_benchmark'] > solution.get_total_costs()].index
+
+            if not index_below_original.empty:
+                # as we set the column local_benchmark to math.inf, it might be quite common that the local benchmark
+                # is more expensive than solution costs. Therefore, compare again to local benchmark index
+                index_below_in_local_benchmark = pd.Index(options_in_tolerance_local.loc[index_below_original, 'adjusted_index'])
+                index_below_in_local_benchmark = index_below_in_local_benchmark.intersection(local_benchmarks.index)
+                if not index_below_in_local_benchmark.empty:
+                    local_benchmarks.loc[index_below_in_local_benchmark, 'total_costs'] = solution.get_total_costs()
+
+        if True:
+            # add local benchmark if not existing
+            index_local_benchmark = pd.Index(options_in_tolerance_local['adjusted_index'])
+            not_common_local_benchmarks = index_local_benchmark.difference(local_benchmarks.index)
+            if not not_common_local_benchmarks.empty:
+                new_location_benchmark = pd.DataFrame(index=not_common_local_benchmarks)
+                new_location_benchmark['total_costs'] = solution.get_total_costs()
+                new_location_benchmark['solution'] = None
+                local_benchmarks = pd.concat([local_benchmarks, new_location_benchmark])
+
+        # remove options above local benchmark
+        options_in_tolerance_local.index = old_index
+        options_in_tolerance_local \
+            = options_in_tolerance_local[options_in_tolerance_local['local_benchmark'] <= solution.get_total_costs()].copy()
 
     # Only choose closest target of network if set in configuration
     # in tolerance
@@ -275,7 +366,6 @@ def _process_options(data, configuration, solution, options):
                 if configuration[m_local]['find_only_closest_in_tolerance']:
 
                     for g in df_options_m_local['graph'].unique():
-
                         df_options_m_local_g = df_options_m_local[df_options_m_local['graph'] == g].copy()
 
                         if len(df_options_m_local_g.index) > 0:
@@ -320,7 +410,6 @@ def _process_options(data, configuration, solution, options):
                 if configuration[m_local]['find_only_closest_in_tolerance']:
 
                     for g in df_options_m_local['graph'].unique():
-
                         df_options_m_local_g = df_options_m_local[df_options_m_local['graph'] == g].copy()
 
                         if len(df_options_m_local_g.index) > 0:
@@ -344,29 +433,27 @@ def _process_options(data, configuration, solution, options):
         else:
             start_location = 'Start'
 
+        # todo: attaching the index takes quite a long time
         new_network_segment_options = []
         for network in ['Pipeline_Gas', 'Pipeline_Liquid']:  # todo: add railroad
-            if configuration[network]['build_new_infrastructure']:
-                if not configuration[network]['build_consecutive_new_infrastructure']:
-                    # If set in settings, don't build consecutive new infrastructure (connecting new infrastructure to
-                    # new infrastructure)
+            if network in options_outside_tolerance_local['mean_of_transport'].values.tolist():
+                if configuration[network]['build_new_infrastructure']:
+                    if not configuration[network]['build_consecutive_new_infrastructure']:
+                        # If set in settings, don't build consecutive new infrastructure (connecting new infrastructure
+                        # to new infrastructure)
 
-                    last_transportation_means = solution.get_used_transport_means()
-                    if len(list(last_transportation_means.keys())) > 2:
-                        # can only check last mean of transport if one exists
-                        last_key = list(last_transportation_means.keys())[-2]
-                        if last_transportation_means[last_key] == 'New_' + network:
+                        if solution.get_last_used_transport_mean() == 'New_' + network:
                             # if last mean of transport is new infrastructure & consecutive new ones are not allowed
                             # --> skip
                             continue
 
-            if network in options_outside_tolerance_local['mean_of_transport'].values.tolist():
-                if configuration[network]['build_new_infrastructure']:
-                    max_length_new_infrastructure\
-                        = configuration[network]['max_length_new_segment']
+                    max_length_new_infrastructure = configuration[network]['max_length_new_segment']
                     possible_new_network_segment_options \
                         = options_outside_tolerance_local[options_outside_tolerance_local['direct_distance']
                                                           <= max_length_new_infrastructure].copy()
+
+                    print(possible_new_network_segment_options)
+
                     possible_new_network_segment_options['mean_of_transport'] = 'New_' + network
 
                     # attach multi index to dataframe
@@ -401,7 +488,8 @@ def _process_options(data, configuration, solution, options):
         new_network_segment_options.append(options_outside_tolerance_local)
         options_outside_tolerance_local = pd.concat(new_network_segment_options)
 
-    return options_in_tolerance_local, options_outside_tolerance_local, local_infrastructure_local
+    return options_in_tolerance_local, options_outside_tolerance_local, local_infrastructure_local, \
+        local_benchmarks, solutions_to_remove
 
 
 def _remove_ports_based_on_continent(options, considered_continent):
@@ -456,9 +544,12 @@ def _remove_options_based_on_used_infrastructure(solution, options):
 
 
 def _assess_options_in_tolerance(data, configuration, solution, options_within_infrastructure, benchmark,
-                                 local_benchmarks):
+                                 local_benchmarks, graph_data_local):
 
     def _assess_targets():
+
+        benchmark_local = benchmark
+        local_benchmarks_updated = local_benchmarks
 
         # For each potential destination, calculate distance + costs to potential destination and afterwards
         # calculate distance and costs from potential destination to final destination
@@ -481,13 +572,19 @@ def _assess_options_in_tolerance(data, configuration, solution, options_within_i
 
             target_infrastructure_local = target_infrastructure.copy()
 
-            # No transportation from one location to same location
-            if start_location in target_infrastructure_local.index:
-                target_infrastructure_local.drop([start_location], inplace=True)
+            if True:
 
-            # add distance column to target and fill with information from infrastructure distances
-            target_infrastructure_local['distance'] \
-                = infrastructure_distances.loc[start_location, target_infrastructure_local.index.tolist()]
+                # No transportation from one location to same location
+                if start_location in target_infrastructure_local.index:
+                    target_infrastructure_local.drop([start_location], inplace=True)
+
+                # add distance column to target and fill with information from infrastructure distances
+                target_infrastructure_local['distance'] \
+                    = infrastructure_distances.loc[start_location, target_infrastructure_local.index.tolist()]
+
+            else:
+                target_infrastructure_local['distance'] \
+                    = pd.DataFrame(infrastructure_distances[start_location], index=[start_location])[target_infrastructure_local.index.tolist()]
 
             # Before assessing the targets, check if one is at final destination. Set these one to 0
             target_infrastructure_local['distance_to_final_destination'] = \
@@ -520,14 +617,26 @@ def _assess_options_in_tolerance(data, configuration, solution, options_within_i
             target_infrastructure_local['local_benchmark'] = math.inf
 
             old_index = target_infrastructure_local.index
-            local_benchmark_index = [(ind, commodity.get_name()) for ind in target_infrastructure_local.index]
-            target_infrastructure_local.index = local_benchmark_index
+            target_infrastructure_local_adjusted_index = pd.Index([(Point([target_infrastructure_local.at[ind, 'destination_longitude'],
+                                                                           target_infrastructure_local.at[ind, 'destination_latitude']]),
+                                                                    commodity.get_name())
+                                                                   for ind in target_infrastructure_local.index])
+            target_infrastructure_local['adjusted_index'] = target_infrastructure_local_adjusted_index
 
-            available_local_benchmarks = list(local_benchmarks.keys())
+            common_local_benchmarks = target_infrastructure_local_adjusted_index.intersection(local_benchmarks_updated.index)
+            common_local_benchmarks_original_index \
+                = target_infrastructure_local[target_infrastructure_local['adjusted_index'].isin(common_local_benchmarks)].index
 
-            common_local_benchmarks = set(available_local_benchmarks).intersection(set(local_benchmark_index))
-            benchmarks = [local_benchmarks[k]['total_costs'] for k in common_local_benchmarks]
-            target_infrastructure_local.loc[common_local_benchmarks, 'local_benchmark'] = benchmarks
+            if not common_local_benchmarks_original_index.empty:
+
+                benchmarks = []
+                for k in target_infrastructure_local_adjusted_index:
+                    if k in local_benchmarks_updated.index:
+                        benchmarks.append(local_benchmarks_updated.at[k, 'total_costs'])
+                    else:
+                        benchmarks.append(math.inf)
+
+                target_infrastructure_local['local_benchmark'] = benchmarks
 
             target_infrastructure_local.index = old_index
 
@@ -538,9 +647,45 @@ def _assess_options_in_tolerance(data, configuration, solution, options_within_i
             if len(target_infrastructure_local.index) == 0:
                 continue
 
+            # here we can update the local benchmark as we know the exact costs to the target infrastructure
+            if False:
+                # replace local benchmark where new options are below local benchmark
+                # possible because only options in tolerance --> equal to costs of current location, which are known
+                index_below_original \
+                    = target_infrastructure_local[
+                    target_infrastructure_local['local_benchmark'] > target_infrastructure_local['total_costs_to_destination']].index
+
+                if not index_below_original.empty:
+                    # as we set the column local_benchmark to math.inf, it might be quite common that the local benchmark
+                    # is more expensive than solution costs. Therefore, compare again to local benchmark index
+                    index_below_in_local_benchmark = pd.Index(
+                        target_infrastructure_local.loc[index_below_original, 'adjusted_index'])
+                    index_below_in_local_benchmark = index_below_in_local_benchmark.intersection(local_benchmarks_updated.index)
+                    if not index_below_in_local_benchmark.empty:
+                        benchmarks = []
+                        for k in target_infrastructure_local.index:
+                            if target_infrastructure_local.at[k, 'adjusted_index'] in index_below_in_local_benchmark:
+                                benchmarks.append(target_infrastructure_local.at[k, 'total_costs_to_destination'])
+                        local_benchmarks_updated.loc[index_below_in_local_benchmark, 'total_costs'] = benchmarks
+                        local_benchmarks_updated.loc[index_below_in_local_benchmark, 'solution'] = None
+
+                # add local benchmark if not existing
+                index_local_benchmark = pd.Index(target_infrastructure_local['adjusted_index'])
+                not_common_local_benchmarks = index_local_benchmark.difference(local_benchmarks.index)
+                if not not_common_local_benchmarks.empty:
+                    benchmarks = []
+                    for k in target_infrastructure_local.index:
+                        if target_infrastructure_local.at[k, 'adjusted_index'] in not_common_local_benchmarks:
+                            benchmarks.append(target_infrastructure_local.at[k, 'total_costs_to_destination'])
+
+                    new_location_benchmark = pd.DataFrame(index=not_common_local_benchmarks)
+                    new_location_benchmark['total_costs'] = benchmarks
+                    new_location_benchmark['solution'] = None
+                    local_benchmarks_updated = pd.concat([local_benchmarks, new_location_benchmark])
+
             # Distance and costs from potential destination to final destination
             target_infrastructure_local \
-                = calculate_cheapest_option_to_final_destination(data, solution, target_infrastructure_local)
+                = calculate_cheapest_option_to_final_destination(data, target_infrastructure_local, solution=solution)
 
             target_infrastructure_local['total_costs_to_final_destination'] \
                 = total_costs + target_infrastructure_local['distance'] / 1000 \
@@ -556,26 +701,30 @@ def _assess_options_in_tolerance(data, configuration, solution, options_within_i
             # Check if one of the options is within tolerance to the final destination. If so, then all options
             # which are more expensive will be removed. The solution which is at the final destination will set the
             # new benchmark and all other options will be removed on this basis
-            targets_in_tolerance_to_destination \
-                = target_infrastructure_local[target_infrastructure_local['distance_to_final_destination']
-                                              <= configuration['to_final_destination_tolerance']].index
+            if solution.get_current_commodity_name() in solution.get_final_commodity():
+                targets_in_tolerance_to_destination \
+                    = target_infrastructure_local[target_infrastructure_local['distance_to_final_destination']
+                                                  <= configuration['to_final_destination_tolerance']].index
 
-            if len(targets_in_tolerance_to_destination) > 0:
-                # max_costs_to_final_destination = future benchmark as the potential destination will have no costs to
-                # final destination
-                max_costs_to_final_destination \
-                    = target_infrastructure_local.loc[targets_in_tolerance_to_destination,
-                                                      'total_costs_to_final_destination'].values[0]
+                if len(targets_in_tolerance_to_destination) > 0:
+                    # max_costs_to_final_destination = future benchmark
+                    # as the potential destination will have no costs to final destination
+                    max_costs_to_final_destination \
+                        = target_infrastructure_local.loc[targets_in_tolerance_to_destination,
+                                                          'total_costs_to_final_destination'].values[0]
 
-                # get all potential destinations which minimal costs to next destination or final destination is above
-                # max value (= new benchmark)
-                targets_to_remove = \
-                    target_infrastructure_local[target_infrastructure_local['total_costs_to_destination']
-                                                > max_costs_to_final_destination].index.tolist()
-                targets_to_remove += \
-                    target_infrastructure_local[target_infrastructure_local['total_costs_to_final_destination']
-                                                > max_costs_to_final_destination].index.tolist()
-                target_infrastructure_local.drop(targets_to_remove, inplace=True)
+                    # get all potential destinations which minimal costs to next destination or
+                    # final destination is above max value (= new benchmark)
+                    targets_to_remove = \
+                        target_infrastructure_local[target_infrastructure_local['total_costs_to_destination']
+                                                    > max_costs_to_final_destination].index.tolist()
+                    targets_to_remove += \
+                        target_infrastructure_local[target_infrastructure_local['total_costs_to_final_destination']
+                                                    > max_costs_to_final_destination].index.tolist()
+                    target_infrastructure_local.drop(targets_to_remove, inplace=True)
+
+                    # update benchmark
+                    benchmark_local = max_costs_to_final_destination
 
             if len(target_infrastructure_local.index) == 0:
                 continue
@@ -596,6 +745,7 @@ def _assess_options_in_tolerance(data, configuration, solution, options_within_i
             start_location_df['destination_latitude'] = target_infrastructure_local['destination_latitude'].values
             start_location_df['destination_longitude'] = target_infrastructure_local['destination_longitude'].values
             start_location_df['costs_to_destination'] = target_infrastructure_local['costs_to_destination'].values
+            start_location_df['total_costs_to_destination'] = target_infrastructure_local['costs_to_destination'].values + solution.get_total_costs()
             start_location_df['distance'] = target_infrastructure_local['distance'].values
             start_location_df['start_latitude'] = options_within_infrastructure_m_local.loc[start_location, 'latitude']
             start_location_df['start_longitude']\
@@ -622,9 +772,9 @@ def _assess_options_in_tolerance(data, configuration, solution, options_within_i
             start_location_df_list.append(start_location_df)
 
         if len(start_location_df_list) == 0:
-            return pd.DataFrame()
+            return pd.DataFrame(), benchmark_local, local_benchmarks_updated
         else:
-            return pd.concat(start_location_df_list)
+            return pd.concat(start_location_df_list), benchmark_local, local_benchmarks_updated
 
     destination_continent = solution.get_destination_continent()
 
@@ -677,7 +827,9 @@ def _assess_options_in_tolerance(data, configuration, solution, options_within_i
                                                   "latitude": "destination_latitude"},
                                          inplace=True)
 
-            processed_targets = _assess_targets()
+            processed_targets, adjusted_benchmark, local_benchmarks = _assess_targets()
+            if adjusted_benchmark < benchmark:
+                benchmark = math.ceil(adjusted_benchmark * 10000) / 10000
 
             if processed_targets is not None:
                 processed_targets_list.append(processed_targets)
@@ -687,12 +839,12 @@ def _assess_options_in_tolerance(data, configuration, solution, options_within_i
             used_infrastructure = list(solution.get_used_infrastructure().values())
 
             for n_start in options_within_infrastructure_m_local.index:
+                now = time.time()
 
                 network = options_within_infrastructure_m_local.loc[n_start, 'graph']
                 graph_id = network
 
                 if graph_id in used_infrastructure:
-                    print('used')
                     continue
 
                 graph_local = None
@@ -714,7 +866,7 @@ def _assess_options_in_tolerance(data, configuration, solution, options_within_i
                 if False:
                     infrastructure_distances, paths = nx.single_source_dijkstra(graph_local, source=n_start)
                     infrastructure_distances = pd.DataFrame(infrastructure_distances, index=[n_start])
-                else:
+                elif False:
                     infrastructure_distances = data[m_local][graph_id]['Distances']['value']  # numpy array
 
                     infrastructure_distances = pd.DataFrame(data[m_local][graph_id]['Distances']['value'],
@@ -722,9 +874,25 @@ def _assess_options_in_tolerance(data, configuration, solution, options_within_i
                                                             columns=data[m_local][graph_id]['Distances']['columns'])
 
                     infrastructure_distances = infrastructure_distances.loc[[n_start]]
+                elif False:
+                    if False:
+                        infrastructure_distances = data[m_local][graph_id]['Distances']
+                    else:
+                        infrastructure_distances = graph_data_local
+
+                else:
+
+                    path_data = '/home/localadmin/Dokumente/Daten_Transportmodell/Daten/'
+                    infrastructure_distances\
+                        = pd.read_hdf(path_data + '/inner_infrastructure_distances/' + n_start + '.h5', mode='r',
+                                      title=graph_id, dtype=np.float16)
+                    infrastructure_distances = infrastructure_distances.transpose()
 
                 # Remove options which have been used already by solution
-                target_infrastructure = _remove_options_based_on_used_infrastructure(solution, target_infrastructure)
+                if False:
+                    now = time.time()
+                    target_infrastructure = _remove_options_based_on_used_infrastructure(solution, target_infrastructure)
+                    print(time.time() - now)
 
                 # if no targets are left after removing, don't process empty targets
                 if not target_infrastructure.index.tolist():
@@ -735,9 +903,10 @@ def _assess_options_in_tolerance(data, configuration, solution, options_within_i
                                                       "latitude": "destination_latitude"},
                                              inplace=True)
 
-                # options_within_infrastructure_m_local = options_within_infrastructure_m_local.iloc[1:, :]
+                processed_targets, adjusted_benchmark, local_benchmarks = _assess_targets()
 
-                processed_targets = _assess_targets()
+                if adjusted_benchmark < benchmark:
+                    benchmark = math.ceil(adjusted_benchmark * 10000) / 10000
 
                 if processed_targets is not None:
                     processed_targets_list.append(processed_targets)
@@ -747,7 +916,7 @@ def _assess_options_in_tolerance(data, configuration, solution, options_within_i
     else:
         reduced_df = pd.DataFrame()
 
-    return reduced_df
+    return reduced_df, benchmark
 
 
 def _assess_options_outside_tolerance(data, solution, options_outside_tolerance, benchmark, configuration):
@@ -763,16 +932,21 @@ def _assess_options_outside_tolerance(data, solution, options_outside_tolerance,
     options_outside_tolerance.rename(columns={"longitude": "destination_longitude",
                                               "latitude": "destination_latitude"},
                                      inplace=True)
+
     options_outside_tolerance['start_longitude'] = location.x
     options_outside_tolerance['start_latitude'] = location.y
-    options_outside_tolerance['target_infrastructure'] = options_outside_tolerance.index.tolist()
+    # options_outside_tolerance['target_infrastructure'] = options_outside_tolerance.index.tolist()
 
     df_to_concat = []
     for m_local in means_of_transport:
 
+        print(m_local)
+
         m_local_df \
             = options_outside_tolerance[options_outside_tolerance['mean_of_transport']
                                         == m_local].copy()
+
+        print('m local 1: ' + str(len(m_local_df.index)))
 
         if len(m_local_df.index) == 0:
             # m_local_df is empty
@@ -787,11 +961,13 @@ def _assess_options_outside_tolerance(data, solution, options_outside_tolerance,
         # separate options based on check_benchmark column
         m_local_df = m_local_df[m_local_df['direct_distance_costs'] <= benchmark].copy()
 
+        print('m local 2: ' + str(len(m_local_df.index)))
+
         # Check the distance from each option to the final destination
         # and calculate the minimal costs to the final destination
         # If minimal costs are higher than benchmark, remove these options
         m_local_df \
-            = calculate_cheapest_option_to_final_destination(data, solution, m_local_df)
+            = calculate_cheapest_option_to_final_destination(data, m_local_df, solution=solution)
         m_local_df['total_costs_to_final_destination'] \
             = m_local_df['costs_to_final_destination'] + m_local_df['direct_distance_costs']
 
@@ -934,9 +1110,10 @@ def calculate_distance_known_infrastructure(data, configuration, solution, optio
         available_local_benchmarks = list(local_benchmarks.keys())
 
         # Check which potential destination has local benchmark and attach local benchmark
-        common_local_benchmarks = set(available_local_benchmarks).intersection(set(local_benchmark_index))
-        benchmarks = [local_benchmarks[k]['total_costs'] for k in common_local_benchmarks]
-        potential_destinations.loc[common_local_benchmarks, 'local_benchmark'] = benchmarks
+        common_local_benchmarks = list(set(available_local_benchmarks).intersection(set(local_benchmark_index)))
+        if common_local_benchmarks:
+            benchmarks = [local_benchmarks[k]['total_costs'] for k in common_local_benchmarks]
+            potential_destinations.loc[common_local_benchmarks, 'local_benchmark'] = benchmarks
 
         # set old index
         potential_destinations.index = old_index
