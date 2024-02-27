@@ -1,81 +1,81 @@
-import pandas as pd
-from shapely.geometry import LineString, MultiLineString, Point, MultiPoint
-from shapely import wkt
-from shapely.affinity import scale
-import shapely
 import os
-
-from vincenty import vincenty
-from shapely.ops import unary_union
-import searoute as sr
-import numpy as np
-
-from geopy.distance import geodesic as calc_distance
-
-from _helpers import calc_distance_list_to_single, calc_distance_single_to_single, calc_distance_list_to_list
-
-import geojson
-
-import itertools
-
-from joblib import Parallel, delayed
-import multiprocessing
-from tqdm import tqdm
-
-import requests
-import json  # call the OSMR API
-import time
-
-from shapely.ops import nearest_points
-
-import reverse_geocode
-
-from geopy.geocoders import Nominatim
-
-import geopandas as gpd
-
-import networkx as nx
-
-import matplotlib.pyplot as plt
-
 import math
 
+import pandas as pd
+import numpy as np
 
-def get_geodata_and_graph_from_network_data_only_boundaries(path_network_data, name_network):
+import shapely
+from shapely.geometry import LineString, MultiLineString, Point, MultiPoint
+from shapely.affinity import scale
+from shapely.ops import unary_union
+from vincenty import vincenty
+from geopy.distance import geodesic as calc_distance
+from tqdm import tqdm
+
+
+def process_network_data_to_network_objects_no_additional_connection_points(name_network, path_network_data):
+
+    """
+    This method connects LineStrings of networks to one common network. It does not add additional connection points.
+
+    :param str name_network: Name of the network ('gas_pipeline', 'oil_pipeline', or 'railroad').
+    :param str path_network_data: Path to the directory containing the network data files.
+
+    :return: A tuple containing three pandas DataFrames:
+             - line_data_local: DataFrame containing information about the processed lines.
+             - graphs_local: DataFrame containing information about the graphs (edges and nodes).
+             - geodata_local: DataFrame containing geospatial information about the nodes.
+    """
 
     def process_line(node_number_local):
-        distance = 0
+
+        """
+        Processes a single line and updates node and edge information.
+
+        :param int node_number_local: Current node number.
+
+        :return: Updated node number.
+        """
 
         coords = line.coords
 
+        # get start node of line
         node_start = [round(coords.xy[0][0], 10), round(coords.xy[1][0], 10),
                       node_addition + '_Graph_' + str(graph_number)]
         if node_start not in existing_nodes:
+            # if node does not exist, add new node information
             existing_nodes.append(node_start)
             node_start_name = node_addition + '_Node_' + str(node_number_local)
             existing_nodes_dict[node_start_name] = node_start
             node_number_local += 1
 
         else:
+            # if node exists, use existing node information
             node_start_name = list(existing_nodes_dict.keys())[
                 list(existing_nodes_dict.values()).index(node_start)]
 
+        # get start node of line
         node_end = [round(coords.xy[0][-1], 10), round(coords.xy[1][-1], 10),
                     node_addition + '_Graph_' + str(graph_number)]
         if node_end not in existing_nodes:
+            # if node does not exist, add new node information
             existing_nodes.append(node_end)
             node_end_name = node_addition + '_Node_' + str(node_number_local)
             existing_nodes_dict[node_end_name] = node_end
             node_number_local += 1
 
         else:
+            # if node exists, use existing node information
             node_end_name = list(existing_nodes_dict.keys())[
                 list(existing_nodes_dict.values()).index(node_end)]
 
+        # if both are the same node, ignore
         if node_start == node_end:
             return node_number_local
 
+        # else: calculate distance and add new edge information
         coords_before = None
+        distance = 0
         for i_x, x in enumerate(coords.xy[0]):
             x = round(x, 10)
             y = round(coords.xy[1][i_x], 10)
@@ -137,27 +137,48 @@ def get_geodata_and_graph_from_network_data_only_boundaries(path_network_data, n
 
         graph_number += 1
 
-    graphs_local = pd.DataFrame.from_dict(existing_edges_dict, orient='index', columns=['graph',
-                                                                                        'node_start', 'node_end',
-                                                                                        'distance', 'line'])
-    geodata_local = pd.DataFrame.from_dict(existing_nodes_dict, orient='index', columns=['longitude',
-                                                                                         'latitude',
-                                                                                         'graph'])
-    line_data_local = pd.DataFrame.from_dict(existing_lines_dict, orient='index', columns=['geometry'])
+    # save files
+    graphs = pd.DataFrame.from_dict(existing_edges_dict, orient='index', columns=['graph', 'node_start', 'node_end',
+                                                                                  'distance', 'line'])
+    geodata = pd.DataFrame.from_dict(existing_nodes_dict, orient='index', columns=['longitude', 'latitude', 'graph'])
+    line_data = pd.DataFrame.from_dict(existing_lines_dict, orient='index', columns=['geometry'])
 
-    return line_data_local, graphs_local, geodata_local
+    return line_data, graphs, geodata
 
 
-def get_geodata_and_graph_from_network_data_with_intermediate_points(path_network_data, name_network,
-                                                                     minimal_distance_between_node=50000):
+def process_network_data_to_network_objects_with_additional_connection_points(name_network, path_network_data,
+                                                                              minimal_distance_between_node=50000):
+
+    """
+    This method connects LineStrings of networks to one common network. It does not add additional connection points.
+
+    :param str name_network: Name of the network ('gas_pipeline', 'oil_pipeline', or 'railroad').
+    :param str path_network_data: Path to the directory containing the network data files.
+    :param int minimal_distance_between_node: Minimal distance between node
+
+    :return: A tuple containing three pandas DataFrames:
+             - line_data: DataFrame containing information about the processed lines.
+             - graphs: DataFrame containing information about the graphs (edges and nodes).
+             - geodata: DataFrame containing geospatial information about the nodes.
+    """
 
     def process_line(node_number_local, edge_number_local, single_line=False):
 
-        total_distance = 0
+        """
+        Processes a single line and updates node and edge information.
+
+        :param int node_number_local: Current node number.
+        :param int edge_number_local: Current edge number.
+        :param bool single_line: indicates if line is part of network
+
+        :return: Updated node number.
+        """
+
         coords = line.coords
 
         # Calculate distance of line string
         coords_before = None
+        total_distance = 0
         for i_x, x in enumerate(coords.xy[0]):
             x = x
             y = coords.xy[1][i_x]
@@ -167,16 +188,16 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
 
             coords_before = (x, y)
 
-        total_distance_from_single = 0  # todo: remove as only needed for checking
-
+        # if line does not belong to a network and is very short (10km), it is removed
         if single_line:
             if total_distance < 10000:
                 return node_number_local, edge_number_local
 
+        # if distance of line is more than minimal distance, new lines are added
         if total_distance > minimal_distance_between_node:
-            distance = 0
 
-            # distances between nodes not more than 50 km
+            # distances between nodes not more than minimal_distance_between_node
+            # Create new points based on minimal distance
             n = math.ceil(total_distance / minimal_distance_between_node) - 1 + 2
             distances = np.linspace(0, line.length, n)
             points = [line.interpolate(d) for d in distances]
@@ -185,6 +206,8 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
             line_used_to_sort = LineString(points)
             points = [Point([line_used_to_sort.coords.xy[0][i], line_used_to_sort.coords.xy[1][i]])
                       for i in range(len(line_used_to_sort.coords.xy[0]))]
+
+            # todo: Kann man nicht einfach points nehmen um die Linie zu legen?
 
             # sort coords to ensure that they have same order
             points_in_line_list = []
@@ -199,11 +222,14 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
             points_in_line_list = []
 
             coords_before = None
-            j = 0
             node_start_name = ''
+            j = 0
 
+            # now iterate over all coords
+            distance = 0
             for c in coords:
 
+                # process first coordinate as start of line
                 if c == coords[0]:
                     # current point c is start of line
 
@@ -212,19 +238,19 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
                                   node_addition + '_Graph_' + str(graph_number)]
 
                     if node_start not in existing_nodes:
-
+                        # node does not exist yet
                         existing_nodes.append(node_start)
                         node_start_name = node_addition + '_Node_' + str(node_number_local)
                         existing_nodes_dict[node_start_name] = node_start
                         node_number_local += 1
                     else:
+                        # node already exists
                         node_start_name = list(existing_nodes_dict.keys())[
                             list(existing_nodes_dict.values()).index(node_start)]
 
                     points_in_line_list.append(c)
 
-                    # remove point of points which is the closest to c. Due to different numbers of
-                    # decimal places, this needs to be done via distances
+                    # remove c from points list. Due to floating point differences, it is done by distance
                     distance = math.inf
                     position_to_remove = 0
                     for pos, p in enumerate(points):
@@ -248,9 +274,11 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
                     for i, p in enumerate(points):
 
                         if segment.distance(p) < 0.0000001:
+                            # point is on segment
+
                             if (p.distance(coords[0]) > 0.0000001) \
                                     & (p.distance(coords[-1]) > 0.0000001):
-                                # point is neither start or end of line
+                                # point is neither start nor end of line
 
                                 # point is in line
                                 point_in_line = True
@@ -262,18 +290,18 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
                                 # update distance of line
                                 distance += calc_distance((coords_before.y, coords_before.x),
                                                           (p.y, p.x)).meters
-                                total_distance_from_single += distance
 
                                 # add p as node to graph
                                 node_end = [round(p.x, 10), round(p.y, 10),
                                             node_addition + '_Graph_' + str(graph_number)]
                                 if node_end not in existing_nodes:
-
+                                    # node is new node
                                     existing_nodes.append(node_end)
                                     node_end_name = node_addition + '_Node_' + str(node_number_local)
                                     existing_nodes_dict[node_end_name] = node_end
                                     node_number_local += 1
                                 else:
+                                    # node is existing node
                                     node_end_name = list(existing_nodes_dict.keys())[
                                         list(existing_nodes_dict.values()).index(node_end)]
 
@@ -291,20 +319,13 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
                                 # reset distance
                                 if i + 1 < len(points):
                                     # there is a next point
-                                    if segment.distance(
-                                            points[i + 1]) < 0.0000001:  # point is on current segment
-                                        if points[i + 1].distance(coords[0]) < 0.0000001:
-                                            # next point is end point
-
-                                            # This point is calculated when end point is processed
-                                            distance = 0
-                                        else:
-                                            # This point is calculated when next point is processed
-                                            distance = 0
+                                    if segment.distance(points[i + 1]) < 0.0000001:  # point is on current segment
+                                        distance = 0
                                     else:
                                         # next point is not on current segment
 
                                         # calculate distance from current point to end point of current segment
+                                        # we use the distance from p to c as starting distance
                                         distance = calc_distance((p.y, p.x), (c.y, c.x)).meters
                                 else:
                                     # there is no next point
@@ -313,9 +334,8 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
                                 # reset points in line
                                 points_in_line_list = [p]
 
-                                # update coords before to resemble point
+                                # p is added as new line. New distance starts from p --> update coords before to p
                                 coords_before = p
-                                # segment = LineString([Point(coords_before), Point([x, y])])
 
                                 # point has been processed --> don't consider again
                                 j += 1
@@ -333,18 +353,18 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
                                 # update distance of line
                                 distance += calc_distance((coords_before.y, coords_before.x),
                                                           (p.y, p.x)).meters
-                                total_distance_from_single += distance
 
                                 # add p as node to graph
                                 node_end = [round(p.x, 10), round(p.y, 10),
                                             node_addition + '_Graph_' + str(graph_number)]
                                 if node_end not in existing_nodes:
-
+                                    # node is new node
                                     existing_nodes.append(node_end)
                                     node_end_name = node_addition + '_Node_' + str(node_number_local)
                                     existing_nodes_dict[node_end_name] = node_end
                                     node_number_local += 1
                                 else:
+                                    # node is existing node
                                     node_end_name = list(existing_nodes_dict.keys())[
                                         list(existing_nodes_dict.values()).index(node_end)]
 
@@ -355,25 +375,27 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
                                 existing_lines_dict[node_addition + '_Edge_' + str(edge_number_local)] = sub_line
                                 edge_number_local += 1
 
+                    # add
                     if not point_in_line:
                         points_in_line_list.append(c)
                         distance += calc_distance((c.y, c.x), (coords_before.y, coords_before.x)).meters
 
                 coords_before = c
 
-        else:  # distance is lower than 50 km. Therefore, add no more intermediate points and only use boundaries
+        else:
+            # distance is lower than minimal distance between nodes.
+            # Therefore, add no more intermediate points and only use boundaries
 
-            # todo: it seems that distances are so short that different nodes are seen as the same
-            #  edges are not added as same start and end
             node_start = [round(coords.xy[0][0], 10), round(coords.xy[1][0], 10),
                           node_addition + '_Graph_' + str(graph_number)]
             if node_start not in existing_nodes:
-
+                # node is new node
                 existing_nodes.append(node_start)
                 node_start_name = node_addition + '_Node_' + str(node_number_local)
                 existing_nodes_dict[node_start_name] = node_start
                 node_number_local += 1
             else:
+                # node is existing node
                 node_start_name = list(existing_nodes_dict.keys())[
                     list(existing_nodes_dict.values()).index(node_start)]
 
@@ -381,18 +403,21 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
                         node_addition + '_Graph_' + str(graph_number)]
 
             if node_end not in existing_nodes:
-
+                # node is new node
                 existing_nodes.append(node_end)
                 node_end_name = node_addition + '_Node_' + str(node_number_local)
                 existing_nodes_dict[node_end_name] = node_end
                 node_number_local += 1
             else:
+                # node is existing node
                 node_end_name = list(existing_nodes_dict.keys())[
                     list(existing_nodes_dict.values()).index(node_end)]
 
+            # if start and end is same node, ignore line
             if node_start == node_end:
                 return node_number_local, edge_number_local
 
+            # add edge information
             existing_edges_dict[node_addition + '_Edge_' + str(edge_number_local)] \
                 = [node_addition + '_Graph_' + str(graph_number), node_start_name, node_end_name, total_distance,
                    line]
@@ -427,7 +452,7 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
         network_data = pd.read_csv(path_network_data + file, index_col=0, sep=';')
         lines = [shapely.wkt.loads(line) for line in network_data['geometry']]
 
-        # Split Multilinestring / Linestring into separate Linestrings if intersections exist
+        # Split Multilinestring / Linestring into separate LineStrings if intersections exist
         network = unary_union(lines)
 
         # It seems like that not all lines are 100% connected even though they are very close
@@ -442,18 +467,19 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
                     length = calc_distance((start.y, start.x), (end.y, end.x)).meters
                     if length != 0:
                         scaling_factor = 1 / length + 1
-                        scaled_lines.append(scale(segment, xfact=scaling_factor, yfact=scaling_factor))
+                        new_line = scale(segment, xfact=scaling_factor, yfact=scaling_factor)
+
+                        new_line = LineString([Point(round(new_line.bounds[0], 10), round(new_line.bounds[1], 10)),
+                                               Point(round(new_line.bounds[2], 10), round(new_line.bounds[3], 10))])
+
+                        if not new_line.is_valid:
+                            continue
+
+                        if new_line not in scaled_lines:
+                            scaled_lines.append(new_line)
+
             network = unary_union(scaled_lines)
 
-        if False: #graph_number == 126: # todo: 126 still not working
-            if isinstance(network, MultiLineString):
-                fig, ax = plt.subplots()
-                line_gdf = gpd.GeoDataFrame(geometry=list(network.geoms))
-                line_gdf.plot(ax=ax)
-
-                plt.show()
-
-        plot_lines = []
         if isinstance(network, MultiLineString):
 
             for original_line in network.geoms:
@@ -461,37 +487,15 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
                 if original_line.is_empty:
                     continue
 
-                if True:
-
-                    # first check if line is a ring. Because then we have to consider that start is end
-                    if original_line.is_ring:
-                        line_segments = list(map(LineString, zip(original_line.coords[:-1], original_line.coords[1:])))
-                        for line in line_segments:
-                            node_number, edge_number = process_line(node_number, edge_number)
-
-                    else:
-                        line = original_line
+                # first check if line is a ring. Because then we have to consider that start is end
+                if original_line.is_ring:
+                    line_segments = list(map(LineString, zip(original_line.coords[:-1], original_line.coords[1:])))
+                    for line in line_segments:
                         node_number, edge_number = process_line(node_number, edge_number)
 
                 else:
-
-                    line_segments = list(map(LineString, zip(original_line.coords[:-1], original_line.coords[1:])))
-                    for line in line_segments:
-
-                        #  line = scale(line, xfact=1.01, yfact=1.01)
-
-                        #  plot_lines.append(scale(line, xfact=1.01, yfact=1.01))
-
-                        node_number, edge_number = process_line(node_number, edge_number)
-
-            if False: #graph_number == 129:
-                fig, ax = plt.subplots()
-                line_gdf = gpd.GeoDataFrame(geometry=list(network.geoms))
-                line_gdf.plot(ax=ax)
-
-                line_ex_gdf = gpd.GeoDataFrame(geometry=plot_lines)
-                line_ex_gdf.plot(ax=ax, alpha=0.5, color='r')
-                # plt.show()
+                    line = original_line
+                    node_number, edge_number = process_line(node_number, edge_number)
 
             existing_graphs_dict[graph_number] = network
 
@@ -505,62 +509,40 @@ def get_geodata_and_graph_from_network_data_with_intermediate_points(path_networ
 
             # object is linestring --> single line instead of network --> single edge is added and nodes at end of edge
             original_line = network
-            if True:
-                if original_line.is_ring:
-                    line_segments = list(map(LineString, zip(original_line.coords[:-1], original_line.coords[1:])))
-                    for line in line_segments:
-                        node_number, edge_number = process_line(node_number, edge_number)
-
-                else:
-                    line = network
-                    node_number, edge_number = process_line(node_number, edge_number, single_line=True)
-            else:
+            if original_line.is_ring:
                 line_segments = list(map(LineString, zip(original_line.coords[:-1], original_line.coords[1:])))
                 for line in line_segments:
                     node_number, edge_number = process_line(node_number, edge_number)
+
+            else:
+                line = network
+                node_number, edge_number = process_line(node_number, edge_number, single_line=True)
 
             if (node_number != node_number_before) & (edge_number != edge_number_before):
                 # if node and edge numbers didn't change, line was too short --> not considered
                 existing_graphs_dict[graph_number] = network
 
-        if False: #graph_number == 126: # todo: 126 still not working
-            fig, ax = plt.subplots()
-            line_gdf = gpd.GeoDataFrame(geometry=lines_to_plot)
-            line_gdf.plot(ax=ax)
+    graphs = pd.DataFrame.from_dict(existing_edges_dict, orient='index', columns=['graph', 'node_start', 'node_end',
+                                                                                  'distance', 'line'])
+    geodata = pd.DataFrame.from_dict(existing_nodes_dict, orient='index', columns=['longitude', 'latitude', 'graph'])
+    line_data = pd.DataFrame.from_dict(existing_lines_dict, orient='index', columns=['geometry'])
 
-            point_gdf = gpd.GeoDataFrame(geometry=points_to_plot)
-            point_gdf.plot(ax=ax, color='r')
-
-            for x, y in zip(point_gdf.geometry.x, point_gdf.geometry.y):
-                ax.annotate(str(x) + ' ' + str(y), xy=(x, y), xytext=(3, 3), textcoords="offset points")
-
-            plt.show()
-
-    graphs_local = pd.DataFrame.from_dict(existing_edges_dict, orient='index', columns=['graph',
-                                                                                        'node_start', 'node_end',
-                                                                                        'distance', 'line'])
-    geodata_local = pd.DataFrame.from_dict(existing_nodes_dict, orient='index', columns=['longitude',
-                                                                                         'latitude',
-                                                                                         'graph'])
-    line_data_local = pd.DataFrame.from_dict(existing_lines_dict, orient='index', columns=['geometry'])
-
-    # finally, remove all lines which are not used to connect other lines and are very short
-    # todo: mehrmals machen weil ja jedes mal eine rausfallen könnte?
+    # finally, remove all lines which are not used to connect other lines and are very short (less than 10 km)
     edges_to_drop = []
     nodes_to_drop = []
-    for node in geodata_local.index:
-        if graphs_local['node_start'].values.tolist().count(node) + graphs_local['node_end'].values.tolist().count(node) <= 1:
-            if node in graphs_local['node_start'].values.tolist():
-                index_to_check = graphs_local[graphs_local['node_start'] == node].index.values.tolist()[0]
+    for node in geodata.index:
+        if graphs['node_start'].values.tolist().count(node) + graphs['node_end'].values.tolist().count(node) <= 1:
+            if node in graphs['node_start'].values.tolist():
+                index_to_check = graphs[graphs['node_start'] == node].index.values.tolist()[0]
             else:
-                index_to_check = graphs_local[graphs_local['node_end'] == node].index.values.tolist()[0]
+                index_to_check = graphs[graphs['node_end'] == node].index.values.tolist()[0]
 
-            if graphs_local.at[index_to_check, 'distance'] < 10000:
+            if graphs.at[index_to_check, 'distance'] < 10000:
                 nodes_to_drop.append(node)
                 edges_to_drop += [index_to_check]
 
-    graphs_local.drop(edges_to_drop, inplace=True)
-    line_data_local.drop(edges_to_drop, inplace=True)
-    geodata_local.drop(nodes_to_drop, inplace=True)
+    graphs.drop(edges_to_drop, inplace=True)
+    line_data.drop(edges_to_drop, inplace=True)
+    geodata.drop(nodes_to_drop, inplace=True)
 
-    return line_data_local, graphs_local, geodata_local
+    return line_data, graphs, geodata

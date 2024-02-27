@@ -1,27 +1,20 @@
 import time
 import math
-
 import gc
+import psutil
 
 import pandas as pd
+
 from shapely.geometry import Point
 
 from methods_benchmark import check_if_benchmark_possible
-
 from methods_routing import process_out_tolerance_solutions, process_in_tolerance_solutions, get_complete_infrastructure
-
-from process_input_data import attach_new_ports
-
 from methods_algorithm import create_new_solutions_based_on_conversion, postprocessing_solutions,\
     create_solutions_based_on_commodities_at_start, check_for_inaccessibility_and_at_destination,\
     adjust_production_costs_of_commodities
-
 from script_benchmark import calculate_benchmark
-
 from _helpers import calc_distance_list_to_single, get_continent_from_location, \
     calculate_cheapest_option_to_final_destination, calculate_minimal_costs_conversion_for_oil_and_gas_infrastructure
-
-import psutil
 
 import logging
 logging.getLogger().setLevel(logging.INFO)
@@ -30,7 +23,7 @@ logging.getLogger().setLevel(logging.INFO)
 def run_algorithm(args):
 
     # get parameters from input
-    k, num_cores_local, location_data, data, configuration, print_information = args
+    k, location_data, data, configuration, print_information = args
     location_data = location_data.loc[k, :]
 
     start_time = time.time()
@@ -48,10 +41,6 @@ def run_algorithm(args):
     # adjust data with new information
     data['start'] = {'location': starting_location,
                      'continent': starting_continent}
-
-    # todo: diskutieren ob neue Häfen installiert werden sollen. Wenn ja, wie und wann??
-    # data = attach_new_ports(data, configuration, starting_continent, starting_location, destination_continent,
-    #                         destination_location)
 
     # get all infrastructure options and check access to infrastructure
     complete_infrastructure = get_complete_infrastructure(data)
@@ -91,7 +80,7 @@ def run_algorithm(args):
     # Start iterations. While loop runs as long as solutions dataframe
     final_solution = None
     iteration = 0
-    while not solutions.empty:
+    while not solutions.empty:  # while loop runs as long as solutions to process exist
 
         len_start_solutions = len(solutions.index)
         total_time = time.time()
@@ -112,10 +101,6 @@ def run_algorithm(args):
             conversion_solutions, solution_number \
                 = create_new_solutions_based_on_conversion(conversion_solutions, data, solution_number, benchmark)
 
-            if False: #not conversion_solutions.empty:
-                PG_Node_71643 = conversion_solutions[conversion_solutions['current_node'] == 'PG_Node_71643']
-                print(PG_Node_71643[['current_total_costs', 'current_commodity']])
-
             # assess newly created solutions
             conversion_solutions = conversion_solutions[conversion_solutions['current_total_costs'] <= benchmark]
 
@@ -135,10 +120,6 @@ def run_algorithm(args):
                 = calculate_cheapest_option_to_final_destination(data, conversion_solutions,
                                                                  configuration, benchmark,
                                                                  'current_total_costs')
-
-            if False: #not conversion_solutions.empty:
-                PG_Node_71643 = conversion_solutions[conversion_solutions['current_node'] == 'PG_Node_71643']
-                print(PG_Node_71643[['minimal_total_costs_to_final_destination', 'current_commodity']])
 
             # throws out options to expensive
             conversion_solutions \
@@ -219,7 +200,7 @@ def run_algorithm(args):
 
         len_conversion_solutions = len(solutions.index)
 
-        # continue process only if sufficient memory is available
+        """ Handle memory issues """
         n = 0
         delta_benchmark = benchmark - solutions['current_total_costs'].min()
         last_memory = math.inf
@@ -404,10 +385,6 @@ def run_algorithm(args):
 
                 # todo: man könnte auch noch alle pipelines entfernen, welche auf einem anderen Kontinent sind
 
-                if False:# not out_tolerance_solutions.empty:
-                    PG_Node_71643 = out_tolerance_solutions[out_tolerance_solutions['current_node'] == 'PG_Node_71643']
-                    print(PG_Node_71643['taken_routes'].tolist())
-
                 # processing out tolerance solutions can be quite memory expensive as all options will be considered
                 # But some options can be removed. For example, if one solution cannot be converted to a
                 # commodity which is transportable via oil pipeline because the conversion costs would exceed the benchmark,
@@ -529,16 +506,6 @@ def run_algorithm(args):
                 outside_options = pd.concat([outside_options_no_gas, outside_options_no_liquid,
                                              outside_options_only_shipping, outside_options_no_limitation])
 
-                if False:# not outside_options.empty:
-                    PG_Node_22373 = outside_options[outside_options['current_node'] == 'PG_Node_22373']
-                    print(PG_Node_22373['current_distance'])
-
-                    H492 = outside_options[outside_options['current_node'] == 'H492']
-                    print(H492)
-
-                    # todo: problem: Methan Gas ist nicht transportierbar auf der Straße. Wenn aber
-                    #  die Distanz = 0 ist, dann sollte das ignoriert werden
-
             else:
                 outside_options = pd.DataFrame()
 
@@ -546,13 +513,6 @@ def run_algorithm(args):
                 in_tolerance_options \
                     = process_in_tolerance_solutions(data, in_tolerance_solutions, complete_infrastructure,
                                                      local_benchmarks, benchmark, configuration, k)
-
-                if False: #not in_tolerance_options.empty:
-                    PG_Node_71643 = in_tolerance_options[in_tolerance_options['current_node'] == 'PG_Node_22373']
-                    print(PG_Node_71643)
-
-                    H828 = in_tolerance_options[in_tolerance_options['current_node'] == 'H828']
-                    print(H828)
 
                 if not outside_options.empty:
                     solutions = pd.concat([in_tolerance_options, outside_options], ignore_index=True)
@@ -571,8 +531,8 @@ def run_algorithm(args):
             solutions.sort_values(['current_total_costs'], inplace=True)
 
             solutions['comparison_index'] = [solutions.at[ind, 'current_node'] + '-'
-                                               + solutions.at[ind, 'current_commodity']
-                                               for ind in solutions.index]
+                                             + solutions.at[ind, 'current_commodity']
+                                             for ind in solutions.index]
             solutions = solutions.groupby('comparison_index').first().reset_index()
 
             # Reset the index if needed

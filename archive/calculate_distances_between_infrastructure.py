@@ -1,20 +1,17 @@
-import pandas as pd
-from shapely.geometry import MultiLineString, Point
-from shapely import wkt
-import shapely
-
-from _helpers import calc_distance_list_to_single
-
-import reverse_geocode
-
-from geopy.geocoders import Nominatim
-
-import geopandas as gpd
-import numpy as np
-
 import requests
 import json
 import time
+import reverse_geocode
+
+import pandas as pd
+import geopandas as gpd
+
+import shapely
+from shapely import wkt
+from shapely.geometry import MultiLineString, Point
+from geopy.geocoders import Nominatim
+
+from _helpers import calc_distance_list_to_single
 
 
 def get_graph(data, geo_data, graph_data, name):
@@ -303,67 +300,3 @@ def calculate_road_distances(network_geo_data=None, network_graph_data=None, net
     return all_distances
 
 
-def get_distances_within_networks(network_graph_data, path_data):
-
-    import networkx as nx
-    from tqdm import tqdm
-    import matplotlib.pyplot as plt
-
-    graphs = set(network_graph_data['graph'])
-
-    for g in tqdm(graphs):
-
-        graph = nx.Graph()
-        edges_graph = network_graph_data[network_graph_data['graph'] == g].index
-        for edge in edges_graph:
-            node_start = network_graph_data.loc[edge, 'node_start']
-            node_end = network_graph_data.loc[edge, 'node_end']
-            distance = network_graph_data.loc[edge, 'distance']
-            graph.add_edge(node_start, node_end, weight=distance)
-
-        all_distances_network = dict(nx.all_pairs_dijkstra_path_length(graph))
-        all_distances_network_df = pd.DataFrame(all_distances_network)
-
-        if all_distances_network_df.isnull().values.any():
-            print(str(g) + ' still a small problem')
-            # pos = nx.spring_layout(graph)
-            # nx.draw(graph, pos=pos)
-            # plt.show()
-
-            m_inf = all_distances_network_df.isnull()
-            all_distances_network_df = all_distances_network_df.mask(m_inf, np.inf)
-
-        if False:
-
-            sub_df = all_distances_network_df.loc[[all_distances_network_df.index[0]], :].transpose()
-            sub_df.to_hdf(path_data + '/inner_infrastructure_distances/' + 'test' + '.h5', g, mode='w',
-                          format='table')
-
-            read_test = pd.read_hdf(path_data + '/inner_infrastructure_distances/' + 'test' + '.h5')
-            print(read_test)
-            print(len(sub_df.index))
-
-        if True:
-
-            all_distances_network_df = all_distances_network_df.transpose()
-
-            for column in all_distances_network_df.columns:
-                sub_df = all_distances_network_df[[column]]
-
-                if False:
-                    sub_df['index'] = sub_df.index
-                    sub_df.to_hdf(path_data + '/inner_infrastructure_distances/' + column + '.h5', column, mode='w',
-                                  format='fixed')
-                else:
-                    sub_df.to_hdf(path_data + '/inner_infrastructure_distances/' + column + '.h5', column, mode='w',
-                                  format='table')
-
-
-
-        """# all_distances_network_df.to_csv(path_data + '/inner_infrastructure_distances/' + g + '.csv')
-        # all_distances_network_df.to_parquet(path_data + '/inner_infrastructure_distances/' + g + '.parquet', compression=None)
-        all_distances_network_df.to_hdf(path_data + '/inner_infrastructure_distances/' + g + '.h5', g, mode='w',
-                                        format='fixed')
-
-        test = pd.read_hdf(path_data + '/inner_infrastructure_distances/' + g + '.h5')
-        print(test)"""

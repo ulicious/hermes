@@ -48,8 +48,7 @@ def calculate_and_save_shortest_distances(options, data):
         distances.to_hdf(path_data + '/shortest_distances/shortest_distances_' + i + '.h5', i, mode='w', format='table')
 
 
-def calculate_and_save_shortest_distance(options, data):
-    path_data = '/home/localadmin/Dokumente/Daten_Transportmodell/Daten/'
+def calculate_and_save_shortest_distance(options, data, path_processed_data):
 
     minimal_values = {}
     minimal_value_nodes = {}
@@ -102,4 +101,4 @@ def calculate_and_save_shortest_distance(options, data):
     distances = pd.DataFrame({'minimal_distance': minimal_values.values(),
                               'closest_node': minimal_value_nodes.values()},
                              index=minimal_values.keys())
-    distances.to_csv(path_data + 'minimal_distances.csv')
+    distances.to_csv(path_processed_data + 'minimal_distances.csv')
