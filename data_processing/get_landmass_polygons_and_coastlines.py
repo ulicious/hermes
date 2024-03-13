@@ -33,7 +33,6 @@ def get_landmass_polygons_and_coastlines(use_minimal_example=False):
     merged_polygons = []
     coastlines = []
     while len(polygons) > 0:
-        print(len(polygons))
         merged_polygon = polygons.pop(0)
 
         broken = True

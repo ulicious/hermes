@@ -42,10 +42,9 @@ def randlatlon1():
         Lat = round(cf*radLat, 5)
         Lon = round(cf*radLon, 5)
 
-        if False:
-            if is_in_europe(Lat, Lon):
-                if globe.is_land(Lat, Lon):
-                    return Lon, Lat
+        if is_in_europe(Lat, Lon):
+            if globe.is_land(Lat, Lon):
+                return Lon, Lat
 
 
 def country_to_continent(country_name):
@@ -106,4 +105,4 @@ while i < 500:
 
     time.sleep(1)
 
-coords_df.to_excel('C:/Users/mt5285/Desktop/Transportmodel/Daten/start_data/start_destination_combinations_50000.xlsx')
+coords_df.to_excel('C:/Users/mt5285/Desktop/Transportmodel/Daten/start_data/start_destination_combinations_500.xlsx')

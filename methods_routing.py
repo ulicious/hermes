@@ -1,19 +1,13 @@
 import math
+import time
+import gc
 
 import pandas as pd
 import numpy as np
-
-import time
+import networkx as nx
 
 from _helpers import calc_distance_list_to_single,\
     calculate_cheapest_option_to_final_destination, calc_distance_list_to_list
-
-import gc
-
-# Ignore runtime warnings as they
-# import os
-# os.environ['PYTHONWARNINGS'] = 'ignore::[RuntimeWarning]'
-# os.environ['PYTHONWARNINGS'] = 'ignore::[FutureWarning]'
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -44,7 +38,7 @@ def get_complete_infrastructure(data):
             options_shipping['current_transport_mean'] = m
             options_shipping['graph'] = None
 
-            options_to_concat.append(options_shipping)  # todo: use used_infrastructure to remove ports already
+            options_to_concat.append(options_shipping)
 
         else:
             networks = data[m].keys()
@@ -175,8 +169,6 @@ def process_out_tolerance_solutions(options, solutions, configuration, iteration
         minimal_distances = data['minimal_distances']
 
         if True:
-            time_new_approach = time.time()
-            time_calculate_distances = time.time()
 
             all_road_distances = []
             all_new_distances = []
@@ -260,24 +252,6 @@ def process_out_tolerance_solutions(options, solutions, configuration, iteration
                             indexes_to_remove[i] = {'nodes': data['Pipeline_Liquid'][i]['GeoData'].index.tolist(),
                                                     'solutions': affected_solutions}
 
-
-            options_to_remove = {}
-            if False: # iteration > 0:
-
-                unstacked_benchmark \
-                    = local_benchmarks.set_index(['current_commodity', 'current_node'])['current_total_costs'].unstack()
-
-                for i in unstacked_benchmark.index:
-                    if i in solutions['current_commodity'].tolist():
-                        c_benchmarks = unstacked_benchmark.loc[i, :].dropna()
-                        c_solutions = solutions[solutions['current_commodity'] == i]['anticipated_costs']
-
-                        result = c_solutions.apply(lambda x: c_benchmarks[c_benchmarks < x].index.tolist())
-
-                        options_to_remove[i] = {}
-                        for n in result.index:
-                            options_to_remove[i][n] = result.at[n]
-
             for c in solutions['current_commodity'].unique():
                 c_solutions = solutions[solutions['current_commodity'] == c]
                 if c_solutions.empty:
@@ -286,14 +260,11 @@ def process_out_tolerance_solutions(options, solutions, configuration, iteration
                 c_distances = distances.copy()
                 commodity_object = data['commodities']['commodity_objects'][c]
 
-                time_change_columns = time.time()
                 # exchange current_node columns with corresponding solution names
                 node_list = c_solutions['current_node'].tolist()  # list is unique
                 solution_list = c_solutions.index.tolist()
                 new_column_list = []
                 columns_to_keep = []
-                # todo: why is list values (c_solutions['Pipeline_Gas_applicable']) larger than new distances index?
-                #  only possible if not all elements in node list are used
                 for n in distances.columns:
                     if n in node_list:
                         new_column_list.append(solution_list[node_list.index(n)])
@@ -301,8 +272,6 @@ def process_out_tolerance_solutions(options, solutions, configuration, iteration
 
                 c_distances = c_distances[columns_to_keep]
                 c_distances.columns = new_column_list  # rename columns to solutions
-
-                time_road = time.time()
 
                 if commodity_object.get_transportation_options()['Road']:
 
@@ -334,8 +303,6 @@ def process_out_tolerance_solutions(options, solutions, configuration, iteration
                     all_road_distances.append(road_distances)
 
                 # create and process new infrastructure distances
-                time_new = time.time()
-
                 if (commodity_object.get_transportation_options()['Pipeline_Gas']
                         | commodity_object.get_transportation_options()['Pipeline_Liquid']) & build_new_infrastructure:
 
@@ -343,7 +310,6 @@ def process_out_tolerance_solutions(options, solutions, configuration, iteration
                     columns = new_distances.columns
 
                     # add information before any change to distances is made
-                    # todo: more values than new_distance index
                     new_distances['pipeline_gas_applicable'] = c_solutions['Pipeline_Gas_applicable'].tolist()
                     new_distances['pipeline_liquid_applicable'] = c_solutions['Pipeline_Liquid_applicable'].tolist()
                     new_distances['max_length'] = max_length_new_segment / no_road_multiplier
@@ -365,7 +331,6 @@ def process_out_tolerance_solutions(options, solutions, configuration, iteration
                     new_distances = new_distances.stack().dropna()
                     all_new_distances.append(new_distances)
 
-            time_postprocessing = time.time()
             if all_road_distances:
                 road_options = pd.concat(all_road_distances)
                 road_options = road_options.reset_index()
@@ -380,11 +345,7 @@ def process_out_tolerance_solutions(options, solutions, configuration, iteration
             else:
                 new_infrastructure_options = pd.DataFrame()
 
-    time_distance = time.time() - now
-
     # Create for road options
-    now = time.time()
-
     if not road_options.empty:
 
         if not road_options.empty:
@@ -433,10 +394,7 @@ def process_out_tolerance_solutions(options, solutions, configuration, iteration
     else:
         road_options = pd.DataFrame()
 
-    time_road = time.time() - now
-
     # Create new infrastructure options
-    now = time.time()
     if not new_infrastructure_options.empty:
 
         # all distance below tolerance are 0
@@ -495,10 +453,7 @@ def process_out_tolerance_solutions(options, solutions, configuration, iteration
     else:
         new_infrastructure_options = pd.DataFrame()
 
-    time_new = time.time() - now
-
     # Concatenate all options
-    now = time.time()
     outside_options = pd.concat([road_options, new_infrastructure_options], ignore_index=True)
 
     if not outside_options.empty:
@@ -527,11 +482,6 @@ def process_out_tolerance_solutions(options, solutions, configuration, iteration
 
         # add further information
         outside_options['current_infrastructure'] = None
-
-    time_concat = time.time() - now
-
-    """print('number solutions: ' + str(len(solutions.index)) + ' | prepare distances: ' + str(time_distance)
-          + ' | prepare road: ' + str(time_road) + ' | prepare new: ' + str(time_new) + ' | postprocessing: ' + str(time_concat))"""
 
     return outside_options
 
@@ -595,9 +545,8 @@ def process_in_tolerance_solutions(data, options, all_options, local_benchmarks,
                 shipping_infrastructure = shipping_infrastructure[
                     shipping_infrastructure['continent'].isin([destination_continent])]
 
-            shipping_distances = pd.DataFrame(data['Shipping']['Distances']['value'],
-                                              index=data['Shipping']['Distances']['index'],
-                                              columns=data['Shipping']['Distances']['columns'])
+            shipping_distances = pd.read_csv(configuration['path_processed_data']
+                                             + 'inner_infrastructure_distances/port_distances.csv')
 
             # create one big target_infrastructure dataframe for all shipping options
             for s in options_m.index:
@@ -653,6 +602,14 @@ def process_in_tolerance_solutions(data, options, all_options, local_benchmarks,
             processed_infrastructure['Shipping'] = shipping_infrastructure
 
         else:
+
+            graph_distances = {}
+            for g in options_m['graph'].unique():
+                graph = data[mot][g]['Graph']
+
+                all_distances_network = dict(nx.all_pairs_dijkstra_path_length(graph))  # todo: check memory usage --> could be replaced with single node distances
+                graph_distances[g] = pd.DataFrame(all_distances_network)
+
             for s in options_m.index:
 
                 current_commodity_object = options_m.at[s, 'current_commodity_object']
@@ -681,13 +638,17 @@ def process_in_tolerance_solutions(data, options, all_options, local_benchmarks,
 
                 start_location = options_m.at[s, 'current_node']
 
-                path_data = '/home/localadmin/Dokumente/Daten_Transportmodell/Daten/'
-                distances \
-                    = pd.read_hdf(path_data + '/inner_infrastructure_distances/' + start_location + '.h5',
-                                  mode='r', title=graph_id, dtype=np.float16)
+                if not configuration['use_low_storage']:
+                    path_processed_data = configuration['path']['processed_data']
+                    distances \
+                        = pd.read_hdf(path_processed_data + '/inner_infrastructure_distances/' + start_location + '.h5',
+                                      mode='r', title=graph_id, dtype=np.float16)
 
-                distances = pd.Series(distances.transpose().values[0], index=distances.index)
-                distances = distances.loc[pipeline_infrastructure.index]
+                    distances = pd.Series(distances.transpose().values[0], index=distances.index)
+                    distances = distances.loc[pipeline_infrastructure.index]
+                else:
+                    distances = graph_distances[graph_id]
+                    distances = distances.loc[start_location]  # todo: check how it looks like
 
                 current_total_costs_distances = distances / 1000 * transportation_costs + current_total_costs
                 current_total_costs_distances = current_total_costs_distances[current_total_costs_distances <= benchmark].dropna()

@@ -60,7 +60,6 @@ def calculate_searoute_distances(ports, num_cores, path_processed_data):
     # get all combinations of ports
     combinations = list(itertools.combinations(ports.index, 2))
 
-
     # apply multiprocessing to calculate distances
     inputs = tqdm(combinations)
     results = Parallel(n_jobs=num_cores)(delayed(calculate_searoute)(inp) for inp in inputs)
@@ -124,8 +123,7 @@ def get_distances_of_closest_infrastructure(options, path_processed_data):
     """
     Finds the distances to the closest infrastructure nodes for each option.
 
-    :param options: A DataFrame containing the options data, including latitude, longitude, and graph information.
-    :type options: pandas.DataFrame
+    :param pandas.DataFrame options: A DataFrame containing the options data, including latitude, longitude, and graph information.
     :param str path_processed_data: The path to save the processed data.
     :returns: A DataFrame containing the minimal distances and the corresponding closest nodes for each option.
     :rtype: pandas.DataFrame
@@ -162,5 +160,5 @@ def get_distances_of_closest_infrastructure(options, path_processed_data):
 
     distances = pd.DataFrame({'minimal_distance': minimal_values.values(),
                               'closest_node': minimal_value_nodes.values()},
-                             index=minimal_values.keys())
+                             index=list(minimal_values.keys()))
     distances.to_csv(path_processed_data + 'minimal_distances.csv')

@@ -1,4 +1,5 @@
 import math
+import os
 
 import pandas as pd
 import numpy as np
@@ -12,25 +13,31 @@ from object_commodity import create_commodity_objects
 
 def prepare_data_and_configuration_dictionary(config_file):
 
-    path_data = config_file['paths']['overall_data']
+    path_project_folder = config_file['paths']['project_folder']
+    path_processed_data = path_project_folder + config_file['paths']['processed_data']
+    path_techno_economic_data = os.getcwd() + '/techno_economic_data/'
 
     # load input data
-    location_data = pd.read_excel(path_data + config_file['filenames']['location_data'], index_col=0)
-    conversion_costs = pd.read_excel(path_data + config_file['filenames']['conversion_costs'], index_col=0)
-    conversion_efficiencies = pd.read_excel(path_data + config_file['filenames']['conversion_losses'], index_col=0)
-    transportation_costs = pd.read_excel(path_data + config_file['filenames']['transportation_costs'], index_col=0)
-    pipeline_gas_geodata = pd.read_csv(path_data + config_file['filenames']['gas_pipeline_geodata'], index_col=0,
+    location_data = pd.read_excel(path_project_folder + 'start_destination_combinations.xlsx', index_col=0)
+    conversion_costs = pd.read_excel(path_techno_economic_data + 'commodities_conversions.xlsx', index_col=0)
+    conversion_efficiencies = pd.read_excel(path_techno_economic_data + 'commodities_conversion_efficiencies.xlsx',
+                                            index_col=0)
+    transportation_costs = pd.read_excel(path_techno_economic_data + 'commodities_transportation.xlsx',
+                                         index_col=0)
+
+    pipeline_gas_geodata = pd.read_csv(path_processed_data + 'gas_pipeline_geodata.csv', index_col=0,
                                        dtype={'latitude': np.float16, 'longitude': np.float16})
-    pipeline_gas_graphs = pd.read_csv(path_data + config_file['filenames']['gas_pipeline_graph'], index_col=0)
-    pipeline_gas_graphs_objects = pd.read_csv(path_data + config_file['filenames']['gas_pipeline_graph_object'], index_col=0)
-    pipeline_liquid_geodata = pd.read_csv(path_data + config_file['filenames']['oil_pipeline_geodata'], index_col=0,
+    pipeline_gas_graphs = pd.read_csv(path_processed_data + 'gas_pipeline_graphs.csv', index_col=0)
+    pipeline_gas_graphs_objects = pd.read_csv(path_processed_data + 'gas_pipeline_graphs_object.csv',
+                                              index_col=0)
+    pipeline_liquid_geodata = pd.read_csv(path_processed_data + 'oil_pipeline_geodata.csv', index_col=0,
                                           dtype={'latitude': np.float16, 'longitude': np.float16})
-    pipeline_liquid_graphs = pd.read_csv(path_data + config_file['filenames']['oil_pipeline_graph'], index_col=0)
-    pipeline_liquid_graphs_objects = pd.read_csv(path_data + config_file['filenames']['oil_pipeline_graph_object'], index_col=0)
-    ports = pd.read_excel(path_data + config_file['filenames']['ports'], index_col=0)
-    ports_distances = pd.read_csv(path_data + config_file['filenames']['shipping_distances'], index_col=0)
-    coastlines = pd.read_csv(path_data + config_file['filenames']['coastlines'], index_col=0)
-    minimal_distances = pd.read_csv(path_data + config_file['filenames']['minimal_distances'], index_col=0)
+    pipeline_liquid_graphs = pd.read_csv(path_processed_data + 'oil_pipeline_graphs.csv',
+                                         index_col=0)
+    pipeline_liquid_graphs_objects = pd.read_csv(path_processed_data + 'oil_pipeline_graphs_object.csv', index_col=0)
+    ports = pd.read_csv(path_processed_data + 'ports.csv', index_col=0)
+    coastlines = pd.read_csv(path_processed_data + 'coastlines.csv', index_col=0)
+    minimal_distances = pd.read_csv(path_processed_data + 'minimal_distances.csv', index_col=0)
 
     # get commodities and associated data
     commodities, commodity_names, commodity_names_to_commodity_object, means_of_transport \
@@ -44,11 +51,8 @@ def prepare_data_and_configuration_dictionary(config_file):
     destination_continent = config_file['destination_continent']
 
     # The data dictionary holds common information/data/parameter which apply for all solutions.
-    # todo: alles klein schreiben
-    data = {'Shipping': {'ports': ports,
-                         'Distances': {'value': ports_distances.to_numpy(),
-                                       'index': ports_distances.index,
-                                       'columns': ports_distances.columns}},
+    # todo: alles klein schreiben + shipping anpassen
+    data = {'Shipping': {'ports': ports},
             'minimal_distances': minimal_distances,
             'transport_means': means_of_transport,
             'commodities': {'final_commodities': final_commodities,
@@ -73,7 +77,8 @@ def prepare_data_and_configuration_dictionary(config_file):
                      'max_length_road': config_file['max_length_road'],
                      'build_new_infrastructure': config_file['build_new_infrastructure'],
                      'H2_ready_infrastructure': config_file['H2_ready_infrastructure'],
-                     'path_results': config_file['paths']['results']}
+                     'path_processed_data': path_processed_data,
+                     'path_results': config_file['paths']['project_folder'] + config_file['paths']['results']}
 
     if isinstance(configuration['tolerance_distance'], str):
         configuration['tolerance_distance'] = math.inf

@@ -30,8 +30,6 @@ def process_network_data(data, name, geo_data, graph_data):
     graph_data = gpd.GeoDataFrame(graph_data)
     graph_data['line'] = graph_data['line'].apply(shapely.wkt.loads)
 
-    # distances_dict = {}
-
     print('Load ' + name + ' data')
     for g in tqdm(geo_data['graph'].unique()):
         graph = nx.Graph()
@@ -50,92 +48,10 @@ def process_network_data(data, name, geo_data, graph_data):
         nodes_graph_original = geo_data[geo_data['graph'] == g].index
         graph_object = MultiLineString(lines)
 
-        if False:
-
-            # distance dataframe
-            # distances = pd.read_csv(path_data + '/inner_infrastructure_distances/' + g + '.csv', index_col=0).astype(np.float16)
-            # distances = pd.read_parquet(path_data + '/inner_infrastructure_distances/' + g + '.parquet', engine='fastparquet').astype(np.float16)
-
-            # distances_as_dict = distances.to_dict()
-
-            graph_dfs = []
-            graph_distance_df = pd.DataFrame()
-            for n in nodes_graph_original:
-                path_data = '/home/localadmin/Dokumente/Daten_Transportmodell/Daten/'
-                infrastructure_distances \
-                    = pd.read_hdf(path_data + '/inner_infrastructure_distances/' + n + '.h5', mode='r',
-                                  title=n)
-                infrastructure_distances = infrastructure_distances.transpose()
-                # graph_dfs.append(infrastructure_distances)
-
-                distances_dict.update(infrastructure_distances.to_dict())
-                # print(distances_dict)
-
-            # if len()
-            # graph_distance_df = pd.concat([graph_distance_df] + graph_dfs)
-
-
-            """filename = path_data + '/inner_infrastructure_distances/' + g + '.h5'
-
-            try:
-                d = pd.read_hdf(filename)
-                print(d)
-            except:
-                continue"""
-
-            """with h5py.File(filename, "r") as f:
-                if 's' in f.keys():
-                    print(f['s'])
-
-            distances = h5py.File(path_data + '/inner_infrastructure_distances/' + g + '.h5', mode='w')
-            print(distances)
-            print(distances.get(g))"""
-
-            """distances = open_file(path_data + '/inner_infrastructure_distances/' + g + '.h5', mode='w', title=g)
-            distances.get()
-            group = distances.create_group('/', 'detector', 'Detector information')
-            table = distances.create_table(group, 'readout', Particle, 'readout example')
-            print(table)"""
-
-        # distances_as_df = pd.DataFrame(distances_as_dict['PG_Node_0'], index=['PG_Node_0'])
-
-        if False: # '179' in g:
-
-            geoms = []
-            for s in graph_object.geoms:
-                geoms.append(LineString(s))
-
-            gpd.GeoDataFrame(geometry=geoms).plot()
-            print('')
-            plt.show()
-
-        if False:
-            data[name][g] = {'Graph': graph,
-                             'GraphData': graph_data,
-                             'GraphObject': graph_object,
-                             'GeoData': geo_data.loc[nodes_graph_original],
-                             'Distances': {'value': distances.to_numpy(dtype=np.float16),
-                                           'index': distances.index.tolist(),
-                                           'columns': distances.columns.tolist()}}
-        elif False:
-            data[name][g] = {'Graph': graph,
-                             'GraphData': graph_data,
-                             'GraphObject': graph_object,
-                             'GeoData': geo_data.loc[nodes_graph_original],
-                             'Distances': distances_as_dict}
-
-        elif False:
-            data[name][g] = {'Graph': graph,
-                             'GraphData': graph_data,
-                             'GraphObject': graph_object,
-                             'GeoData': geo_data.loc[nodes_graph_original],
-                             'Distances': graph_distance_df}
-
-        else:
-            data[name][g] = {'Graph': graph,
-                             'GraphData': graph_data,
-                             'GraphObject': graph_object,
-                             'GeoData': geo_data.loc[nodes_graph_original]}
+        data[name][g] = {'Graph': graph,
+                         'GraphData': graph_data,
+                         'GraphObject': graph_object,
+                         'GeoData': geo_data.loc[nodes_graph_original]}
 
     return data
 
