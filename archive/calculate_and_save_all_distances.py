@@ -1,4 +1,4 @@
-from _helpers import calc_distance_list_to_single
+from algorithm.methods_geographic import calc_distance_list_to_single
 import pandas as pd
 from tqdm import tqdm
 import math

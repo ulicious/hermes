@@ -1,9 +1,6 @@
 import itertools
-import math
 
 import pandas as pd
-
-from _helpers import calc_distance_list_to_list
 
 path_data = '/home/localadmin/Dokumente/Daten_Transportmodell/'
 path_railroad_data = path_data + 'railway_data/'

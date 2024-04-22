@@ -1,7 +1,6 @@
-from shapely.geometry import LineString, Point, MultiLineString
 import pandas as pd
 
-from _helpers import calc_distance_single_to_single
+from algorithm.methods_geographic import calc_distance_single_to_single
 
 from joblib import Parallel, delayed
 import multiprocessing

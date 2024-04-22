@@ -1,0 +1,219 @@
+# set uniform prices
+uniform_costs:
+   Hydrogen_Gas: 0 # € / MWh
+   Electricity: 45 # € / MWh
+   CO2: 145 # € / t CO2
+   Low_Temperature_Heat: 50 # € / MWh
+   Mid_Temperature_Heat: 50 # € / MWh
+   High_Temperature_Heat: 50 # € / MWh
+   Nitrogen: 55 # € / MWh
+
+uniform_interest_rate: 0.06
+
+Hydrogen_Gas:
+   potential_conversions: ['Hydrogen_Liquid', 'Ammonia', 'Methanol', 'Methane_Gas', 'DBT', 'MCH', 'FTF']
+   Hydrogen_Liquid:
+      specific_investment: 1497967  # € / kWH2
+      fixed_maintenance: 0.08
+      lifetime: 20
+      electricity_demand: 0.2034
+      co2_demand: 0
+      nitrogen_demand: 0
+      heat_demand: 0
+      heat_demand_niveau: None
+      operating_hours: 8000
+      efficiency_autothermal: 0.9835
+      efficiency_external_heat: 0.9835
+   Ammonia:
+      specific_investment: 513871  # € / kW NH3
+      fixed_maintenance: 0.03
+      lifetime: 20
+      electricity_demand: 0.0514
+      co2_demand: 0
+      nitrogen_demand: 0.16 # t / MWh NH3
+      heat_demand: 0
+      heat_demand_niveau: None
+      operating_hours: 8000
+      efficiency_autothermal: 0.878
+      efficiency_external_heat: 0.878
+   Methanol:
+      specific_investment: 1090000  # € / MW MeOH
+      fixed_maintenance: 0.0175
+      lifetime: 30
+      electricity_demand: 0.0172
+      co2_demand: 0.247
+      nitrogen_demand: 0
+      heat_demand: 0
+      heat_demand_niveau: None
+      operating_hours: 8000
+      efficiency_autothermal: 0.7986
+      efficiency_external_heat: 0.7986
+   Methane_Gas:
+      specific_investment: 278000  # € / kW MeOH
+      fixed_maintenance: 0.04
+      lifetime: 30
+      electricity_demand: 0
+      co2_demand: 0.198
+      nitrogen_demand: 0
+      heat_demand: 0
+      heat_demand_niveau: None
+      operating_hours: 8000
+      efficiency_autothermal: 0.8334
+      efficiency_external_heat: 0.8334
+   DBT:
+      specific_investment: 256026
+      fixed_maintenance: 0.04
+      lifetime: 20
+      electricity_demand: 0.003
+      co2_demand: 0
+      nitrogen_demand: 0
+      heat_demand: 0
+      heat_demand_niveau: None
+      operating_hours: 8000
+      efficiency_autothermal: 0.999
+      efficiency_external_heat: 0.999
+   MCH:
+      specific_investment: 157016
+      fixed_maintenance: 0.04
+      lifetime: 20
+      electricity_demand: 0.006
+      co2_demand: 0
+      nitrogen_demand: 0
+      heat_demand: 0
+      heat_demand_niveau: None
+      operating_hours: 8000
+      efficiency_autothermal: 0.999
+      efficiency_external_heat: 0.999
+   FTF:
+      specific_investment: 1600000  # € / kW FTF
+      fixed_maintenance: 0.03
+      lifetime: 25
+      electricity_demand: 0.0179
+      co2_demand: 0.406
+      nitrogen_demand: 0
+      heat_demand: 0
+      heat_demand_niveau: None
+      operating_hours: 8000
+      efficiency_autothermal: 0.8323
+      efficiency_external_heat: 0.8323
+
+Hydrogen_Liquid:
+   potential_conversions: ['Hydrogen_Gas']
+   Hydrogen_Gas:
+      specific_investment: 4320  # € / MW H2
+      fixed_maintenance: 0.03
+      lifetime: 10
+      electricity_demand: 0.0180
+      co2_demand: 0
+      nitrogen_demand: 0
+      heat_demand: 0
+      heat_demand_niveau: None
+      operating_hours: 8000
+      efficiency_autothermal: 1
+      efficiency_external_heat: 1
+
+Ammonia:
+   potential_conversions: ['Hydrogen_Gas']
+   Hydrogen_Gas:
+      specific_investment: 264026
+      fixed_maintenance: 0.03
+      lifetime: 20
+      electricity_demand: 0.0285
+      co2_demand: 0
+      nitrogen_demand: 0
+      heat_demand: 0.19951995
+      heat_demand_niveau: 'mid_temperature'
+      operating_hours: 8000
+      efficiency_autothermal: 0.9326
+      efficiency_external_heat: 1.1458
+
+Methanol:
+   potential_conversions: ['Hydrogen_Gas']
+   Hydrogen_Gas:
+      specific_investment: 16318
+      fixed_maintenance: 0.04
+      lifetime: 20
+      electricity_demand: 0.0960
+      co2_demand: 0
+      nitrogen_demand: 0
+      heat_demand: 0.1350135
+      heat_demand_niveau: 'mid_temperature'
+      operating_hours: 8000
+      efficiency_autothermal: 0.9431
+      efficiency_external_heat: 1.0807
+
+Methane_Gas:
+   potential_conversions: ['Hydrogen_Gas', 'Methane_Liquid']
+   Hydrogen_Gas:
+      specific_investment: 470085
+      fixed_maintenance: 0.03
+      lifetime: 30
+      electricity_demand: 0
+      co2_demand: 0
+      nitrogen_demand: 0
+      heat_demand: 0.33363336
+      heat_demand_niveau: 'high_temperature'
+      operating_hours: 8000
+      efficiency_autothermal: 0.695
+      efficiency_external_heat: 0.948
+   Methane_Liquid:
+      specific_investment: 740000  # € / kW CH4
+      fixed_maintenance: 0.035
+      lifetime: 25
+      electricity_demand: 0.0360
+      co2_demand: 0
+      nitrogen_demand: 0
+      heat_demand: 0
+      heat_demand_niveau: None
+      operating_hours: 8000
+      efficiency_autothermal: 1
+      efficiency_external_heat: 1
+
+Methane_Liquid:
+   potential_conversions: ['Methane_Gas']
+   Methane_Gas:
+      specific_investment: 280000  # € / MW CH4
+      fixed_maintenance: 0.035
+      lifetime: 30
+      electricity_demand: 0
+      co2_demand: 0
+      nitrogen_demand: 0
+      heat_demand: 0
+      heat_demand_niveau: None
+      operating_hours: 8000
+      efficiency_autothermal: 0.98
+      efficiency_external_heat: 0.98
+
+DBT:
+   potential_conversions: ['Hydrogen_Gas']
+   Hydrogen_Gas:
+      specific_investment: 282028
+      fixed_maintenance: 0.04
+      lifetime: 20
+      electricity_demand: 0.003
+      co2_demand: 0
+      nitrogen_demand: 0
+      heat_demand: 0.3480348
+      heat_demand_niveau: 'mid_temperature'
+      operating_hours: 8000
+      efficiency_autothermal: 0.652
+      efficiency_external_heat: 1
+
+MCH:
+   potential_conversions: ['Hydrogen_Gas']
+   Hydrogen_Gas:
+      specific_investment: 127013
+      fixed_maintenance: 0.04
+      lifetime: 20
+      electricity_demand: 0.135
+      co2_demand: 0
+      nitrogen_demand: 0
+      heat_demand: 0.19951995
+      heat_demand_niveau: 'mid_temperature'
+      operating_hours: 8000
+      efficiency_autothermal: 0.595
+      efficiency_external_heat: 1
+
+FTF:
+   potential_conversions: []
+

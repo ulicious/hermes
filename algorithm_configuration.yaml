@@ -1,0 +1,80 @@
+# general configuration
+use_minimal_example: True
+use_low_storage: False  # distances are not precalculated --> lower storage demand but higher memory and time demand
+use_low_memory: False  # avoids parallel processing and large matrix implementations --> lower memory demand but higher time demand
+number_cores: 'max'  # set certain number or 'max'; will be set to 1 if use_low_memory = True
+
+# todo: mit anderen Einstellungen testen
+
+# general information
+available_commodity: ['Hydrogen_Gas', 'Hydrogen_Liquid', 'Ammonia', 'Methane_Gas','Methane_Liquid', 'FTF', 'Methanol', 'DBT', 'MCH']
+available_transport_means: ['Pipeline_Gas', 'New_Pipeline_Gas', 'Pipeline_Liquid', 'New_Pipeline_Liquid', 'Shipping', 'Road']
+
+# parameters and assumptions for start - destination - combination file
+destination_location: [9.993682, 53.551086]  # [Longitude, Latitude]
+destination_country: 'Germany'
+destination_continent: 'Europe'
+origin_continents: []  # [] if all continents are possible, else define continents like ['Europe']
+cost_type:  # 'uniform' sets a uniform cost (defined in techno_economic_data_conversion), 'country' (from levelized_costs_country), 'location' (from levelized_costs_location)
+   # IMPORTANT: IF 'location' or 'country' is chosen, they have to be available in respective levelized cost file
+   Hydrogen_Gas: 'location'
+   Electricity: 'location'
+   CO2: 'uniform'
+   Nitrogen: 'uniform'
+   Low_Temperature_Heat: 'uniform'
+   Mid_Temperature_Heat: 'uniform'
+   High_Temperature_Heat: 'uniform'
+low_temp_heat_available_at_start: True
+mid_temp_heat_available_at_start: True
+high_temp_heat_available_at_start: True
+number_locations: 500
+minimal_latitude: -90  # will be overwritten if minimal_example is applied
+maximal_latitude: 90  # will be overwritten if minimal_example is applied
+minimal_longitude: -180  # will be overwritten if minimal_example is applied
+maximal_longitude: 180  # will be overwritten if minimal_example is applied
+
+# parameters and assumptions for infrastructure processing
+update_only_conversion_costs_and_efficiency: True  # set True if you only want to update location specific conversion costs and efficiencies
+low_temp_heat_available_at_ports: True
+mid_temp_heat_available_at_ports: True
+high_temp_heat_available_at_ports: True
+low_temp_heat_available_at_pipelines: False
+mid_temp_heat_available_at_pipelines: False
+high_temp_heat_available_at_pipelines: False
+minimal_distance_between_pipeline_connection_points: 50000  # [m] max distance between to connection points in pipeline (will be overwritten if minimal_example is applied)
+
+# algorithm assumptions and settings
+target_commodity: ['Hydrogen_Gas', 'Hydrogen_Liquid', 'Ammonia', 'Methane_Gas','Methane_Liquid', 'FTF', 'Methanol']
+tolerance_distance: 10000  # [m] distance which defines if transport is necessary to change between infrastructure
+to_final_destination_tolerance: 10000  # [m] distance which allows close infrastructure to be at solution
+max_length_new_segment: 100000  # [m] max distance for new pipelines
+max_length_road: math.inf  # [m] max distance for road transportation
+no_road_multiplier: 1.5  # distance * no_road_multiplier
+build_new_infrastructure: True
+H2_ready_infrastructure: True
+low_temp_heat_available_at_destination: False
+mid_temp_heat_available_at_destination: False
+high_temp_heat_available_at_destination: False
+print_runtime_information: True
+print_benchmark_info: False
+
+paths:
+   project_folder: 'C:/Users/mt5285/Transportmodell/'
+   raw_data: 'raw_data/'
+   processed_data: 'processed_data/'
+   results: 'results/'
+   
+filenames:
+   location_data: 'start_destination_combinations_500.xlsx'
+   conversion_costs_and_efficiencies: 'conversion_costs_and_efficiency.csv'
+   transportation_costs: 'commodities_transportation.xlsx'
+   gas_pipeline_geodata: 'gas_pipeline_geodata.csv'
+   gas_pipeline_graph: 'gas_pipeline_graphs.csv'
+   gas_pipeline_graph_object: 'gas_pipeline_graphs_object.csv'
+   oil_pipeline_geodata: 'oil_pipeline_geodata.csv'
+   oil_pipeline_graph: 'oil_pipeline_graphs.csv'
+   oil_pipeline_graph_object: 'oil_pipeline_graphs_object.csv'
+   ports: 'ports.csv'
+   coastlines: 'landmasses.csv'
+   minimal_distances: 'minimal_distances.csv'
+

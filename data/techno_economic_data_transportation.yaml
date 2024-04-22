@@ -1,0 +1,50 @@
+# all costs in € / MWh / 1000 km
+
+Hydrogen_Gas:
+   potential_transportation: ['Pipeline_Gas', 'New_Pipeline_Gas', 'Road']
+   Pipeline_Gas: 4.88
+   New_Pipeline_Gas: 3.11
+   Road: 126.62
+
+Hydrogen_Liquid:
+   potential_transportation: ['Shipping', 'Road']
+   Shipping: 1.36
+   Road: 23
+
+Ammonia:
+   potential_transportation: [ 'Shipping', 'Road' ]
+   Shipping: 0.68
+   Road: 33.57
+
+Methanol:
+   potential_transportation: [ 'Shipping', 'Road' ]
+   Shipping: 0.47
+   Road: 10.29
+
+Methane_Gas:
+   potential_transportation: ['Pipeline_Gas', 'New_Pipeline_Gas']
+   Pipeline_Gas: 1.43
+   New_Pipeline_Gas: 0.88
+
+Methane_Liquid:
+   potential_transportation: [ 'Shipping', 'Road' ]
+   Shipping: 0.92
+   Road: 16.69
+
+DBT:
+   potential_transportation: [ 'Shipping', 'Road' ]
+   Shipping: 1.31
+   Road: 42.58
+
+MCH:
+   potential_transportation: [ 'Shipping', 'Road' ]
+   Shipping: 1.31
+   Road: 43.28
+
+FTF:
+   potential_transportation: ['Pipeline_Liquid', 'New_Pipeline_Liquid', 'Shipping', 'Road']
+   Pipeline_Liquid: 0.37
+   New_Pipeline_Liquid: 0.24
+   Shipping: 0.14
+   Road: 5.11
+

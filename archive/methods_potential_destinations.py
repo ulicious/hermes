@@ -1,18 +1,14 @@
 import math
 import pandas as pd
 from shapely.geometry import Point
-from shapely.ops import nearest_points
 import networkx as nx
 import numpy as np
-import searoute as sr
-from tables import *
 
 import time
 
-from _helpers import calc_distance_single_to_single, calc_distance_list_to_single,\
-    calculate_cheapest_option_to_final_destination, check_if_reachable_on_land
-from methods_road_transport import get_road_distance_to_single_option, get_road_distance_to_options
-from methods_networks import attach_new_node_to_graph
+from algorithm.methods_geographic import calc_distance_single_to_single, calc_distance_list_to_single,\
+    calculate_cheapest_option_to_final_destination
+from archive.methods_networks import attach_new_node_to_graph
 
 # Ignore runtime warnings as they
 # import os

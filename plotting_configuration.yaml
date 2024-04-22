@@ -1,0 +1,90 @@
+commodity_colors:
+   Hydrogen_Gas: 'lawngreen'
+   Hydrogen_Liquid: 'forestgreen'
+   Ammonia: 'violet'
+   Methane_Gas: 'dodgerblue'
+   Methane_Liquid: 'navy'
+   Methanol: 'gold'
+   DBT: 'maroon'
+   MCH: 'darkorchid'
+   FTF: 'orangered'
+   None: 'black'
+
+nice_name_dictionary:
+   Hydrogen_Gas: 'Hydrogen (Gas)'
+   Hydrogen_Liquid: 'Hydrogen (Liquid)'
+   Ammonia: 'Ammonia'
+   Methane_Gas: 'Methane (Gas)'
+   Methane_Liquid: 'Methane (Liquid)'
+   Methanol: 'Methanol'
+   DBT: 'DBT'
+   MCH: 'MCH'
+   FTF: 'Fischer-Tropsch Crude'
+   None: 'No Data'
+   Road: 'Road'
+   Shipping: 'Ship'
+   Pipeline_Gas: 'Gas Pipeline'
+   Pipeline_Liquid: 'Oil Pipeline'
+   New_Pipeline_Gas: 'New Gas Pipeline'
+   New_Pipeline_Liquid: 'New Oil Pipeline'
+   global-any_target_h2_ready: 'All-Ready'
+   global-any_target_not_h2_ready: 'All-Not-Ready'
+   global-h2_target_h2_ready: 'H2-Ready'
+   global-h2_target_not_h2_ready: 'H2-Not-Ready'
+
+transport_mean_styles:
+   Road: ''
+   Shipping: '.'
+   Pipeline_Gas: '/'
+   New_Pipeline_Gas: '//'
+   Pipeline_Liquid: '+'
+   New_Pipeline_Liquid: '.'
+   None: '/'
+
+transport_mean_line_styles:
+   Road: 'dashed'
+   Shipping: 'dotted'
+   Pipeline: '-'
+   Pipeline_Gas: '-'
+   New_Pipeline_Gas: '-'
+   Pipeline_Liquid: '-'
+   New_Pipeline_Liquid: '-'
+   None: '/'
+
+line_widths:
+   Hydrogen_Gas:
+      Road: 0.5
+      Pipeline_Gas: 0.5
+      New_Pipeline_Gas: 0.5
+   Hydrogen_Liquid:
+      Road: 1
+      Shipping: 1.5
+   Ammonia:
+      Road: 0.5
+      Shipping: 1
+   Methane_Gas:
+      Pipeline_Gas: 1
+      New_Pipeline_Gas: 1
+   Methane_Liquid:
+      Road: 0.5
+      Shipping: 0.5
+   Methanol:
+      Road: 0.5
+      Shipping: 0.5
+   DBT:
+      Road: 0.5
+      Shipping: 1.5
+   MCH:
+      Road: 0.5
+      Shipping: 1.5
+   FTF:
+      Road: 0.5
+      Shipping: 1
+      Pipeline_Liquid: 1
+      New_Pipeline_Liquid: 1
+
+infrastructure_colors:
+   Road: 'r'
+   Shipping: 'b'
+   Pipeline_Gas: 'g'
+   Pipeline_Oil: 'black'

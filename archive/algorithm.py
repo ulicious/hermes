@@ -9,15 +9,15 @@ from tqdm import tqdm
 from shapely.geometry import Point
 
 from methods_checking import check_total_costs_of_solutions, sort_solutions_by_distance_to_destination, remove_solution_duplications
-from methods_benchmark import find_shipping_benchmark_solution
+from algorithm.methods_benchmark import find_shipping_benchmark_solution
 
-from object_commodity import create_commodity_objects
-from object_solution import Solution, create_solution_dataframe
-from process_input_data import process_network_data, attach_new_ports
-from methods_algorithm import create_solutions_from_conversion, create_solutions_from_routing, process_road_options_without_route, \
-    create_solutions_from_historic_paths, process_solutions_reaching_end, update_benchmark_based_on_historic_paths, update_graph_data_based_on_parts, \
+from algorithm.object_commodity import create_commodity_objects
+from archive.object_solution import Solution, create_solution_dataframe
+from algorithm.process_input_data import process_network_data, attach_new_ports
+from algorithm.methods_algorithm import create_solutions_from_conversion, create_solutions_from_routing, process_road_options_without_route, \
+    process_solutions_reaching_end, update_benchmark_based_on_historic_paths, update_graph_data_based_on_parts, \
     create_graph_from_graph_data, update_local_benchmark_based_on_graph
-from _helpers import calc_distance_list_to_single
+from algorithm.methods_geographic import calc_distance_list_to_single
 
 import logging
 logging.getLogger().setLevel(logging.INFO)

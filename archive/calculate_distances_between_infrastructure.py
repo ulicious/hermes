@@ -11,7 +11,7 @@ from shapely import wkt
 from shapely.geometry import MultiLineString, Point
 from geopy.geocoders import Nominatim
 
-from _helpers import calc_distance_list_to_single
+from algorithm.methods_geographic import calc_distance_list_to_single
 
 
 def get_graph(data, geo_data, graph_data, name):
