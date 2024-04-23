@@ -11,23 +11,22 @@ to other nodes is not possible anymore.
   <img src="images/graphical_abstract.png" />
 </p>
 
-Following steps need to be taken to use PtX Transport:
--
+# Following steps need to be taken to use PtX Transport:
 
 1. Download this repository and create python project in your coding environment
 2. Install requirements (in terminal: pip install -r requirements.txt)
 3. Create following directory structure
 
-
-    project folder/
+```
+project folder/
+|
++---raw data/
++---processed data/
++---results/
     |
-    +---raw data/
-    +---processed data/
-    +---results/
-        |
-        +---location_results/
-        +---plots/
-
+    +---location_results/
+    +---plots/
+```
 
 4. Move raw data from "data" folder in this repository to the created raw data folder. Alternatively, place your own raw data in the raw data folder
 5. Adjust "algorithm_configuration.yaml" (paths, parameters etc.) in this repository based on created dictionary and own configurations
@@ -37,8 +36,8 @@ Following steps need to be taken to use PtX Transport:
 9. If you want to start the routing algorithm, run "algorithm/main.py"
 10. If you want to plot the results, run "plotting/plot_results.py". You can adjust plotting configuration in "plotting_configuration.yaml"
 
-Important things to consider:
--
+# Important things to consider:
+
 - Data processing is quite time-consuming and heavily depends on the resources of you computer
 - The processed data will take quite some storage space
   - Minimal example: 1.69 GB | Full approach: 
