@@ -1,7 +1,8 @@
 import pycountry_convert as pc
 import numpy as np
 import reverse_geocode
-import geopandas as gp
+import geopandas as gpd
+import cartopy.io.shapereader as shpreader
 
 from geopandas.tools import sjoin
 from math import cos, sin, asin, sqrt, radians
@@ -111,61 +112,6 @@ def calc_distance_list_to_list(latitude_list_1, longitude_list_1, latitude_list_
     return m
 
 
-def get_country_and_continent_from_location(location_longitude, location_latitude):
-
-    """
-    This method derives continent and country from location coordinates
-
-    @param location_longitude: latitude of location
-    @param location_latitude: longitude of location
-    @return: tuple with (country, continent)
-    """
-
-    coordinates = (location_latitude, location_longitude),
-    closest_city = reverse_geocode.search(coordinates)
-    country_destination = closest_city[0]['country']
-    country_code = closest_city[0]['country_code']
-
-    # Important: reverse geocode does not necessarily give the right country. It gives the closest city.
-    # Other packages might be more suitable
-
-    # The dataset seems not to be complete. Therefore, we have to catch some special cases
-    # todo: all prints can be deleted as soon as no new exceptions pop up. prints are necessary to recognize exceptions
-    continent_name = None
-    if country_destination in ['Sint Maarten', 'Bonaire, Saint Eustatius and Saba', 'Curacao', 'Aruba']:
-        continent_name = 'South America'
-    elif country_destination in ['Libyan Arab Jamahiriya', 'Western Sahara', "Cote d'Ivoire"]:
-        continent_name = 'Africa'
-    elif country_destination in ['Aland Islands']:
-        continent_name = 'Europe'
-    elif country_destination in ['Palestinian Territory', 'Timor-Leste']:
-        continent_name = 'Asia'
-    elif country_destination == '':
-        if country_code in ['XK']:
-            continent_name = 'Europe'
-        else:
-            print(closest_city)
-    else:
-        try:
-            country_alpha2 = pc.country_name_to_country_alpha2(country_destination)
-            continent_code = pc.country_alpha2_to_continent_code(country_alpha2)
-            continent_name = pc.convert_continent_code_to_continent_name(continent_code)
-        except:
-            print(coordinates)
-
-            print(closest_city)
-
-            print(country_destination)
-
-            country_alpha2 = pc.country_name_to_country_alpha2(country_destination)
-            print(country_alpha2)
-
-            continent_code = pc.country_alpha2_to_continent_code(country_alpha2)
-            print(continent_code)
-
-    return country_destination, continent_name
-
-
 def get_continent_from_location(location):
 
     """
@@ -178,49 +124,14 @@ def get_continent_from_location(location):
     location_longitude = location[0]
     location_latitude = location[1]
 
-    coordinates = (location_latitude, location_longitude),
-    closest_city = reverse_geocode.search(coordinates)
-    country_destination = closest_city[0]['country']
-    country_code = closest_city[0]['country_code']
+    country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
+    world = gpd.read_file(country_shapefile)
 
-    # Important: reverse geocode does not necessarily give the right country. It gives the closest city.
-    # Other packages might be more suitable
+    gdf = gpd.GeoDataFrame(geometry=gpd.points_from_xy([location_longitude], [location_latitude])).set_crs('EPSG:4326')
+    result = gpd.sjoin(gdf, world, how='left')
+    continent = result.at[result.index[0], 'CONTINENT']
 
-    # The dataset seems not to be complete. Therefore, we have to catch some special cases
-    # todo: all prints can be deleted as soon as no new exceptions pop up. prints are necessary to recognize exceptions
-    continent_name = None
-    if country_destination in ['Sint Maarten', 'Bonaire, Saint Eustatius and Saba', 'Curacao', 'Aruba']:
-        continent_name = 'South America'
-    elif country_destination in ['Libyan Arab Jamahiriya', 'Western Sahara', "Cote d'Ivoire"]:
-        continent_name = 'Africa'
-    elif country_destination in ['Aland Islands']:
-        continent_name = 'Europe'
-    elif country_destination in ['Palestinian Territory', 'Timor-Leste']:
-        continent_name = 'Asia'
-    elif country_destination == '':
-        if country_code in ['XK']:
-            continent_name = 'Europe'
-        else:
-            print(closest_city)
-    else:
-        try:
-            country_alpha2 = pc.country_name_to_country_alpha2(country_destination)
-            continent_code = pc.country_alpha2_to_continent_code(country_alpha2)
-            continent_name = pc.convert_continent_code_to_continent_name(continent_code)
-        except:
-            print(coordinates)
-
-            print(closest_city)
-
-            print(country_destination)
-
-            country_alpha2 = pc.country_name_to_country_alpha2(country_destination)
-            print(country_alpha2)
-
-            continent_code = pc.country_alpha2_to_continent_code(country_alpha2)
-            print(continent_code)
-
-    return continent_name
+    return continent
 
 
 def check_if_reachable_on_land(start_location, list_longitude, list_latitude, coastline, get_only_availability=False,
@@ -239,15 +150,15 @@ def check_if_reachable_on_land(start_location, list_longitude, list_latitude, co
     @return: returns tuple with the boolean if reachable by road (within the same polygon) and the index of the polygon
     """
 
-    df_start = gp.GeoSeries.from_wkt(['Point(' + str(start_location.x) + ' ' + str(start_location.y) + ')'])
-    gdf_start = gp.GeoDataFrame(df_start, geometry=0)
+    df_start = gpd.GeoSeries.from_wkt(['Point(' + str(start_location.x) + ' ' + str(start_location.y) + ')'])
+    gdf_start = gpd.GeoDataFrame(df_start, geometry=0)
 
     points = []
     for i in list_latitude.index:
         points.append('Point(' + str(list_longitude.loc[i]) + ' ' + str(list_latitude.loc[i]) + ')')
 
-    df_target = gp.GeoSeries.from_wkt(points)
-    gdf_target = gp.GeoDataFrame(df_target, geometry=0)
+    df_target = gpd.GeoSeries.from_wkt(points)
+    gdf_target = gpd.GeoDataFrame(df_target, geometry=0)
 
     polygons = sjoin(gdf_start, coastline, predicate='within', how='right').dropna(subset=['index_left'])
 

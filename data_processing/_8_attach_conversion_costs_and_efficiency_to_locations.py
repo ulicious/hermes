@@ -122,14 +122,6 @@ def attach_conversion_costs_and_efficiency_to_locations(options, config_file, te
     path_raw_data = config_file['paths']['project_folder'] + config_file['paths']['raw_data']
 
     levelized_costs_location = pd.read_csv(path_raw_data + 'levelized_costs_locations.csv', index_col=0)
-    new_index = [i.split('_')[1].split('c')[1] for i in levelized_costs_location.index]
-    levelized_costs_location.index = new_index
-    levelized_costs_location.sort_index(inplace=True)
-    levelized_costs_location = levelized_costs_location[~levelized_costs_location.index.duplicated(keep='first')]
-
-    levelized_costs_location['longitude'] = [int(i.split('x')[0]) / 100 for i in levelized_costs_location.index]
-    levelized_costs_location['latitude'] = [int(i.split('x')[1]) / 100 for i in levelized_costs_location.index]
-
     levelized_costs_country = pd.read_csv(path_raw_data + 'levelized_costs_countries.csv', index_col=0)
 
     # add country information to options
@@ -184,26 +176,22 @@ def attach_conversion_costs_and_efficiency_to_locations(options, config_file, te
             if config_file['cost_type'][c] != 'location':
                 continue
 
-            if adjusted_coords in levelized_costs_location.index:
-                country_options.loc[i, c] = levelized_costs_location.loc[adjusted_coords, c]
+            # apply small grid search to get the closest location
+            sub_locations = levelized_costs_location[(levelized_costs_location['latitude'] <= adjusted_latitude + 0.5) &
+                                                     (levelized_costs_location['latitude'] >= adjusted_latitude - 0.5) &
+                                                     (levelized_costs_location['longitude'] <= adjusted_longitude + 0.5) &
+                                                     (levelized_costs_location['longitude'] >= adjusted_longitude - 0.5)]
+
+            if not sub_locations.empty:
+                distances = calc_distance_list_to_single(sub_locations['latitude'], sub_locations['longitude'],
+                                                         adjusted_latitude, adjusted_longitude)
+                distances = pd.DataFrame(distances, index=sub_locations.index)
+
+                idxmin = distances.idxmin().values[0]
+                country_options.loc[i, c] = levelized_costs_location.loc[idxmin, c]
+
             else:
-
-                # apply small grid search to get the closest location
-                sub_locations = levelized_costs_location[(levelized_costs_location['latitude'] <= adjusted_latitude + 0.5) &
-                                                         (levelized_costs_location['latitude'] >= adjusted_latitude - 0.5) &
-                                                         (levelized_costs_location['longitude'] <= adjusted_longitude + 0.5) &
-                                                         (levelized_costs_location['longitude'] >= adjusted_longitude - 0.5)]
-
-                if not sub_locations.empty:
-                    distances = calc_distance_list_to_single(sub_locations['latitude'], sub_locations['longitude'],
-                                                             adjusted_latitude, adjusted_longitude)
-                    distances = pd.DataFrame(distances, index=sub_locations.index)
-
-                    idxmin = distances.idxmin().values[0]
-                    country_options.loc[i, c] = levelized_costs_location.loc[idxmin, c]
-
-                else:
-                    new_nan_values.append(i)
+                new_nan_values.append(i)
 
     new_nan_solutions = country_options.loc[new_nan_values, :]
     no_conversion_solutions = pd.concat([no_country_options, new_nan_solutions])

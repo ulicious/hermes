@@ -22,7 +22,6 @@ Following steps need to be taken to use PtX Transport:
     project folder/
     |
     +---raw data/
-    #---techno_economic_data/
     +---processed data/
     +---results/
         |
@@ -30,10 +29,10 @@ Following steps need to be taken to use PtX Transport:
         +---plots/
 
 
-5. Adjust "configuration.yaml" (paths, parameters etc.)
-6. Optional: Place your own raw, processed and techno economic data in the respective folder. This data must resemble the data in the raw, processed and techno_economic data folder in the github repository
-7. If you want to create start locations, check respective configurations and run "data_processing/_1_create_random_locations"
-8. If you need to process raw data, run "data_processing/_2_script_process_raw_data.py"
+4. Adjust "algorithm_configuration.yaml" (paths, parameters etc.) in this repository
+5. Move raw data from data folder in this repository to the created raw data folder. Alternatively, place your own raw data in the raw data folder
+6. If you want to create start locations, check respective configurations and run "data_processing/_1_create_random_locations"
+7. If you need to process raw data, run "data_processing/_2_script_process_raw_data.py". Alternatively, you can place your processed data in the processed data folder
 8. If you want to start the routing algorithm, run "algorithm/main.py"
 9. If you want to plot the results, run "plotting/plot_results.py"
 

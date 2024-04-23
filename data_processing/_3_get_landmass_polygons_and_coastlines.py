@@ -6,6 +6,14 @@ from shapely.geometry import MultiPolygon
 
 def get_landmass_polygons_and_coastlines(use_minimal_example=False):
 
+    """
+    Create large polygons based on connected country polygons
+
+    @param use_minimal_example: boolean if only Europe should be considered
+
+    @return: multipolygons for landmass and linestrings of coastlines
+    """
+
     # Load the shapefile data for country boundaries with 10m resolution
     world_high_res = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
 
