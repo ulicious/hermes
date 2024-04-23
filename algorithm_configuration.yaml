@@ -16,7 +16,7 @@ destination_country: 'Germany'
 destination_continent: 'Europe'
 origin_continents: []  # [] if all continents are possible, else define continents like ['Europe']
 cost_type:  # 'uniform' sets a uniform cost (defined in techno_economic_data_conversion), 'country' (from levelized_costs_country), 'location' (from levelized_costs_location)
-   # IMPORTANT: IF 'location' or 'country' is chosen, they have to be available in respective levelized cost file
+   # IMPORTANT: If 'location' or 'country' is chosen, they have to be available in respective levelized cost file
    Hydrogen_Gas: 'location'
    Electricity: 'location'
    CO2: 'uniform'

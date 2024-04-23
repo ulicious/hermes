@@ -15,7 +15,7 @@ Following steps need to be taken to use PtX Transport:
 -
 
 1. Download this repository and create python project in your coding environment
-2. Install requirements
+2. Install requirements (in terminal: pip install -r requirements.txt)
 3. Create following directory structure
 
 
@@ -29,12 +29,13 @@ Following steps need to be taken to use PtX Transport:
         +---plots/
 
 
-4. Adjust "algorithm_configuration.yaml" (paths, parameters etc.) in this repository
-5. Move raw data from data folder in this repository to the created raw data folder. Alternatively, place your own raw data in the raw data folder
-6. If you want to create start locations, check respective configurations and run "data_processing/_1_create_random_locations"
-7. If you need to process raw data, run "data_processing/_2_script_process_raw_data.py". Alternatively, you can place your processed data in the processed data folder
-8. If you want to start the routing algorithm, run "algorithm/main.py"
-9. If you want to plot the results, run "plotting/plot_results.py"
+4. Move raw data from "data" folder in this repository to the created raw data folder. Alternatively, place your own raw data in the raw data folder
+5. Adjust "algorithm_configuration.yaml" (paths, parameters etc.) in this repository based on created dictionary and own configurations
+6. Adjust the techno economic data in the created "raw data" folder if needed
+7. If you want to create start locations, check respective configurations (algorithm_configuration.yaml) and run "data_processing/_1_create_random_locations"
+8. If you need to process raw data, run "data_processing/_2_script_process_raw_data.py". Alternatively, you can place your processed data in the processed data folder
+9. If you want to start the routing algorithm, run "algorithm/main.py"
+10. If you want to plot the results, run "plotting/plot_results.py". You can adjust plotting configuration in "plotting_configuration.yaml"
 
 Important things to consider:
 -
