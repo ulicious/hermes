@@ -59,15 +59,13 @@ print_runtime_information: True
 print_benchmark_info: False
 
 paths:
-   project_folder: 'C:/Users/mt5285/Transportmodell/'
-   raw_data: 'raw_data/'
-   processed_data: 'processed_data/'
-   results: 'results/'
+   project_folder: 'C:/Users/mt5285/Transportmodell/'  # full path of folder
+   raw_data: 'raw_data/'  # only folder name + "/"
+   processed_data: 'processed_data/'  # only folder name + "/"
+   results: 'results/'  # only folder name + "/"
    
 filenames:
    location_data: 'start_destination_combinations_500.xlsx'
-   conversion_costs_and_efficiencies: 'conversion_costs_and_efficiency.csv'
-   transportation_costs: 'commodities_transportation.xlsx'
    gas_pipeline_geodata: 'gas_pipeline_geodata.csv'
    gas_pipeline_graph: 'gas_pipeline_graphs.csv'
    gas_pipeline_graph_object: 'gas_pipeline_graphs_object.csv'

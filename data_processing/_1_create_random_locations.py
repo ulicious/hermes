@@ -3,8 +3,6 @@ import random
 import os
 import yaml
 
-from global_land_mask import globe
-
 import pandas as pd
 import geopandas as gpd
 import cartopy.io.shapereader as shpreader
@@ -43,8 +41,7 @@ def randlatlon1(min_latitude, max_latitude, min_longitude, max_longitude):
         Lon = round(cf*radLon, 5)
 
         if is_within_boundaries(Lat, Lon):
-            if globe.is_land(Lat, Lon):
-                return Lon, Lat
+            return Lon, Lat
 
 
 def round_to_quarter(number):
@@ -238,6 +235,10 @@ while i < config_file['number_locations']:
         result = gpd.sjoin(gdf, world, how='left')
         country_start = result.at[result.index[0], 'NAME_EN']
         continent_start = result.at[result.index[0], 'CONTINENT']
+
+        if isinstance(country_start, float):
+            # country is nan
+            continue
 
         if origin_continents:
             if continent_start not in origin_continents:

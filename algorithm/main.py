@@ -55,8 +55,7 @@ if __name__ == '__main__':
                         itertools.repeat(location_data),
                         itertools.repeat(data),
                         itertools.repeat(config_file),
-                        itertools.repeat(configuration),
-                        itertools.repeat(print_information))
+                        itertools.repeat(configuration))
 
         # Start processing tasks and ensure parallelism
         results = list(pool.imap(run_algorithm, task_args))
@@ -67,7 +66,7 @@ if __name__ == '__main__':
 
     else:
         for i in location_data.index:
-            args = (i, location_data, data, config_file, configuration, print_information)
+            args = (i, location_data, data, config_file, configuration)
             run_algorithm(args)
 
     if time.time() - time_start < 60:
