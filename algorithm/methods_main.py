@@ -18,12 +18,12 @@ def process_network_data(data, name, geo_data, graph_data):
     """
     Method creates dictionary with network data
 
-    @param data: Existing dictionary
-    @param name: name of network
-    @param geo_data: geo data of network (locations of nodes)
-    @param graph_data: information on lines of network
+    @param dict data: Existing dictionary
+    @param str name: name of network
+    @param pandas.DataFrame geo_data: geo data of network (locations of nodes)
+    @param pandas.DataFrame graph_data: information on lines of network
 
-    @return: dictionary with network data
+    @return: dict dictionary with network data
     """
 
     data[name] = {}
@@ -62,7 +62,7 @@ def prepare_data_and_configuration_dictionary(config_file):
     Loads all data based on paths in configuration file and stores it in the data dictionary.
     Furthermore, takes some adjustments to the destination (e.g., add conversion costs)
 
-    @param config_file: dictionary with configurations
+    @param dict config_file: dictionary with configurations
 
     @return:
         - data dictionary

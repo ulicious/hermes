@@ -1,6 +1,4 @@
-import pycountry_convert as pc
 import numpy as np
-import reverse_geocode
 import geopandas as gpd
 import cartopy.io.shapereader as shpreader
 
@@ -12,10 +10,10 @@ def calc_distance_single_to_single(latitude_1, longitude_1, latitude_2, longitud
     """
     This methods calculates direct distance between two locations
     
-    @param latitude_1: latitude first location
-    @param longitude_1: longitude first location
-    @param latitude_2: latitude second location
-    @param longitude_2: longitude second location
+    @param float latitude_1: latitude first location
+    @param float longitude_1: longitude first location
+    @param float latitude_2: latitude second location
+    @param float longitude_2: longitude second location
     @return: single direct distance values in meter
     """
 
@@ -35,10 +33,10 @@ def calc_distance_list_to_single(latitude_list_1, longitude_list_1, latitude_2, 
     """
     This method calculates the direct distance between a single location and an array of locations
 
-    @param latitude_list_1: latitudes of start locations
-    @param longitude_list_1: longitude of start locations
-    @param latitude_2: latitude of destination
-    @param longitude_2: longitude of destination
+    @param pandas.DataFrame latitude_list_1: latitudes of start locations
+    @param pandas.DataFrame longitude_list_1: longitude of start locations
+    @param float latitude_2: latitude of destination
+    @param float longitude_2: longitude of destination
     @return: array of direct distances in meter
     """
 
@@ -60,10 +58,10 @@ def calc_distance_list_to_list_no_matrix(latitude_list_1, longitude_list_1, lati
     """
     This method calculates the direct distance between two arrays of locations
 
-    @param latitude_list_1: latitudes of starting locations
-    @param longitude_list_1: longitudes of starting locations
-    @param latitude_list_2: latitudes of destination locations
-    @param longitude_list_2: longitudes of destination locations
+    @param pandas.DataFrame latitude_list_1: latitudes of starting locations
+    @param pandas.DataFrame longitude_list_1: longitudes of starting locations
+    @param pandas.DataFrame latitude_list_2: latitudes of destination locations
+    @param pandas.DataFrame longitude_list_2: longitudes of destination locations
     @return: dataframe of direct distances in meter. Important: list-like not array
     """
 
@@ -86,10 +84,10 @@ def calc_distance_list_to_list(latitude_list_1, longitude_list_1, latitude_list_
     """
     This method calculates the direct distances between two lists of coordinates.
 
-    @param latitude_list_1: latitudes of starting locations
-    @param longitude_list_1: longitudes of starting locations
-    @param latitude_list_2: latitudes of destination locations
-    @param longitude_list_2: longitudes of destination locations
+    @param pandas.DataFrame latitude_list_1: latitudes of starting locations
+    @param pandas.DataFrame longitude_list_1: longitudes of starting locations
+    @param pandas.DataFrame latitude_list_2: latitudes of destination locations
+    @param pandas.DataFrame longitude_list_2: longitudes of destination locations
     @return: Matrix with direct distances in meter
     """
 
@@ -117,9 +115,9 @@ def get_continent_from_location(location, world=None):
     """
     This method derives continent from location coordinates. Method is used within the context of DataFrame.apply
 
-    @param location: coordinates of location as tuple (longitude, latitude)
-    @param world: shapefile of all countries
-    @return: continent
+    @param tuple location: coordinates of location as tuple (longitude, latitude)
+    @param geopandas.GeoDataFrame world: shapefile of all countries
+    @return: continent name of current location
     """
 
     location_longitude = location[0]
@@ -131,7 +129,7 @@ def get_continent_from_location(location, world=None):
 
     gdf = gpd.GeoDataFrame(geometry=gpd.points_from_xy([location_longitude], [location_latitude])).set_crs('EPSG:4326')
     result = gpd.sjoin(gdf, world, how='left')
-    continent = result.at[result.index[0], 'CONTINENT']
+    continent = str(result.at[result.index[0], 'CONTINENT'])
 
     return continent
 
@@ -143,12 +141,12 @@ def check_if_reachable_on_land(start_location, list_longitude, list_latitude, co
     This method checks if a location can reach different locations by checking if they are in the same polygon.
     The polygon are based on the coastlines so if not on same polygon, water is in between --> no road
 
-    @param start_location: shapely.geometry.Point of start location
-    @param list_longitude: longitude of target locations
-    @param list_latitude: latitude of target locations
-    @param coastline: polygons based on coastline
-    @param get_only_availability: array with True or False values of reachable on land
-    @param get_only_poly: used to get only the polygon of the starting location
+    @param shapely.geometry.Point start_location: shapely.geometry.Point of start location
+    @param pandas.DataFrame list_longitude: longitude of target locations
+    @param pandas.DataFrame list_latitude: latitude of target locations
+    @param geopandas.GeoDataFrame coastline: polygons based on coastline
+    @param bool get_only_availability: array with True or False values of reachable on land
+    @param bool get_only_poly: used to get only the polygon of the starting location
     @return: returns tuple with the boolean if reachable by road (within the same polygon) and the index of the polygon
     """
 
@@ -191,9 +189,9 @@ def check_if_reachable_on_land(start_location, list_longitude, list_latitude, co
             if not get_only_availability:
                 return result, index_poly_start
             else:
-                return result
+                return result, None
         else:
-            return index_poly_start
+            return None, index_poly_start
 
     else:
         return None, None

@@ -40,7 +40,8 @@ project folder/
 
 - Data processing is quite time-consuming and heavily depends on the resources of you computer
 - The processed data will take quite some storage space
-  - Minimal example: 1.69 GB | Full approach: 
+  - Minimal example: 22 MB (without distances) | 7.2 GB (with distances)
+  - Full approach: 
 - The computational expenses heavily rely on the data and setting
 
 Citation

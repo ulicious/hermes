@@ -12,14 +12,14 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, lo
     """
     Script for conversion of current branches
 
-    @param branches: dataframe with current branches
-    @param configuration: dictionary with configuration
-    @param data: dictionary with common data
-    @param branch_number: current branch number
-    @param benchmark: current benchmark
-    @param local_benchmarks: dataframe with local benchmarks at nodes and ports
-    @param iteration: current iteration
-    @param start_time: time since start of processing of current start location
+    @param pandas.DataFrame branches: dataframe with current branches
+    @param dict configuration: dictionary with configuration
+    @param dict data: dictionary with common data
+    @param int branch_number: current branch number
+    @param float benchmark: current benchmark
+    @param pandas.DataFrame local_benchmarks: dataframe with local benchmarks at nodes and ports
+    @param int iteration: current iteration
+    @param float start_time: seconds since start of processing of current start location
 
     @return:
     - update branches dataframe

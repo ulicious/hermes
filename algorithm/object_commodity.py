@@ -78,13 +78,13 @@ class Commodity:
 
         """
         Creates instance of commodity object
-        @param name: name of commodity
-        @param production_costs: production cost of commodity at location
-        @param conversion_options: list with conversion options
-        @param conversion_costs: DataFrame with conversion costs at location
-        @param conversion_efficiencies: DataFrame with conversion efficiencies at location
-        @param transportation_options: list with transportation options
-        @param transportation_costs: DataFrame with transportation costs
+        @param str name: name of commodity
+        @param pandas.DataFrame production_costs: production cost of commodity at location
+        @param dict conversion_options: list with conversion options
+        @param pandas.DataFrame conversion_costs: DataFrame with conversion costs at location
+        @param pandas.DataFrame conversion_efficiencies: DataFrame with conversion efficiencies at location
+        @param dict transportation_options: list with transportation options
+        @param pandas.Series transportation_costs: DataFrame with transportation costs
         """
 
         self.name = name
@@ -106,14 +106,14 @@ def create_commodity_objects(location_data,
     """
     This function processes and organizes data related to commodities and transportation options.
 
-    @param location_data: DataFrame containing information on production costs at start location
-    @param conversion_costs_and_efficiencies: DataFrame containing information on location specific conversion costs and efficiencies
-    @param techno_economic_data_conversion: DataFrame containing information about transportation options and costs.
-    @param techno_economic_data_transportation: DataFrame containing information about transportation options and costs.
-    @param config_file: yaml file containing necessary settings and assumptions
+    @param pandas.DataFrame location_data: DataFrame containing information on production costs at start location
+    @param pandas.DataFrame conversion_costs_and_efficiencies: DataFrame containing information on location specific conversion costs and efficiencies
+    @param pandas.DataFrame techno_economic_data_conversion: DataFrame containing information about transportation options and costs.
+    @param pandas.DataFrame techno_economic_data_transportation: DataFrame containing information about transportation options and costs.
+    @param dict config_file: containing necessary settings and assumptions
     @return: A tuple containing two elements:
              1. List of Commodity instances with details about each commodity.
-             2. List of commodity names.
+             2. List of str commodity names.
     """
 
     commodity_names = config_file['available_commodity']
@@ -182,7 +182,3 @@ def create_commodity_objects(location_data,
         commodities.append(commodity)
 
     return commodities, commodity_names
-
-
-
-

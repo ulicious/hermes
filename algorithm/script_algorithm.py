@@ -27,9 +27,8 @@ def run_algorithm(args):
     """
     Script for calling the different methods to process branches
 
-    @param args: list with the input data for the process: location_index, location_data, dictionary with common data
-    dictionary with necessary paths, dictionary with configuration
-    @return:
+    @param list args: list with the input data for the process: location_index, location_data,
+     dictionary with common data dictionary with necessary paths, dictionary with configuration
     """
 
     # get parameters from input

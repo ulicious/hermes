@@ -18,9 +18,9 @@ def get_complete_infrastructure(data):
     """
     Method to collect all ports, nodes and destination in one single dataframe
 
-    @param data: dictionary with common data
+    @param dict data: dictionary with common data
 
-    @return: DataFrame with all nodes, ports and destination
+    @return: pandas.DataFrame with all nodes, ports and destination
     """
 
     complete_infrastructure = pd.DataFrame()
@@ -72,16 +72,16 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
     Method to assess potential transportation destinations via road or new pipelines based on current branches
     and all available infrastructure.
 
-    @param complete_infrastructure: DataFrame with all nodes, ports and destination
-    @param branches: DataFrame with current branches
-    @param configuration: dictionary with configuration
-    @param iteration: current iteration
-    @param data: dictionary with common data
-    @param benchmark: current benchmark
-    @param use_minimal_distance: (optional) boolean to set if minimal distances are used to assess locations
-    @param limitation: (str) determines which infrastructure can actually be used
+    @param pandas.DataFrame complete_infrastructure: DataFrame with all nodes, ports and destination
+    @param pandas.DataFrame branches: DataFrame with current branches
+    @param dict configuration: dictionary with configuration
+    @param int iteration: current iteration
+    @param dict data: dictionary with common data
+    @param float benchmark: current benchmark
+    @param bool use_minimal_distance: (optional) boolean to set if minimal distances are used to assess locations
+    @param str limitation: (optional) determines which infrastructure can actually be used
 
-    @return: dataframe with new branches
+    @return: pandas.DataFrame with new branches
     """
 
     tolerance_distance = configuration['tolerance_distance']
@@ -552,14 +552,14 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
     This method iterates over all branches, gets the distance to all connected nodes or ports, and then processes
     all branches together. Processing all branches together results in high memory usage but is faster
 
-    @param data: dictionary with common data
-    @param branches: DataFrame with current branches
-    @param complete_infrastructure: DataFrame with all nodes, ports and destination
-    @param benchmark: current benchmark
-    @param configuration: dictionary with configuration
-    @param with_assessment: boolean to start assessment of resulting dataframe
+    @param dict data: dictionary with common data
+    @param pandas.DataFrame branches: DataFrame with current branches
+    @param pandas.DataFrame complete_infrastructure: DataFrame with all nodes, ports and destination
+    @param float benchmark: current benchmark
+    @param dict configuration: dictionary with configuration
+    @param bool with_assessment: boolean to start assessment of resulting dataframe
 
-    @return: dataframe with new branches
+    @return: pandas.DataFrame with new branches
     """
 
     destination_continent = data['destination']['continent']
@@ -825,14 +825,14 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
     This method iterates over all branches, gets the distance to all connected nodes or ports, and then processes
     each branch alone. Processing all branches alone saves memory but takes more time
 
-    @param data: dictionary with common data
-    @param branches: DataFrame with current branches
-    @param complete_infrastructure: DataFrame with all nodes, ports and destination
-    @param benchmark: current benchmark
-    @param configuration: dictionary with configuration
-    @param with_assessment: boolean to start assessment of resulting dataframe
+    @param dict data: dictionary with common data
+    @param pandas.DataFrame branches: DataFrame with current branches
+    @param pandas.DataFrame complete_infrastructure: DataFrame with all nodes, ports and destination
+    @param float benchmark: current benchmark
+    @param dict configuration: dictionary with configuration
+    @param bool with_assessment: boolean to start assessment of resulting dataframe
 
-    @return: dataframe with new branches
+    @return: pandas.DataFrame with new branches
     """
 
     destination_continent = data['destination']['continent']

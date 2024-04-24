@@ -13,10 +13,10 @@ def prepare_commodities(config_file, location_data, data):
     This method loads the techno economic data and calculates conversion costs and conversion efficiencies for each
     location and the transportation costs for each transport mean
 
-    @param config_file: dictionary with all configuration
-    @param location_data: location specific levelized costs
-    @param data: dictionary with all common data
-    @return: commoditiy objects and list with commodity names
+    @param dict config_file: dictionary with all configuration
+    @param pandas.DataFrame location_data: location specific levelized costs
+    @param dict data: dictionary with all common data
+    @return: commodity objects and list with commodity names
     """
     path_data = config_file['paths']['project_folder'] + config_file['paths']['raw_data']
     yaml_file = open(path_data + 'techno_economic_data_conversion.yaml')
@@ -40,7 +40,7 @@ def create_branches_based_on_commodities_at_start(data):
     """
     Based on commodities, calculate starting branches for each commodity
 
-    @param data: dictionary containing commodities
+    @param dict data: dictionary containing commodities
     @return: dataframe with starting branches and integer representing current branch number
     """
 
@@ -109,7 +109,7 @@ def create_branches_based_on_commodities_at_start(data):
     return branches, branch_number
 
 
-def check_for_inaccessibility_and_at_destination(data, configuration, complete_infrastructure, k,
+def check_for_inaccessibility_and_at_destination(data, configuration, complete_infrastructure, location_integer,
                                                  branches):
     """
     Method to assess if we should go into the branch process
@@ -122,11 +122,11 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
 
     will return True else
 
-    @param data: dictionary with common data
-    @param configuration: dictionary with configuration
-    @param complete_infrastructure: dataframe with all infrastructure (ports, pipelines, destination)
-    @param k: identification of current starting location
-    @param branches: dataframe with branches --> if at destination, we only need to convert the branches
+    @param dict data: dictionary with common data
+    @param dict configuration: dictionary with configuration
+    @param pandas.DataFrame complete_infrastructure: dataframe with all infrastructure (ports, pipelines, destination)
+    @param int location_integer: identification of current starting location
+    @param pandas.DataFrame branches: dataframe with branches --> if at destination, we only need to convert the branches
     @return: boolean if we need to continue to process the branch
     """
 
@@ -156,22 +156,22 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
     distance_to_destination.drop(['Destination'])
 
     if (len(distance_to_start) == 0) & (len(distance_to_destination) == 0):
-        print(str(k) + ': Parameters limit the access to infrastructure')
+        print(str(location_integer) + ': Parameters limit the access to infrastructure')
 
         result = pd.Series(['no benchmark', starting_location.y, starting_location.x],
                            index=['status', 'latitude', 'longitude'])
-        result.to_csv(configuration['path_results'] + str(k) + '_no_benchmark.csv')
+        result.to_csv(configuration['path_results'] + str(location_integer) + '_no_benchmark.csv')
         continue_processing = False
 
     reachable_from_start = complete_infrastructure[complete_infrastructure['reachable_from_start']].index
     reachable_from_destination = complete_infrastructure[complete_infrastructure['reachable_from_destination']].index
 
     if (len(reachable_from_start) == 0) | (len(reachable_from_destination) == 0):
-        print(str(k) + ': No infrastructure on same land mass as start or destination')
+        print(str(location_integer) + ': No infrastructure on same land mass as start or destination')
 
         result = pd.Series(['no benchmark', starting_location.y, starting_location.x],
                            index=['status', 'latitude', 'longitude'])
-        result.to_csv(configuration['path_results'] + 'location_results/' + str(k) + '_no_benchmark.csv')
+        result.to_csv(configuration['path_results'] + 'location_results/' + str(location_integer) + '_no_benchmark.csv')
         continue_processing = False
 
     # if location is already at destination --> return cheapest branch if right commodity
@@ -192,8 +192,8 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
                     chosen_branch = branches.loc[s, :].copy()
 
         chosen_branch.at['status'] = 'complete'
-        chosen_branch.to_csv(configuration['path_results'] + str(k) + '_final_solution.csv')
-        print(str(k) + ' is already in tolerance to destination')
+        chosen_branch.to_csv(configuration['path_results'] + str(location_integer) + '_final_solution.csv')
+        print(str(location_integer) + ' is already in tolerance to destination')
         continue_processing = False
 
     return continue_processing
@@ -203,10 +203,10 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
     """
     Iterates through all commodities and creates new branches based on conversions from current branches
 
-    @param branches: dataframe with current branches
-    @param data: dictionary with common data
-    @param branch_number: current branch number
-    @param benchmark: current benchmark
+    @param pandas.DataFrame branches: dataframe with current branches
+    @param dict data: dictionary with common data
+    @param int branch_number: current branch number
+    @param float benchmark: current benchmark
     @return: dataframe with new branches based on conversion and new branch number
     """
 
@@ -384,8 +384,8 @@ def postprocessing_branches(branches, old_branches):
     Past information is stored as lists (e.g., list with previously visited nodes). Add current information to these
     lists
 
-    @param branches: dataframe with new branches
-    @param old_branches: dataframe with old branches
+    @param pandas.DataFrame branches: dataframe with new branches
+    @param pandas.DataFrame old_branches: dataframe with old branches
     @return: complete dataframe with new branches and all information
     """
 

@@ -12,9 +12,9 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
     For example, if now land connection exists between the starting location and any infrastructure or distances
     are longer than set in configuration --> infrastructure = False
 
-    @param data: dictionary with common data
-    @param configuration: dictionary with configuration
-    @param complete_infrastructure: all infrastructure (ports, pipelines, destination)
+    @param dict data: dictionary with common data
+    @param dict configuration: dictionary with configuration
+    @param pandas.DataFrame complete_infrastructure: all infrastructure (ports, pipelines, destination)
     @return: complete_infrastructure but with information if reachable from start or destination
     """
 
@@ -24,10 +24,7 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
     # 2: transportation to pipeline, transportation in pipeline, and transportation to destination
     # 3: road transportation all the way
     starting_location = data['start']['location']
-    starting_continent = data['start']['continent']
-
     destination_location = data['destination']['location']
-    destination_continent = data['destination']['continent']
 
     max_length_road = configuration['max_length_road']
     max_length_new_segment = configuration['max_length_new_segment']

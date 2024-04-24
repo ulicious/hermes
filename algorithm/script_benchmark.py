@@ -9,9 +9,9 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
     Method runs script which uses different routes to create a valid benchmark solution.
     Possible to print all information on different routes if set in configuration
 
-    @param data: dictionary with common data
-    @param configuration: dictionary with configuration
-    @param complete_infrastructure: all nodes, ports and destination
+    @param dict data: dictionary with common data
+    @param dict configuration: dictionary with configuration
+    @param pandas.DataFrame() complete_infrastructure: all nodes, ports and destination
 
     @return: value of route with minimal costs
     """

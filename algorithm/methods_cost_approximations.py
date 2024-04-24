@@ -10,10 +10,10 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmark, co
     conversion - transportation based on direct distance to final destination - conversion
     to calculate the lowest possible cost to the final destination
 
-    @param data: dictionary with general data
-    @param branches: current branches which includes current commodity and location
-    @param benchmark: current benchmark
-    @param cost_column_name: name of the total cost column in options
+    @param dict data: dictionary with general data
+    @param pandas.DataFrame branches: current branches which includes current commodity and location
+    @param float benchmark: current benchmark
+    @param str cost_column_name: name of the total cost column in options
     @return: options with 'costs to final destination' column representing minimal total costs possible
     """
 
@@ -151,11 +151,11 @@ def calculate_cheapest_option_to_closest_infrastructure(data, branches, configur
     transport to the closest infrastructure is already more expensive than the benchmark, so will be the transport
     to all other infrastructure nodes
 
-    @param data: dictionary with general data
-    @param branches: current branches which include current commodity and location
-    @param configuration: dictionary with assumptions and settings
-    @param benchmark: current benchmark for assessment
-    @param cost_column_name: column of options where information on current costs is saved
+    @param dict data: dictionary with general data
+    @param pandas.DataFrame branches: current branches which include current commodity and location
+    @param dict configuration: dictionary with assumptions and settings
+    @param float benchmark: current benchmark for assessment
+    @param str cost_column_name: column of options where information on current costs is saved
     @return: DataFrame with 'costs to final destination' column for each branch
     """
 

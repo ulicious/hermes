@@ -20,6 +20,15 @@ warnings.filterwarnings('ignore')
 
 def close_gaps(line_combinations, gap_distance=20000):
 
+    """
+    checks all combinations of lines if the distance between the two lines is less than 20,000. If so, a new line is
+    added to close the gap
+
+    @param list line_combinations:
+    @param int gap_distance:
+    @return: list of old lines including gap closing lines
+    """
+
     new_lines = []
     for lines in tqdm(line_combinations):
         l1 = lines[0]
@@ -42,10 +51,10 @@ def find_group_in_data(data):
     """
     Finds connected groups of lines within the given list of geometric line data.
 
-    :param list data: A list containing geometric line data. The first two elements of the list represent
+    @param list data: A list containing geometric line data. The first two elements of the list represent
                       the initial groups of lines (group_one and group_two, respectively). Subsequent elements
                       are ignored.
-    :return: A tuple containing two lists:
+    @return: A tuple containing two lists:
              - group_one: A list representing the first group of connected lines found in the data.
              - group_two: A list representing the residual lines.
     """
