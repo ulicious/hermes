@@ -112,20 +112,22 @@ def calc_distance_list_to_list(latitude_list_1, longitude_list_1, latitude_list_
     return m
 
 
-def get_continent_from_location(location):
+def get_continent_from_location(location, world=None):
 
     """
     This method derives continent from location coordinates. Method is used within the context of DataFrame.apply
 
     @param location: coordinates of location as tuple (longitude, latitude)
+    @param world: shapefile of all countries
     @return: continent
     """
 
     location_longitude = location[0]
     location_latitude = location[1]
 
-    country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
-    world = gpd.read_file(country_shapefile)
+    if world is None:
+        country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
+        world = gpd.read_file(country_shapefile)
 
     gdf = gpd.GeoDataFrame(geometry=gpd.points_from_xy([location_longitude], [location_latitude])).set_crs('EPSG:4326')
     result = gpd.sjoin(gdf, world, how='left')

@@ -22,7 +22,7 @@ path_config = os.path.dirname(os.getcwd()) + '/plotting_configuration.yaml'
 yaml_file = open(path_config)
 config_file_plotting = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-path_production_costs = config_file['paths']['project_folder'] + 'start_destination_combinations_500.xlsx'
+path_production_costs = config_file['paths']['project_folder'] + config_file['filenames']['location_data']
 production_costs = pd.read_excel(path_production_costs, index_col=0)
 
 path_processed_data = config_file['paths']['project_folder'] + config_file['paths']['processed_data']

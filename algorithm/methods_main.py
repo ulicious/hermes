@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import geopandas as gpd
 import networkx as nx
+import cartopy.io.shapereader as shpreader
 
 from shapely.wkt import loads
 from shapely.geometry import Point, MultiLineString
@@ -101,6 +102,9 @@ def prepare_data_and_configuration_dictionary(config_file):
 
     transport_means = config_file['available_transport_means']
 
+    country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
+    world = gpd.read_file(country_shapefile)
+
     # attach conversion costs and efficiencies to destination
     destination = pd.DataFrame(config_file['destination_location'], index=['longitude', 'latitude'], columns=['Destination']).transpose()
     destination = attach_conversion_costs_and_efficiency_to_locations(destination, config_file, techno_economic_data_conversion)
@@ -116,7 +120,8 @@ def prepare_data_and_configuration_dictionary(config_file):
             'destination': {'location': destination_location,
                             'continent': destination_continent},
             'coastlines': coastlines,
-            'conversion_costs_and_efficiencies': conversion_costs_and_efficiencies}
+            'conversion_costs_and_efficiencies': conversion_costs_and_efficiencies,
+            'world': world}
 
     data = process_network_data(data, 'Pipeline_Gas', pipeline_gas_geodata, pipeline_gas_graphs)
 

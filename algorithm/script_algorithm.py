@@ -124,7 +124,7 @@ def run_algorithm(args):
 
             all_locations = data['conversion_costs_and_efficiencies']
 
-            no_conversion_possible_locations = all_locations[all_locations['conversion_possible']].index.tolist()
+            no_conversion_possible_locations = all_locations[~all_locations['conversion_possible']].index.tolist()
             no_conversion_possible_branches = branches[branches['current_node'].isin(no_conversion_possible_locations)]
 
             conversion_possible_locations = [i for i in all_locations.index if i not in no_conversion_possible_locations]
@@ -574,7 +574,7 @@ def run_algorithm(args):
 
             branches['longitude_latitude'] = [(branches.at[i, 'longitude'], branches.at[i, 'latitude'])
                                                for i in branches.index]
-            branches['current_continent'] = branches['longitude_latitude'].apply(get_continent_from_location)
+            branches['current_continent'] = branches['longitude_latitude'].apply(get_continent_from_location, world=data['world'])
             # todo previous transportation and conversion costs + sanity check: does everything work as intended
 
             branches.drop(['minimal_total_costs', 'longitude_latitude'], axis=1, inplace=True)
