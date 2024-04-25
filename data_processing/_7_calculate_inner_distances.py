@@ -20,11 +20,10 @@ def calculate_searoute_distances(ports, num_cores, path_processed_data):
     """
     Calculates sea route distances between pairs of ports and saves the distances in a CSV file.
 
-    :param ports: A pandas DataFrame containing information about ports.
-    :param int num_cores: Number of CPU cores to use for parallel processing.
-    :param str path_processed_data: Path to the directory where the processed data will be saved.
+    @param panda.DataFrame ports: A pandas DataFrame containing information about ports.
+    @param int num_cores: Number of CPU cores to use for parallel processing.
+    @param str path_processed_data: Path to the directory where the processed data will be saved.
 
-    :return: None
     """
 
     def calculate_searoute(combination):
@@ -32,9 +31,9 @@ def calculate_searoute_distances(ports, num_cores, path_processed_data):
         """
         Calculates the sea route distance between two ports.
 
-        :param tuple combination: A tuple containing the combination of two ports.
+        @param tuple combination: A tuple containing the combination of two ports.
 
-        :return: A tuple containing the combination and the calculated distance.
+        @return: A tuple containing the combination and the calculated distance.
         """
 
         start_local = combination[0]
@@ -82,10 +81,10 @@ def get_distances_within_networks(network_graph_data, path_processed_data, use_l
     """
     Calculates distances between nodes within each network graph using Dijkstra and saves the distances as HDF5 files.
 
-    :param network_graph_data: A pandas DataFrame containing information about network graph edges.
-    :param str path_processed_data: Path to the directory where the processed data will be saved.
+    @param pandas.DataFrame network_graph_data: A pandas DataFrame containing information about network graph edges.
+    @param str path_processed_data: Path to the directory where the processed data will be saved.
+    @param bool use_low_memory: indicating of large matrixes can be used or not to calculate distances
 
-    :return: None
     """
 
     # save processed data in folder (each network own folder)
@@ -157,10 +156,11 @@ def get_distances_of_closest_infrastructure(options, path_processed_data):
     """
     Finds the distances to the closest infrastructure nodes for each option.
 
-    :param pandas.DataFrame options: A DataFrame containing the options data, including latitude, longitude, and graph information.
-    :param str path_processed_data: The path to save the processed data.
-    :returns: A DataFrame containing the minimal distances and the corresponding closest nodes for each option.
-    :rtype: pandas.DataFrame
+    @param pandas.DataFrame options: A DataFrame containing the options data, including latitude, longitude, and graph information.
+    @param str path_processed_data: The path to save the processed data.
+
+    @return: A DataFrame containing the minimal distances and the corresponding closest nodes for each option.
+    @rtype: pandas.DataFrame
     """
 
     minimal_values = {}

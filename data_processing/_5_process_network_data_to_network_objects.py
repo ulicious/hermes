@@ -20,10 +20,10 @@ def process_network_data_to_network_objects_no_additional_connection_points(name
     """
     This method connects LineStrings of networks to one common network. It does not add additional connection points.
 
-    :param str name_network: Name of the network ('gas_pipeline', 'oil_pipeline', or 'railroad').
-    :param str path_network_data: Path to the directory containing the network data files.
+    @param str name_network: Name of the network ('gas_pipeline', 'oil_pipeline', or 'railroad').
+    @param str path_network_data: Path to the directory containing the network data files.
 
-    :return: A tuple containing three pandas DataFrames:
+    @return: A tuple containing three pandas DataFrames:
              - line_data_local: DataFrame containing information about the processed lines.
              - graphs_local: DataFrame containing information about the graphs (edges and nodes).
              - geodata_local: DataFrame containing geospatial information about the nodes.
@@ -34,9 +34,9 @@ def process_network_data_to_network_objects_no_additional_connection_points(name
         """
         Processes a single line and updates node and edge information.
 
-        :param int node_number_local: Current node number.
+        @param int node_number_local: Current node number.
 
-        :return: Updated node number.
+        @return: Updated node number.
         """
 
         coords = line.coords
@@ -154,11 +154,11 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     """
     This method connects LineStrings of networks to one common network. It does not add additional connection points.
 
-    :param str name_network: Name of the network ('gas_pipeline', 'oil_pipeline', or 'railroad').
-    :param str path_network_data: Path to the directory containing the network data files.
-    :param int minimal_distance_between_node: Minimal distance between node
+    @param str name_network: Name of the network ('gas_pipeline', 'oil_pipeline', or 'railroad').
+    @param str path_network_data: Path to the directory containing the network data files.
+    @param int minimal_distance_between_node: Minimal distance between node
 
-    :return: A tuple containing three pandas DataFrames:
+    @return: A tuple containing three pandas DataFrames:
              - line_data: DataFrame containing information about the processed lines.
              - graphs: DataFrame containing information about the graphs (edges and nodes).
              - geodata: DataFrame containing geospatial information about the nodes.
@@ -175,11 +175,11 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
             If the coordinate is also a point, node is added
             If the coordinate is not a point, we check if the point lies on the line between two coordinates --> add new node from point coordinate
 
-        :param int node_number_local: Current node number.
-        :param int edge_number_local: Current edge number.
-        :param bool single_line: indicates if line is part of network
+        @param int node_number_local: Current node number.
+        @param int edge_number_local: Current edge number.
+        @param bool single_line: indicates if line is part of network
 
-        :return: Updated node number.
+        @return: Updated node number.
         """
 
         coords = line.coords

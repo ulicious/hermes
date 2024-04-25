@@ -9,9 +9,9 @@ def get_landmass_polygons_and_coastlines(use_minimal_example=False):
     """
     Create large polygons based on connected country polygons
 
-    @param use_minimal_example: boolean if only Europe should be considered
+    @param bool use_minimal_example: boolean if only Europe should be considered
 
-    @return: multipolygons for landmass and linestrings of coastlines
+    @return: geopandas.GeoDataFrame multipolygons for landmass and linestrings of coastlines
     """
 
     # Load the shapefile data for country boundaries with 10m resolution

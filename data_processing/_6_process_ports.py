@@ -3,13 +3,23 @@ import geojson
 import pandas as pd
 
 from shapely.ops import nearest_points
-from shapely.geometry import LineString, MultiLineString, Point
+from shapely.geometry import Point
 
 import warnings
 warnings.filterwarnings('ignore')
 
 
 def process_ports(path_data, coastlines, use_minimal_example=False):
+
+    """
+    processes raw ports data to dataframe and connects port to the closest coastline
+
+    @param str path_data: path to ports data
+    @param geopandas.GeoDataFrame coastlines: coastlines to allow connection of ports to coastline
+    @param bool use_minimal_example: removes all ports outside of Europe in case of minimal example
+    @return: dataframe containing all information on ports
+    """
+
     with open(path_data + 'seaports.geojson') as f:
         gj = geojson.load(f)
     features = gj['features']

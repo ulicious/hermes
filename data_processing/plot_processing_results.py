@@ -14,11 +14,6 @@ def plot_original_pipeline_data():
 
         """
         method to plot shapely.geometry.LineString
-
-        @param lines: list of LineStrings
-        @param same_colors: boolean if same colors are applied to all lines
-        @param wait_plot: boolean if figure should be plotted immediately
-        @param ax: matplotlib axis if axis defined outside of method should be used
         """
 
         def generate_random_colors(n):
@@ -91,6 +86,17 @@ def plot_original_pipeline_data():
 
 
 def get_infrastructure_figure(sub_axes, boundaries, link_to_data, fig_title=''):
+
+    """
+    plots
+
+    @param sub_axes:
+    @param boundaries:
+    @param link_to_data:
+    @param fig_title:
+    @return:
+    """
+
     plt.rcParams.update({'font.size': 11,
                          'font.family': 'Times New Roman'})
 

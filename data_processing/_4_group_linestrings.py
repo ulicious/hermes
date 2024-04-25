@@ -57,6 +57,8 @@ def find_group_in_data(data):
     @return: A tuple containing two lists:
              - group_one: A list representing the first group of connected lines found in the data.
              - group_two: A list representing the residual lines.
+
+    @rtype (list, list)
     """
 
     # input list with lines
@@ -87,19 +89,6 @@ def find_group_in_data(data):
                     # The different elements do not exist in both groups but at least two intersect
                     broken = True
                     break
-
-                # if False:  # todo: remove as such lines are added in close gaps method
-                #     # if the two lines do not intersect, we can use a distance which is used to connect
-                #     # slightly disconnected lines
-                #
-                #     closest_points = ops.nearest_points(l1, l2)
-                #     distance = calc_distance_single_to_single(closest_points[0].y, closest_points[0].x,
-                #                                               closest_points[1].y, closest_points[1].x)
-                #     if distance <= 50000:
-                #         new_line_points = ops.nearest_points(l1, l2)
-                #         l3 = geometry.LineString(new_line_points)
-                #         broken = True
-                #         break
 
             if broken:
                 break
@@ -188,7 +177,6 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, use_mi
     @param str name: Name of the file containing the energy monitor data (without file extension).
     @param int num_cores: Number of CPU cores to use for parallel processing (default is 4).
     @param bool use_minimal_example: Indicates if only subset of data should be used
-    @return: None
     """
 
     # read global energy monitor data
@@ -211,6 +199,16 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, use_mi
     data_new_exploded = data_new.explode(ignore_index=True)
 
     def divide_data(lines_local, chunk_size=100):
+
+        """
+        shuffles all lines and puts them into equal size lists
+
+        @param list lines_local: list with all lines
+        @param int chunk_size: number of lists which will be returned
+        
+        @return: nested list with all lists containing the lines
+        @rtype: list
+        """
 
         # Adjust chunk size s.t. multiprocessing is optimally used
         if len(lines_local) / chunk_size < 120:

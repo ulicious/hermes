@@ -15,7 +15,27 @@ warnings.filterwarnings("ignore")
 
 
 def randlatlon1(min_latitude, max_latitude, min_longitude, max_longitude):
+
+    """
+    Creates latitude and longitude and checks if within boundaries
+
+    @param float min_latitude: minimal value for latitude
+    @param float max_latitude: maximal value for latitude
+    @param float min_longitude: minimal value for longitude
+    @param float max_longitude: maximal value for longitude
+    @return: tuple with longitude, latitude
+    """
+
     def is_within_boundaries(lat, lon):
+
+        """
+        check if latitude and longitude is within boundaries
+
+        @param float lat: latitude value
+        @param float lon: longitude value
+        @return: boolean value if in boundaries
+        """
+
         return min_latitude <= lat <= max_latitude and min_longitude <= lon <= max_longitude
 
     while True:
@@ -44,26 +64,49 @@ def randlatlon1(min_latitude, max_latitude, min_longitude, max_longitude):
             return Lon, Lat
 
 
-def round_to_quarter(number):
+def round_to_quarter(coordinate):
+
+    """
+    levelized costs are ordered in a grid. Find the closest grid to a given coorindate
+
+    @param float coordinate: given latitude or longitude
+    @return: the closest grid coordinate
+    """
+
     # Find the fractional part
-    fraction = number % 1
+    fraction = coordinate % 1
 
     # Round the fractional part to the nearest .25, .5, .75, or 0
     if fraction <= 0.125:
-        return int(number) + 0.00
+        return int(coordinate) + 0.00
     elif fraction <= 0.375:
-        return int(number) + 0.25
+        return int(coordinate) + 0.25
     elif fraction <= 0.625:
-        return int(number) + 0.50
+        return int(coordinate) + 0.50
     elif fraction <= 0.875:
-        return int(number) + 0.75
+        return int(coordinate) + 0.75
     else:
-        return int(number) + 1.00
+        return int(coordinate) + 1.00
 
 
 def apply_conversion():
 
+    """
+    Calculates production costs at locations
+    """
+
     def conversion_script(start_commodity, target_commodity):
+
+        """
+        Calculates conversion costs and conversion efficiency for given start and end commodity at location.
+        Important: Only one location at each time so all data is location specific
+
+        @param str start_commodity: name of commodity before conversion
+        @param str target_commodity: name of commodity after conversion
+        @return: returns conversion costs and conversion efficiency
+        @rtype: (float, float)
+        """
+
         electricity_demand = techno_economic_data_conversion[start_commodity][target_commodity]['electricity_demand']
         co2_demand = techno_economic_data_conversion[start_commodity][target_commodity]['co2_demand']
         nitrogen_demand = techno_economic_data_conversion[start_commodity][target_commodity]['nitrogen_demand']
