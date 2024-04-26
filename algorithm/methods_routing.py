@@ -51,7 +51,7 @@ def get_complete_infrastructure(data):
         else:
             networks = data[m].keys()
             for n in networks:
-                network_infrastructure = data[m][n]['GeoData'].copy()
+                network_infrastructure = data[m][n]['NodeLocations'].copy()
                 network_infrastructure['current_transport_mean'] = m
                 infrastructure_to_concat.append(network_infrastructure)
 
@@ -288,12 +288,12 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
                 if 'PG' in visited_infrastructure:
                     branches_to_remove_based_on_visited_infrastructure[visited_infrastructure] \
-                        = {'nodes': data['Pipeline_Gas'][visited_infrastructure]['GeoData'].index.tolist(),
+                        = {'nodes': data['Pipeline_Gas'][visited_infrastructure]['NodeLocations'].index.tolist(),
                            'branches': affected_branches}
 
                 elif 'PL' in visited_infrastructure:
                     branches_to_remove_based_on_visited_infrastructure[visited_infrastructure] \
-                        = {'nodes': data['Pipeline_Liquid'][visited_infrastructure]['GeoData'].index.tolist(),
+                        = {'nodes': data['Pipeline_Liquid'][visited_infrastructure]['NodeLocations'].index.tolist(),
                            'branches': affected_branches}
 
         # iterate over all commodities. Necessary to look at each commodity to check if applicable for road or
@@ -694,7 +694,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                 if graph_id in processed_infrastructure.keys():
                     pipeline_infrastructure = processed_infrastructure[graph_id]
                 else:
-                    pipeline_infrastructure = data[mot][graph_id]['GeoData'].copy()
+                    pipeline_infrastructure = data[mot][graph_id]['NodeLocations'].copy()
 
                 start_infrastructure = options_m.at[s, 'current_node']
 

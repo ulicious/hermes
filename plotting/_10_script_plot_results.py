@@ -10,7 +10,7 @@ import matplotlib as mpl
 import matplotlib.lines as mlines
 
 from _0_helpers_plotting import load_data, get_complete_infrastructure
-from _2_get_figures import get_routes_figure, get_cost_figure, get_production_costs_figure, get_infrastructure_figure, \
+from _11_get_figures import get_routes_figure, get_cost_figure, get_production_costs_figure, get_infrastructure_figure, \
     get_energy_carrier_figure
 
 # load configuration file
@@ -22,20 +22,20 @@ path_config = os.path.dirname(os.getcwd()) + '/plotting_configuration.yaml'
 yaml_file = open(path_config)
 config_file_plotting = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-path_production_costs = config_file['paths']['project_folder'] + config_file['filenames']['location_data']
+path_production_costs = config_file['project_folder_path'] + 'start_destination_combinations.xlsx'
 production_costs = pd.read_excel(path_production_costs, index_col=0)
 
-path_processed_data = config_file['paths']['project_folder'] + config_file['paths']['processed_data']
+path_processed_data = config_file['project_folder_path'] + 'processed_data/'
 
 infrastructure_data, destination = load_data(path_processed_data, config_file)
 complete_infrastructure = get_complete_infrastructure(infrastructure_data, destination)
 
-path_saving = config_file['paths']['project_folder'] + config_file['paths']['results'] + 'plots/'
+path_saving = config_file['project_folder_path'] + 'results/plots/'
 
 min_costs = {'total_costs': np.inf, 'transportation_costs': np.inf, 'conversion_costs': np.inf}
 max_costs = {'total_costs': 0, 'transportation_costs': 0, 'conversion_costs': 0}
 
-path = config_file['paths']['project_folder'] + config_file['paths']['results'] + 'location_results/'
+path = config_file['project_folder_path'] + 'results/location_results/'
 
 data = {}
 

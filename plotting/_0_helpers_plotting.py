@@ -9,13 +9,13 @@ from shapely.geometry import MultiLineString, Point
 
 
 def load_data(path_data, config_file):
-    pipeline_gas_geodata = pd.read_csv(path_data + config_file['filenames']['gas_pipeline_geodata'], index_col=0,
+    pipeline_gas_geodata = pd.read_csv(path_data + 'gas_pipeline_node_locations.csv', index_col=0,
                                        dtype={'latitude': np.float16, 'longitude': np.float16})
-    pipeline_gas_graphs = pd.read_csv(path_data + config_file['filenames']['gas_pipeline_graph'], index_col=0)
-    pipeline_liquid_geodata = pd.read_csv(path_data + config_file['filenames']['oil_pipeline_geodata'], index_col=0,
+    pipeline_gas_graphs = pd.read_csv(path_data + 'gas_pipeline_graphs.csv', index_col=0)
+    pipeline_liquid_geodata = pd.read_csv(path_data + 'oil_pipeline_node_locations.csv', index_col=0,
                                           dtype={'latitude': np.float16, 'longitude': np.float16})
-    pipeline_liquid_graphs = pd.read_csv(path_data + config_file['filenames']['oil_pipeline_graph'], index_col=0)
-    ports = pd.read_csv(path_data + config_file['filenames']['ports'], index_col=0)
+    pipeline_liquid_graphs = pd.read_csv(path_data + 'oil_pipeline_graphs.csv', index_col=0)
+    ports = pd.read_csv(path_data + 'ports.csv', index_col=0)
 
     data = {'Shipping': {'ports': ports}}
 

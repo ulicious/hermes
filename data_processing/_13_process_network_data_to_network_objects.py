@@ -11,8 +11,75 @@ from vincenty import vincenty
 from geopy.distance import geodesic as calc_distance
 from tqdm import tqdm
 
-from _0_helpers_raw_data_processing import extend_line_in_one_direction,\
-    extend_line_in_both_directions
+
+def extend_line_in_one_direction(direction_coordinate, support_coordinate, extension_percentage):
+    """
+    extends a linestring in one direction without changing the direction
+
+    @param direction_coordinate: coordinate where extensions takes place
+    @param support_coordinate: support direction to create linestring
+    @param extension_percentage: percentage by how much line should be extended
+    @return: LineString of extended line
+    """
+
+    # Create a LineString from the two coordinates
+    line = LineString([direction_coordinate, support_coordinate])
+
+    # Calculate the direction vector of the LineString
+    direction_vector = np.array([direction_coordinate.x, direction_coordinate.y]) \
+                       - np.array([support_coordinate.x, support_coordinate.y])
+
+    # Normalize the direction vector
+    norm = np.linalg.norm(direction_vector)
+    if norm != 0:
+        direction_vector /= norm
+
+    # Calculate the extension length based on the keyword (percentage)
+    line_length = line.length
+    extension_length = line_length * extension_percentage / 100
+
+    # Calculate the new end point
+    new_end_point = Point([direction_coordinate.x + direction_vector[0] * extension_length,
+                           direction_coordinate.y + direction_vector[1] * extension_length])
+
+    return new_end_point
+
+
+def extend_line_in_both_directions(coord1, coord2, extension_percentage):
+    """
+    extends a linestring in both direction without changing the direction
+
+    @param coord1: start coordinate
+    @param coord2: end coordinate
+    @param extension_percentage: percentage by how much line should be extended
+    @return: LineString of extended line
+    """
+
+    # Create a LineString from the two coordinates
+    line = LineString([coord1, coord2])
+
+    # Calculate the direction vector of the LineString
+    direction_vector = np.array([coord1.x, coord1.y]) - np.array([coord2.x, coord2.y])
+
+    # Normalize the direction vector
+    norm = np.linalg.norm(direction_vector)
+    if norm != 0:
+        direction_vector /= norm
+
+    # Calculate the extension length based on the keyword (percentage)
+    line_length = line.length
+    extension_length = line_length * extension_percentage
+
+    # Calculate the new end points in both directions
+    new_end_point1 = Point([coord1.x + direction_vector[0] * extension_length,
+                            coord1.y + direction_vector[1] * extension_length])
+    new_end_point2 = Point([coord2.x - direction_vector[0] * extension_length,
+                            coord2.y - direction_vector[1] * extension_length])
+
+    # Create the extended LineString
+    extended_linestring = LineString([new_end_point1, new_end_point2])
+
+    return extended_linestring
 
 
 def process_network_data_to_network_objects_no_additional_connection_points(name_network, path_network_data):
@@ -152,7 +219,7 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                                                                               minimal_distance_between_node=50000):
 
     """
-    This method connects LineStrings of networks to one common network. It does not add additional connection points.
+    This method connects LineStrings of networks to one common network.
 
     @param str name_network: Name of the network ('gas_pipeline', 'oil_pipeline', or 'railroad').
     @param str path_network_data: Path to the directory containing the network data files.
@@ -467,103 +534,104 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
         # Split Multilinestring / Linestring into separate LineStrings if intersections exist
         network = unary_union(lines)
 
-        # It seems like that not all lines are 100% connected even though they are very close
-        # To achieve this, we increase each line length by only 1 meter
-        if isinstance(network, MultiLineString):
-
-            # iterate over all lines and connect them overall network if gap exists
-            all_lines = []
-            for line in network.geoms:
-
-                network_without_segment = MultiLineString([l for l in network.geoms if l != line])
-                line_segments = list(map(LineString, zip(line.coords[:-1], line.coords[1:])))
-                new_line_segments = []
-
-                first_segment = line_segments[0]
-                first_segment_start = Point([first_segment.coords[0][0], first_segment.coords[0][1]])
-                first_segment_end = Point([first_segment.coords[1][0], first_segment.coords[1][1]])
-
-                last_segment = line_segments[-1]
-                last_segment_start = Point([last_segment.coords[0][0], last_segment.coords[0][1]])
-                last_segment_end = Point([last_segment.coords[1][0], last_segment.coords[1][1]])
-
-                if len(line_segments) > 1:
-
-                    if first_segment_start.distance(network_without_segment) < first_segment_end.distance(network_without_segment):
-                        first_coord = extend_line_in_one_direction(first_segment_start, first_segment_end, 1)
-                    else:
-                        first_coord = extend_line_in_one_direction(first_segment_end, first_segment_start, 1)
-
-                    if last_segment_start.distance(network_without_segment) < last_segment_end.distance(network_without_segment):
-                        last_coord = extend_line_in_one_direction(last_segment_start, last_segment_end, 1)
-                    else:
-                        last_coord = extend_line_in_one_direction(last_segment_end, last_segment_start, 1)
-
-                else:
-                    first_coord = extend_line_in_one_direction(first_segment_start, first_segment_end, 1)
-                    last_coord = extend_line_in_one_direction(last_segment_end, last_segment_start, 1)
-
-                first_new_line = None
-                first_new_line_length = None
-                first_line_start = None
-                first_line_end = None
-                if not first_segment.intersects(network_without_segment):
-                    new_line_coords = nearest_points(first_segment, network_without_segment)
-                    first_new_line_length = calc_distance((new_line_coords[0].y, new_line_coords[0].x),
-                                                          (new_line_coords[1].y, new_line_coords[1].x)).meters
-
-                    first_line_start = Point([new_line_coords[0].x, new_line_coords[0].y])
-                    first_line_end = Point([new_line_coords[1].x, new_line_coords[1].y])
-
-                    if not first_new_line_length > 100:
-                        first_new_line = extend_line_in_both_directions(new_line_coords[0], new_line_coords[1], 20)
-
-                second_new_line = None
-                second_new_line_length = None
-                second_line_start = None
-                second_line_end = None
-                if not last_segment.intersects(network_without_segment):
-                    new_line_coords = nearest_points(last_segment, network_without_segment)
-                    second_new_line_length = calc_distance((new_line_coords[0].y, new_line_coords[0].x),
-                                                           (new_line_coords[1].y, new_line_coords[1].x)).meters
-
-                    second_line_start = Point([new_line_coords[0].x, new_line_coords[0].y])
-                    second_line_end = Point([new_line_coords[1].x, new_line_coords[1].y])
-
-                    if not second_new_line_length > 100:
-                        second_new_line = extend_line_in_both_directions(new_line_coords[0], new_line_coords[1], 20)
-
-                # recreate old line with new start / end coordinates
-                new_line_segments.append(first_coord)
-                for segment in line_segments:
-                    if segment == line_segments[0]:
-                        new_line_segments.append(Point(segment.coords.xy[0][0],
-                                                       segment.coords.xy[1][0]))
-
-                    new_line_segments.append(Point(segment.coords.xy[0][1],
-                                                   segment.coords.xy[1][1]))
-                new_line_segments.append(last_coord)
-
-                all_lines.append(LineString(new_line_segments))
-
-                # add connecting lines
-                if (first_new_line is not None) & (second_new_line is not None):
-                    # check if both are connected to the same point in network
-                    if (first_line_start == second_line_start) | (first_line_start == second_line_end) \
-                            | (first_line_end == second_line_start) | (first_line_end == second_line_end):
-                        # are connected at the same point of network
-                        if first_new_line_length < second_new_line_length:
-                            all_lines.append(first_new_line)
-                        else:
-                            all_lines.append(second_new_line)
-                    else:
-                        all_lines.append(first_new_line)
-                        all_lines.append(second_new_line)
-                else:
-                    all_lines.append(first_new_line)
-                    all_lines.append(second_new_line)
-
-            network = unary_union(all_lines)
+        # todo: remove as gaps are closed in _4_group_linestrings
+        # # It seems like that not all lines are 100% connected even though they are very close
+        # # To achieve this, we increase each line length by only 1 meter
+        # if isinstance(network, MultiLineString):
+        #
+        #     # iterate over all lines and connect them overall network if gap exists
+        #     all_lines = []
+        #     for line in network.geoms:
+        #
+        #         network_without_segment = MultiLineString([l for l in network.geoms if l != line])
+        #         line_segments = list(map(LineString, zip(line.coords[:-1], line.coords[1:])))
+        #         new_line_segments = []
+        #
+        #         first_segment = line_segments[0]
+        #         first_segment_start = Point([first_segment.coords[0][0], first_segment.coords[0][1]])
+        #         first_segment_end = Point([first_segment.coords[1][0], first_segment.coords[1][1]])
+        #
+        #         last_segment = line_segments[-1]
+        #         last_segment_start = Point([last_segment.coords[0][0], last_segment.coords[0][1]])
+        #         last_segment_end = Point([last_segment.coords[1][0], last_segment.coords[1][1]])
+        #
+        #         if len(line_segments) > 1:
+        #
+        #             if first_segment_start.distance(network_without_segment) < first_segment_end.distance(network_without_segment):
+        #                 first_coord = extend_line_in_one_direction(first_segment_start, first_segment_end, 1)
+        #             else:
+        #                 first_coord = extend_line_in_one_direction(first_segment_end, first_segment_start, 1)
+        #
+        #             if last_segment_start.distance(network_without_segment) < last_segment_end.distance(network_without_segment):
+        #                 last_coord = extend_line_in_one_direction(last_segment_start, last_segment_end, 1)
+        #             else:
+        #                 last_coord = extend_line_in_one_direction(last_segment_end, last_segment_start, 1)
+        #
+        #         else:
+        #             first_coord = extend_line_in_one_direction(first_segment_start, first_segment_end, 1)
+        #             last_coord = extend_line_in_one_direction(last_segment_end, last_segment_start, 1)
+        #
+        #         first_new_line = None
+        #         first_new_line_length = None
+        #         first_line_start = None
+        #         first_line_end = None
+        #         if not first_segment.intersects(network_without_segment):
+        #             new_line_coords = nearest_points(first_segment, network_without_segment)
+        #             first_new_line_length = calc_distance((new_line_coords[0].y, new_line_coords[0].x),
+        #                                                   (new_line_coords[1].y, new_line_coords[1].x)).meters
+        #
+        #             first_line_start = Point([new_line_coords[0].x, new_line_coords[0].y])
+        #             first_line_end = Point([new_line_coords[1].x, new_line_coords[1].y])
+        #
+        #             if not first_new_line_length > 100:
+        #                 first_new_line = extend_line_in_both_directions(new_line_coords[0], new_line_coords[1], 20)
+        #
+        #         second_new_line = None
+        #         second_new_line_length = None
+        #         second_line_start = None
+        #         second_line_end = None
+        #         if not last_segment.intersects(network_without_segment):
+        #             new_line_coords = nearest_points(last_segment, network_without_segment)
+        #             second_new_line_length = calc_distance((new_line_coords[0].y, new_line_coords[0].x),
+        #                                                    (new_line_coords[1].y, new_line_coords[1].x)).meters
+        #
+        #             second_line_start = Point([new_line_coords[0].x, new_line_coords[0].y])
+        #             second_line_end = Point([new_line_coords[1].x, new_line_coords[1].y])
+        #
+        #             if not second_new_line_length > 100:
+        #                 second_new_line = extend_line_in_both_directions(new_line_coords[0], new_line_coords[1], 20)
+        #
+        #         # recreate old line with new start / end coordinates
+        #         new_line_segments.append(first_coord)
+        #         for segment in line_segments:
+        #             if segment == line_segments[0]:
+        #                 new_line_segments.append(Point(segment.coords.xy[0][0],
+        #                                                segment.coords.xy[1][0]))
+        #
+        #             new_line_segments.append(Point(segment.coords.xy[0][1],
+        #                                            segment.coords.xy[1][1]))
+        #         new_line_segments.append(last_coord)
+        #
+        #         all_lines.append(LineString(new_line_segments))
+        #
+        #         # add connecting lines
+        #         if (first_new_line is not None) & (second_new_line is not None):
+        #             # check if both are connected to the same point in network
+        #             if (first_line_start == second_line_start) | (first_line_start == second_line_end) \
+        #                     | (first_line_end == second_line_start) | (first_line_end == second_line_end):
+        #                 # are connected at the same point of network
+        #                 if first_new_line_length < second_new_line_length:
+        #                     all_lines.append(first_new_line)
+        #                 else:
+        #                     all_lines.append(second_new_line)
+        #             else:
+        #                 all_lines.append(first_new_line)
+        #                 all_lines.append(second_new_line)
+        #         else:
+        #             all_lines.append(first_new_line)
+        #             all_lines.append(second_new_line)
+        #
+        #     network = unary_union(all_lines)
 
         if isinstance(network, MultiLineString):
 

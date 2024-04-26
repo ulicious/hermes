@@ -10,17 +10,17 @@ import cartopy.io.shapereader as shpreader
 
 from shapely.wkt import loads
 from shapely.geometry import Point, MultiLineString
-from data_processing._8_attach_conversion_costs_and_efficiency_to_locations import attach_conversion_costs_and_efficiency_to_locations
+from data_processing._17_attach_conversion_costs_and_efficiency_to_locations import attach_conversion_costs_and_efficiency_to_locations
 
 
-def process_network_data(data, name, geo_data, graph_data):
+def process_network_data(data, name, node_locations, graph_data):
 
     """
     Method creates dictionary with network data
 
     @param dict data: Existing dictionary
     @param str name: name of network
-    @param pandas.DataFrame geo_data: geo data of network (locations of nodes)
+    @param pandas.DataFrame node_locations: geo data of network (locations of nodes)
     @param pandas.DataFrame graph_data: information on lines of network
 
     @return: dict dictionary with network data
@@ -32,7 +32,7 @@ def process_network_data(data, name, geo_data, graph_data):
     graph_data['line'] = graph_data['line'].apply(shapely.wkt.loads)
 
     print('Load ' + name + ' data')
-    for g in geo_data['graph'].unique():
+    for g in node_locations['graph'].unique():
         graph = nx.Graph()
         edges_graph = graph_data[graph_data['graph'] == g].index
         lines = []
@@ -45,13 +45,13 @@ def process_network_data(data, name, geo_data, graph_data):
             graph.add_edge(node_start, node_end, weight=distance)
             lines.append(graph_data.loc[edge, 'line'])
 
-        nodes_graph_original = geo_data[geo_data['graph'] == g].index
+        nodes_graph_original = node_locations[node_locations['graph'] == g].index
         graph_object = MultiLineString(lines)
 
         data[name][g] = {'Graph': graph,
                          'GraphData': graph_data,
                          'GraphObject': graph_object,
-                         'GeoData': geo_data.loc[nodes_graph_original]}
+                         'NodeLocations': node_locations.loc[nodes_graph_original]}
 
     return data
 
@@ -71,24 +71,23 @@ def prepare_data_and_configuration_dictionary(config_file):
     """
 
     # paths
-    path_project_folder = config_file['paths']['project_folder']
-    path_raw_data = path_project_folder + config_file['paths']['raw_data']
-    path_processed_data = path_project_folder + config_file['paths']['processed_data']
+    path_project_folder = config_file['project_folder_path']
+    path_raw_data = path_project_folder + 'raw_data/'
+    path_processed_data = path_project_folder + 'processed_data/'
 
     # load input data
-    location_data = pd.read_excel(path_project_folder + config_file['filenames']['location_data'], index_col=0)
+    location_data = pd.read_excel(path_project_folder + 'start_destination_combinations.xlsx', index_col=0)
 
-    pipeline_gas_geodata = pd.read_csv(path_processed_data + config_file['filenames']['gas_pipeline_geodata'], index_col=0,
+    pipeline_gas_node_locations = pd.read_csv(path_processed_data + 'gas_pipeline_node_locations.csv', index_col=0,
                                        dtype={'latitude': np.float16, 'longitude': np.float16})
-    pipeline_gas_graphs = pd.read_csv(path_processed_data + config_file['filenames']['gas_pipeline_graph'], index_col=0)
-    pipeline_liquid_geodata = pd.read_csv(path_processed_data + config_file['filenames']['oil_pipeline_geodata'], index_col=0,
+    pipeline_gas_graphs = pd.read_csv(path_processed_data + 'gas_pipeline_graphs.csv', index_col=0)
+    pipeline_liquid_node_locations = pd.read_csv(path_processed_data + 'oil_pipeline_node_locations.csv', index_col=0,
                                           dtype={'latitude': np.float16, 'longitude': np.float16})
-    pipeline_liquid_graphs = pd.read_csv(path_processed_data + config_file['filenames']['oil_pipeline_graph'],
-                                         index_col=0)
-    ports = pd.read_csv(path_processed_data + config_file['filenames']['ports'], index_col=0)
-    coastlines = pd.read_csv(path_processed_data + config_file['filenames']['coastlines'], index_col=0)
-    minimal_distances = pd.read_csv(path_processed_data + config_file['filenames']['minimal_distances'], index_col=0)
-    conversion_costs_and_efficiencies = pd.read_csv(path_processed_data + config_file['filenames']['conversion_costs_and_efficiencies'], index_col=0)
+    pipeline_liquid_graphs = pd.read_csv(path_processed_data + 'oil_pipeline_graphs.csv', index_col=0)
+    ports = pd.read_csv(path_processed_data + 'ports.csv', index_col=0)
+    coastlines = pd.read_csv(path_processed_data + 'landmasses.csv', index_col=0)
+    minimal_distances = pd.read_csv(path_processed_data + 'minimal_distances.csv', index_col=0)
+    conversion_costs_and_efficiencies = pd.read_csv(path_processed_data + 'conversion_costs_and_efficiency.csv', index_col=0)
 
     yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
     techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
@@ -123,9 +122,9 @@ def prepare_data_and_configuration_dictionary(config_file):
             'conversion_costs_and_efficiencies': conversion_costs_and_efficiencies,
             'world': world}
 
-    data = process_network_data(data, 'Pipeline_Gas', pipeline_gas_geodata, pipeline_gas_graphs)
+    data = process_network_data(data, 'Pipeline_Gas', pipeline_gas_node_locations, pipeline_gas_graphs)
 
-    data = process_network_data(data, 'Pipeline_Liquid', pipeline_liquid_geodata, pipeline_liquid_graphs)
+    data = process_network_data(data, 'Pipeline_Liquid', pipeline_liquid_node_locations, pipeline_liquid_graphs)
 
     # get assumptions
     configuration = {'tolerance_distance': config_file['tolerance_distance'],
@@ -136,7 +135,7 @@ def prepare_data_and_configuration_dictionary(config_file):
                      'build_new_infrastructure': config_file['build_new_infrastructure'],
                      'H2_ready_infrastructure': config_file['H2_ready_infrastructure'],
                      'path_processed_data': path_processed_data,
-                     'path_results': config_file['paths']['project_folder'] + config_file['paths']['results'],
+                     'path_results': config_file['project_folder_path'] + 'results/',
                      'use_low_storage': config_file['use_low_storage'],
                      'use_low_memory': config_file['use_low_memory'],
                      'print_runtime_information': config_file['print_runtime_information'],

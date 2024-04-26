@@ -66,7 +66,7 @@ if __name__ == '__main__':
 
     else:
         for i in location_data.index:
-            args = (i, location_data, data, config_file, configuration)
+            args = [i, location_data, data, config_file, configuration]
             run_algorithm(args)
 
     if time.time() - time_start < 60:

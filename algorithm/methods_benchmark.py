@@ -48,8 +48,8 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
     max_length = max(max_length_road, max_length_new_segment) / no_road_multiplier
 
     complete_infrastructure.sort_values(['distance_to_destination'], inplace=True)
-    distance_to_destination = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= max_length].index
-    distance_to_destination.drop(['Destination'])
+    distance_to_destination = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= max_length].index.tolist()
+    distance_to_destination.remove('Destination')
 
     # we want the Destination and at least 10 harbours within these options where we calculate the reachability
     complete_infrastructure.sort_values(['distance_to_start'], inplace=True)
@@ -96,8 +96,8 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
                                                                 get_only_availability=True)
 
         if (reachable_from_start != (None, None)) & (reachable_from_destination != (None, None)):
-            complete_infrastructure.loc[distance_to_start[:1000], 'reachable_from_start'] = reachable_from_start
-            complete_infrastructure.loc[distance_to_destination[:1000], 'reachable_from_destination'] = reachable_from_destination
+            complete_infrastructure.loc[distance_to_start[:1000], 'reachable_from_start'] = reachable_from_start[0]
+            complete_infrastructure.loc[distance_to_destination[:1000], 'reachable_from_destination'] = reachable_from_destination[0]
 
         else:
             complete_infrastructure['reachable_from_start'] = False
@@ -476,7 +476,7 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
     travelled_distances.append(distance_to_start)
 
     # find ports
-    geodata_start = data['Pipeline_Gas'][closest_graph_to_start]['GeoData'].copy()
+    geodata_start = data['Pipeline_Gas'][closest_graph_to_start]['NodeLocations'].copy()
 
     distance_to_port = calc_distance_list_to_list(geodata_start['latitude'], geodata_start['longitude'],
                                                   options_shipping['latitude'], options_shipping['longitude'])

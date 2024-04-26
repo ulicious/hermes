@@ -1,8 +1,10 @@
 # general configuration
+project_folder_path: 'C:/Users/mt5285/Transportmodell/'  # full path of folder
 use_minimal_example: True
 use_low_storage: False  # distances are not precalculated --> lower storage demand but higher memory and time demand
 use_low_memory: False  # avoids parallel processing and large matrix implementations --> lower memory demand but higher time demand
 number_cores: 'max'  # set certain number or 'max'; will be set to 1 if use_low_memory = True
+use_provided_data: True  # if True, then will use data from GitHub
 
 # todo: mit anderen Einstellungen testen
 
@@ -34,7 +36,8 @@ minimal_longitude: -180  # will be overwritten if minimal_example is applied
 maximal_longitude: 180  # will be overwritten if minimal_example is applied
 
 # parameters and assumptions for infrastructure processing
-update_only_conversion_costs_and_efficiency: True  # set True if you only want to update location specific conversion costs and efficiencies
+enforce_update_of_data: False  # if certain data has been calculated, we skip calculating again
+update_only_conversion_costs_and_efficiency: False  # set True if you only want to update location specific conversion costs and efficiencies
 low_temp_heat_available_at_ports: True
 mid_temp_heat_available_at_ports: True
 high_temp_heat_available_at_ports: True
@@ -57,22 +60,3 @@ mid_temp_heat_available_at_destination: False
 high_temp_heat_available_at_destination: False
 print_runtime_information: True
 print_benchmark_info: False
-
-paths:
-   project_folder: 'C:/Users/mt5285/Transportmodell/'  # full path of folder
-   raw_data: 'raw_data/'  # only folder name + "/"
-   processed_data: 'processed_data/'  # only folder name + "/"
-   results: 'results/'  # only folder name + "/"
-   
-filenames:
-   location_data: 'start_destination_combinations_500.xlsx'
-   gas_pipeline_geodata: 'gas_pipeline_geodata.csv'
-   gas_pipeline_graph: 'gas_pipeline_graphs.csv'
-   gas_pipeline_graph_object: 'gas_pipeline_graphs_object.csv'
-   oil_pipeline_geodata: 'oil_pipeline_geodata.csv'
-   oil_pipeline_graph: 'oil_pipeline_graphs.csv'
-   oil_pipeline_graph_object: 'oil_pipeline_graphs_object.csv'
-   ports: 'ports.csv'
-   coastlines: 'landmasses.csv'
-   minimal_distances: 'minimal_distances.csv'
-

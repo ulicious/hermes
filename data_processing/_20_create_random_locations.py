@@ -230,7 +230,7 @@ path_config = os.path.dirname(os.getcwd()) + '/algorithm_configuration.yaml'
 yaml_file = open(path_config)
 config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-path_techno_economic_data = config_file['paths']['project_folder'] + config_file['paths']['raw_data']
+path_techno_economic_data = config_file['project_folder_path'] + 'raw_data/'
 
 if not config_file['use_minimal_example']:
     # use boundaries from config file
@@ -341,4 +341,4 @@ apply_conversion()
 columns_to_keep = ['longitude', 'latitude', 'country_start', 'continent_start'] + config_file['available_commodity']
 locations = locations[columns_to_keep]
 
-locations.to_excel(config_file['paths']['project_folder'] + 'start_destination_combinations_500.xlsx')
+locations.to_excel(config_file['project_folder_path'] + 'start_destination_combinations.xlsx')

@@ -18,7 +18,7 @@ def prepare_commodities(config_file, location_data, data):
     @param dict data: dictionary with all common data
     @return: commodity objects and list with commodity names
     """
-    path_data = config_file['paths']['project_folder'] + config_file['paths']['raw_data']
+    path_data = config_file['project_folder_path'] + 'raw_data/'
     yaml_file = open(path_data + 'techno_economic_data_conversion.yaml')
     techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
@@ -29,8 +29,7 @@ def prepare_commodities(config_file, location_data, data):
 
     # get commodities and associated data
     commodities, commodity_names \
-        = create_commodity_objects(location_data,
-                                   conversion_costs_and_efficiencies, techno_economic_data_conversion,
+        = create_commodity_objects(location_data, conversion_costs_and_efficiencies, techno_economic_data_conversion,
                                    techno_economic_data_transportation, config_file)
 
     return commodities, commodity_names

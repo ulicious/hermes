@@ -16,7 +16,7 @@ from script_benchmark import calculate_benchmark
 from methods_geographic import get_continent_from_location
 from methods_conversion import apply_conversion
 from methods_cost_approximations import calculate_minimal_costs_conversion_for_oil_and_gas_infrastructure
-from data_processing._8_attach_conversion_costs_and_efficiency_to_locations import attach_conversion_costs_and_efficiency_to_locations
+from data_processing._17_attach_conversion_costs_and_efficiency_to_locations import attach_conversion_costs_and_efficiency_to_locations
 
 import logging
 logging.getLogger().setLevel(logging.INFO)
@@ -70,7 +70,7 @@ def run_algorithm(args):
     data['minimal_distances'] = minimal_distances
 
     # attach conversion costs and efficiencies to start
-    path_techno_economic_data = config_file['paths']['project_folder'] + config_file['paths']['raw_data']
+    path_techno_economic_data = config_file['project_folder_path'] + 'raw_data/'
     yaml_file = open(path_techno_economic_data + 'techno_economic_data_conversion.yaml')
     techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
 

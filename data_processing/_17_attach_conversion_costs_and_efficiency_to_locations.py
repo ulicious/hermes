@@ -217,7 +217,7 @@ def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, 
 
         return locations_to_process
 
-    path_raw_data = config_file['paths']['project_folder'] + config_file['paths']['raw_data']
+    path_raw_data = config_file['project_folder_path'] + 'raw_data/'
 
     levelized_costs_location = pd.read_csv(path_raw_data + 'levelized_costs_locations.csv', index_col=0)
     levelized_costs_country = pd.read_csv(path_raw_data + 'levelized_costs_countries.csv', index_col=0)
