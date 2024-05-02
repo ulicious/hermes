@@ -7,8 +7,7 @@ import cartopy.io.shapereader as shpreader
 
 from shapely.geometry import LineString, Point
 
-from data_processing._0_helpers_raw_data_processing import calculate_conversion_costs
-from algorithm.methods_geographic import calc_distance_list_to_single
+from _0_helpers_raw_data_processing import calculate_conversion_costs, calc_distance_list_to_single
 
 
 def extend_line_in_one_direction(direction_coordinate, support_coordinate, extension_percentage):

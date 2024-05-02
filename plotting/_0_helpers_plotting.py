@@ -9,19 +9,19 @@ from shapely.geometry import MultiLineString, Point
 
 
 def load_data(path_data, config_file):
-    pipeline_gas_geodata = pd.read_csv(path_data + 'gas_pipeline_node_locations.csv', index_col=0,
+    pipeline_gas_node_locations = pd.read_csv(path_data + 'gas_pipeline_node_locations.csv', index_col=0,
                                        dtype={'latitude': np.float16, 'longitude': np.float16})
     pipeline_gas_graphs = pd.read_csv(path_data + 'gas_pipeline_graphs.csv', index_col=0)
-    pipeline_liquid_geodata = pd.read_csv(path_data + 'oil_pipeline_node_locations.csv', index_col=0,
+    pipeline_liquid_node_locations = pd.read_csv(path_data + 'oil_pipeline_node_locations.csv', index_col=0,
                                           dtype={'latitude': np.float16, 'longitude': np.float16})
     pipeline_liquid_graphs = pd.read_csv(path_data + 'oil_pipeline_graphs.csv', index_col=0)
     ports = pd.read_csv(path_data + 'ports.csv', index_col=0)
 
     data = {'Shipping': {'ports': ports}}
 
-    data = process_network_data(data, 'Pipeline_Gas', pipeline_gas_geodata, pipeline_gas_graphs)
+    data = process_network_data(data, 'Pipeline_Gas', pipeline_gas_node_locations, pipeline_gas_graphs)
 
-    data = process_network_data(data, 'Pipeline_Liquid', pipeline_liquid_geodata, pipeline_liquid_graphs)
+    data = process_network_data(data, 'Pipeline_Liquid', pipeline_liquid_node_locations, pipeline_liquid_graphs)
 
     destination = Point(config_file['destination_location'])
 
@@ -32,11 +32,12 @@ def process_network_data(data, name, geo_data, graph_data):
 
     """
     Function is used to create different data structures for the network data
-    :param data: Existing dictionary
-    :param name: name of network
-    :param geo_data: geo data of network (locations of nodes)
-    :param graph_data: information on lines of network
-    :return: different data structures
+    @param dict data: dictionary for all data
+    @param str name: name of network
+    @param pandas.DataFrame geo_data: geo data of network (locations of nodes)
+    @param pandas.DataFrame graph_data: information on lines of network
+
+    @return: different data structures
     """
 
     data[name] = {}

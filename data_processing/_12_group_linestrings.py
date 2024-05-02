@@ -12,7 +12,7 @@ from shapely.geometry import Point, Polygon
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
-from algorithm.methods_geographic import calc_distance_single_to_single
+from _0_helpers_raw_data_processing import calc_distance_single_to_single
 
 import warnings
 warnings.filterwarnings('ignore')
