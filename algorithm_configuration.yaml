@@ -36,7 +36,7 @@ minimal_longitude: -180  # will be overwritten if minimal_example is applied
 maximal_longitude: 180  # will be overwritten if minimal_example is applied
 
 # parameters and assumptions for infrastructure processing
-enforce_update_of_data: False  # if certain data has been calculated, we skip calculating again
+enforce_update_of_data: True  # if certain data has been calculated, we skip calculating again
 update_only_conversion_costs_and_efficiency: False  # set True if you only want to update location specific conversion costs and efficiencies
 low_temp_heat_available_at_ports: True
 mid_temp_heat_available_at_ports: True

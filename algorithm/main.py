@@ -8,7 +8,7 @@ import sys
 from script_algorithm import run_algorithm
 from methods_main import prepare_data_and_configuration_dictionary
 
-sys.path.append(os.path.dirname(os.getcwd()))
+# sys.path.append(os.path.dirname(os.getcwd()))
 
 import warnings
 warnings.filterwarnings('ignore')

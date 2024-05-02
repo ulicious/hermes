@@ -7,7 +7,8 @@ import pandas as pd
 import geopandas as gpd
 import cartopy.io.shapereader as shpreader
 
-from _0_helpers_raw_data_processing import calculate_conversion_costs, calc_distance_list_to_single
+from algorithm.methods_geographic import calc_distance_list_to_single
+from _0_helpers_raw_data_processing import calculate_conversion_costs
 
 import warnings
 warnings.filterwarnings("ignore")

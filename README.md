@@ -15,6 +15,7 @@ to other nodes is not possible anymore.
 
 1. Download this repository and create python project in your coding environment
 2. Install requirements (in terminal: pip install -r requirements.txt)
+3. Create project folder where data and results are stored (this is not the same folder to place the code in)
 3. Adjust "algorithm_configuration.yaml" (paths, parameters etc.) in this repository based on created dictionary and own configurations
 4. Adjust the techno economic data in the created "raw data" folder if needed
 5. Run "data_processing/_10_script_process_raw_data.py".
