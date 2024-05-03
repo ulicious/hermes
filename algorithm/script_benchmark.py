@@ -1,6 +1,6 @@
 import math
 
-from methods_benchmark import find_shipping_benchmark_solution, find_pipeline_shipping_solution, find_pipeline_solution
+from algorithm.methods_benchmark import find_shipping_benchmark_solution, find_pipeline_shipping_solution, find_pipeline_solution
 
 
 def calculate_benchmark(data, configuration, complete_infrastructure):

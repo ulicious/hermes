@@ -2,7 +2,7 @@ import pandas as pd
 from shapely.geometry import LineString, MultiLineString, Point
 import shapely
 
-from data_processing._13_process_network_data_to_network_objects import get_geodata_and_graph_from_network_data_with_intermediate_points
+from data_processing.process_network_data_to_network_objects import get_geodata_and_graph_from_network_data_with_intermediate_points
 
 from shapely.wkt import loads
 

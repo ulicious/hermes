@@ -10,7 +10,7 @@ import cartopy.io.shapereader as shpreader
 
 from shapely.wkt import loads
 from shapely.geometry import Point, MultiLineString
-from data_processing._17_attach_conversion_costs_and_efficiency_to_locations import attach_conversion_costs_and_efficiency_to_locations
+from data_processing.attach_conversion_costs_and_efficiency_to_locations import attach_conversion_costs_and_efficiency_to_locations
 
 
 def process_network_data(data, name, node_locations, graph_data):

@@ -4,8 +4,8 @@ import yaml
 
 import pandas as pd
 
-from methods_geographic import calc_distance_single_to_single, calc_distance_list_to_single
-from object_commodity import create_commodity_objects
+from algorithm.methods_geographic import calc_distance_single_to_single, calc_distance_list_to_single
+from algorithm.object_commodity import create_commodity_objects
 
 
 def prepare_commodities(config_file, location_data, data):

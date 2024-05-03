@@ -5,8 +5,8 @@ import pandas as pd
 import numpy as np
 import networkx as nx
 
-from methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list
-from methods_cost_approximations import calculate_cheapest_option_to_closest_infrastructure, \
+from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list
+from algorithm.methods_cost_approximations import calculate_cheapest_option_to_closest_infrastructure, \
     calculate_cheapest_option_to_final_destination
 
 import warnings

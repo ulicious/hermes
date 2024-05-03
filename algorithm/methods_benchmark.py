@@ -2,7 +2,7 @@ import math
 
 import pandas as pd
 
-from methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list, check_if_reachable_on_land
+from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list, check_if_reachable_on_land
 
 
 def check_if_benchmark_possible(data, configuration, complete_infrastructure):

@@ -5,8 +5,8 @@ import itertools
 import yaml
 import sys
 
-from script_algorithm import run_algorithm
-from methods_main import prepare_data_and_configuration_dictionary
+from algorithm.script_algorithm import run_algorithm
+from algorithm.methods_main import prepare_data_and_configuration_dictionary
 
 # sys.path.append(os.path.dirname(os.getcwd()))
 
@@ -16,7 +16,7 @@ warnings.filterwarnings('ignore')
 if __name__ == '__main__':
 
     # load configuration file
-    path_config = os.path.dirname(os.getcwd()) + '/algorithm_configuration.yaml'
+    path_config = os.getcwd() + '/algorithm_configuration.yaml'
     yaml_file = open(path_config)
     config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 

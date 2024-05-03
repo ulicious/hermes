@@ -2,9 +2,9 @@ import time
 
 import pandas as pd
 
-from methods_algorithm import create_new_branches_based_on_conversion, postprocessing_branches
-from methods_geographic import calc_distance_list_to_single
-from methods_cost_approximations import calculate_cheapest_option_to_final_destination
+from algorithm.methods_algorithm import create_new_branches_based_on_conversion, postprocessing_branches
+from algorithm.methods_geographic import calc_distance_list_to_single
+from algorithm.methods_cost_approximations import calculate_cheapest_option_to_final_destination
 
 
 def apply_conversion(branches, configuration, data, branch_number, benchmark, local_benchmarks, iteration, start_time):

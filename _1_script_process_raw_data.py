@@ -8,22 +8,24 @@ import shapely
 import pandas as pd
 import geopandas as gpd
 
-from _11_get_landmass_polygons_and_coastlines import get_landmass_polygons_and_coastlines
-from _12_group_linestrings import group_LineStrings
-from _13_process_network_data_to_network_objects import \
+from data_processing.get_landmass_polygons_and_coastlines import get_landmass_polygons_and_coastlines
+from data_processing.group_linestrings import group_LineStrings
+from data_processing.process_network_data_to_network_objects import \
     process_network_data_to_network_objects_with_additional_connection_points
-from _14_process_ports import process_ports
-from _16_calculate_inner_distances import get_distances_within_networks, calculate_searoute_distances, \
+from data_processing.process_ports import process_ports
+from data_processing.calculate_inner_distances import get_distances_within_networks, calculate_searoute_distances, \
     get_distances_of_closest_infrastructure
-from _17_attach_conversion_costs_and_efficiency_to_locations import attach_conversion_costs_and_efficiency_to_locations
+from data_processing.attach_conversion_costs_and_efficiency_to_locations import attach_conversion_costs_and_efficiency_to_locations
 
 import warnings
 warnings.filterwarnings('ignore')
 
 logging.basicConfig(level=logging.INFO)
 
+print(os.getcwd())
+
 # load configuration file
-path_config = os.path.dirname(os.getcwd()) + '/algorithm_configuration.yaml'
+path_config = os.getcwd() + '/algorithm_configuration.yaml'
 yaml_file = open(path_config)
 config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
@@ -63,7 +65,7 @@ if not os.path.exists(path_overall_data + 'results/plots/'):
 
 # move raw data from this repository to project folder raw data if set in configuration
 if config_file['use_provided_data']:
-    file_directory = os.path.dirname(os.getcwd()) + '/data/'
+    file_directory = os.getcwd() + '/data/'
     files = os.listdir(file_directory)
     for f in files:
         shutil.copy(file_directory + f, path_raw_data)
