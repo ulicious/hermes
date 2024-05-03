@@ -92,13 +92,13 @@ if not update_only_conversion_costs_and_efficiency:
     # process raw network data and place all connected lines into network folders
     logging.info('Processing raw pipeline data')
     if not (('gas_network_data' in files_in_folder) & (not enforce_update_of_data)):
-        # process coastlines
+        # process gas pipelines
         path_gas_pipeline_data = path_raw_data + 'network_pipelines_gas.xlsx'
         group_LineStrings('gas', num_cores, path_gas_pipeline_data, path_processed_data,
                           use_minimal_example=use_minimal_example)
 
     if not (('oil_network_data' in files_in_folder) & (not enforce_update_of_data)):
-        # process coastlines
+        # process oil pipelines
         path_oil_pipeline_data = path_raw_data + 'network_pipelines_oil.xlsx'
         group_LineStrings('oil', num_cores, path_oil_pipeline_data, path_processed_data,
                           use_minimal_example=use_minimal_example)
