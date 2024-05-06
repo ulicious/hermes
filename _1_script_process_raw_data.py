@@ -116,11 +116,13 @@ if not update_only_conversion_costs_and_efficiency:
         if use_minimal_example:
             gas_lines, gas_graph, gas_nodes \
                 = process_network_data_to_network_objects_with_additional_connection_points('gas_pipeline', path_gas_pipeline_data,
-                                                                                            minimal_distance_between_node=100000)
+                                                                                            minimal_distance_between_node=100000,
+                                                                                            number_workers=num_cores)
         else:
             gas_lines, gas_graph, gas_nodes \
                 = process_network_data_to_network_objects_with_additional_connection_points('gas_pipeline',
-                                                                                            path_gas_pipeline_data)
+                                                                                            path_gas_pipeline_data,
+                                                                                            number_workers=num_cores)
 
         gas_lines.to_csv(path_processed_data + 'gas_pipeline_graphs_object.csv')
         gas_graph.to_csv(path_processed_data + 'gas_pipeline_graphs.csv')
@@ -136,10 +138,12 @@ if not update_only_conversion_costs_and_efficiency:
         if use_minimal_example:
             oil_lines, oil_graph, oil_nodes \
                 = process_network_data_to_network_objects_with_additional_connection_points('oil_pipeline', path_oil_pipeline_data,
-                                                                                            minimal_distance_between_node=100000)
+                                                                                            minimal_distance_between_node=100000,
+                                                                                            number_workers=num_cores)
         else:
             oil_lines, oil_graph, oil_nodes \
-                = process_network_data_to_network_objects_with_additional_connection_points('oil_pipeline', path_oil_pipeline_data)
+                = process_network_data_to_network_objects_with_additional_connection_points('oil_pipeline', path_oil_pipeline_data,
+                                                                                            number_workers=num_cores)
 
         oil_lines.to_csv(path_processed_data + 'oil_pipeline_graphs_object.csv')
         oil_graph.to_csv(path_processed_data + 'oil_pipeline_graphs.csv')

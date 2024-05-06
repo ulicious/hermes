@@ -459,7 +459,8 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
 
 
 def process_network_data_to_network_objects_with_additional_connection_points(name_network, path_network_data,
-                                                                              minimal_distance_between_node=50000):
+                                                                              minimal_distance_between_node=50000,
+                                                                              number_workers=1):
 
     """
     This method connects LineStrings of networks to one common network.
@@ -504,7 +505,7 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
         if isinstance(network, MultiLineString):
 
             inputs = tqdm(network.geoms)
-            results = Parallel(n_jobs=4)(delayed(process_line_super)(i) for i in inputs)
+            results = Parallel(n_jobs=number_workers)(delayed(process_line_super)(i) for i in inputs)
 
             for r in results:
                 if r[0] is None:
@@ -520,36 +521,73 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                     distance = e[2]
                     line = e[3]
 
-                    if start_node not in existing_nodes_dict.values():
-                        node_start_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(
-                            node_number)
-                        existing_nodes_dict[node_start_name] = start_node
+                    node_start_name = existing_nodes_dict.get(tuple(start_node))
+                    if node_start_name is None:
+                        node_start_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(node_number)
+                        existing_nodes_dict[tuple(start_node)] = node_start_name
                         node_number += 1
-                    else:
-                        # node is existing node
-                        node_start_name = list(existing_nodes_dict.keys())[
-                            list(existing_nodes_dict.values()).index(start_node)]
 
-                    if end_node not in existing_nodes_dict.values():
+                    node_end_name = existing_nodes_dict.get(tuple(end_node))
+                    if node_end_name is None:
                         node_end_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(node_number)
-                        existing_nodes_dict[node_end_name] = end_node
+                        existing_nodes_dict[tuple(end_node)] = node_end_name
                         node_number += 1
-                    else:
-                        # node is existing node
-                        node_end_name = list(existing_nodes_dict.keys())[
-                            list(existing_nodes_dict.values()).index(end_node)]
 
-                    # add edge
-                    existing_edges_dict[node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)] \
-                        = [node_addition + '_Graph_' + str(graph_number), node_start_name, node_end_name, distance,
-                           line]
-
-                    # add line
-                    existing_lines_dict[
-                        node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)] = line
+                    edge_key = node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)
+                    existing_edges_dict[edge_key] = [node_addition + '_Graph_' + str(graph_number), node_start_name,
+                                                     node_end_name, distance, line]
+                    existing_lines_dict[edge_key] = line
                     edge_number += 1
 
-                    was_processed = True
+            # todo: remove after it was checked
+            # for r in tqdm(results):
+            #     if r[0] is None:
+            #         continue
+            #
+            #     edges = r[1]
+            #
+            #     for e in edges:
+            #         start_node = e[0].copy()
+            #         start_node.append(node_addition + '_Graph_' + str(graph_number))
+            #         end_node = e[1].copy()
+            #         end_node.append(node_addition + '_Graph_' + str(graph_number))
+            #         distance = e[2]
+            #         line = e[3]
+            #
+            #         if start_node not in existing_nodes:
+            #             existing_nodes.append(start_node)
+            #             node_start_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(
+            #                 node_number)
+            #             existing_nodes_dict[node_start_name] = start_node
+            #             node_number += 1
+            #         else:
+            #             # node is existing node
+            #             node_start_name = list(existing_nodes_dict.keys())[
+            #                 list(existing_nodes_dict.values()).index(start_node)]
+            #
+            #         if end_node not in existing_nodes:
+            #             existing_nodes.append(end_node)
+            #             node_end_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(node_number)
+            #             existing_nodes_dict[node_end_name] = end_node
+            #             node_number += 1
+            #         else:
+            #             # node is existing node
+            #             node_end_name = list(existing_nodes_dict.keys())[
+            #                 list(existing_nodes_dict.values()).index(end_node)]
+            #
+            #         # add edge
+            #         existing_edges_dict[node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)] \
+            #             = [node_addition + '_Graph_' + str(graph_number), node_start_name, node_end_name, distance,
+            #                line]
+            #
+            #         # add line
+            #         existing_lines_dict[
+            #             node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)] = line
+            #         edge_number += 1
+            #
+            #         # print(time.time() - now)
+            #
+            #         was_processed = True
 
         else:
             if network.is_empty:
@@ -570,33 +608,23 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                         distance = e[2]
                         line = e[3]
 
-                        if start_node not in existing_nodes_dict.values():
+                        node_start_name = existing_nodes_dict.get(tuple(start_node))
+                        if node_start_name is None:
                             node_start_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(
                                 node_number)
-                            existing_nodes_dict[node_start_name] = start_node
+                            existing_nodes_dict[tuple(start_node)] = node_start_name
                             node_number += 1
-                        else:
-                            # node is existing node
-                            node_start_name = list(existing_nodes_dict.keys())[
-                                list(existing_nodes_dict.values()).index(start_node)]
 
-                        if end_node not in existing_nodes_dict.values():
+                        node_end_name = existing_nodes_dict.get(tuple(end_node))
+                        if node_end_name is None:
                             node_end_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(node_number)
-                            existing_nodes_dict[node_end_name] = end_node
+                            existing_nodes_dict[tuple(end_node)] = node_end_name
                             node_number += 1
-                        else:
-                            # node is existing node
-                            node_end_name = list(existing_nodes_dict.keys())[
-                                list(existing_nodes_dict.values()).index(end_node)]
 
-                        # add edge
-                        existing_edges_dict[node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)] \
-                            = [node_addition + '_Graph_' + str(graph_number), node_start_name, node_end_name, distance,
-                               line]
-
-                        # add line
-                        existing_lines_dict[
-                            node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)] = line
+                        edge_key = node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)
+                        existing_edges_dict[edge_key] = [node_addition + '_Graph_' + str(graph_number), node_start_name,
+                                                         node_end_name, distance, line]
+                        existing_lines_dict[edge_key] = line
                         edge_number += 1
 
                         was_processed = True
@@ -613,30 +641,22 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                     distance = e[2]
                     line = e[3]
 
-                    if start_node not in existing_nodes_dict.values():
+                    node_start_name = existing_nodes_dict.get(tuple(start_node))
+                    if node_start_name is None:
                         node_start_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(node_number)
-                        existing_nodes_dict[node_start_name] = start_node
+                        existing_nodes_dict[tuple(start_node)] = node_start_name
                         node_number += 1
-                    else:
-                        # node is existing node
-                        node_start_name = list(existing_nodes_dict.keys())[
-                            list(existing_nodes_dict.values()).index(start_node)]
 
-                    if end_node not in existing_nodes_dict.values():
+                    node_end_name = existing_nodes_dict.get(tuple(end_node))
+                    if node_end_name is None:
                         node_end_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(node_number)
-                        existing_nodes_dict[node_end_name] = end_node
+                        existing_nodes_dict[tuple(end_node)] = node_end_name
                         node_number += 1
-                    else:
-                        # node is existing node
-                        node_end_name = list(existing_nodes_dict.keys())[
-                            list(existing_nodes_dict.values()).index(end_node)]
 
-                    # add edge
-                    existing_edges_dict[node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)] \
-                        = [node_addition + '_Graph_' + str(graph_number), node_start_name, node_end_name, distance, line]
-
-                    # add line
-                    existing_lines_dict[node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)] = line
+                    edge_key = node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)
+                    existing_edges_dict[edge_key] = [node_addition + '_Graph_' + str(graph_number), node_start_name,
+                                                     node_end_name, distance, line]
+                    existing_lines_dict[edge_key] = line
                     edge_number += 1
 
                     was_processed = True
@@ -647,39 +667,39 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
 
     graphs = pd.DataFrame.from_dict(existing_edges_dict, orient='index', columns=['graph', 'node_start', 'node_end',
                                                                                   'distance', 'line'])
+    existing_nodes_dict = dict((v, k) for k, v in existing_nodes_dict.items())
     nodes = pd.DataFrame.from_dict(existing_nodes_dict, orient='index', columns=['longitude', 'latitude', 'graph'])
     line_data = pd.DataFrame.from_dict(existing_lines_dict, orient='index', columns=['geometry'])
 
     # finally, remove lines which are not used to connect other lines and are less than 10 km long
     # Such have been added in the scaling process to ensure that lines are properly connected
-    has_changed = True
-    while has_changed:  # run as long as short dead ends exist
-        has_changed = False
+    edges_to_drop = []
+    nodes_to_drop = []
+    sub_graph = graphs[graphs['distance'] < 500].copy()
+    affected_nodes = set(sub_graph['node_start'].tolist() + sub_graph['node_end'].tolist())
+    node_start_counts = graphs['node_start'].value_counts()
+    node_end_counts = graphs['node_end'].value_counts()
 
-        edges_to_drop = []
-        nodes_to_drop = []
-        for node in nodes.index:
+    for node in affected_nodes:
+        # Check if node is used only once --> edge has dead end
+        if (node_start_counts.get(node, 0) + node_end_counts.get(node, 0)) == 1:
+            if node in node_start_counts:
+                index_to_check = graphs.loc[graphs['node_start'] == node].index[0]
+            else:
+                index_to_check = graphs.loc[graphs['node_end'] == node].index[0]
 
-            # check if node is used only once --> edge has dead end
-            if graphs['node_start'].values.tolist().count(node) + graphs['node_end'].values.tolist().count(node) == 1:
-                if node in graphs['node_start'].values.tolist():
-                    index_to_check = graphs[graphs['node_start'] == node].index.values.tolist()[0]
-                else:
-                    index_to_check = graphs[graphs['node_end'] == node].index.values.tolist()[0]
-
-                # check length of edge and remove if too low
-                if graphs.at[index_to_check, 'distance'] < 500:
-                    nodes_to_drop.append(node)
-                    edges_to_drop += [index_to_check]
-
-                    has_changed = True
-
-            # if node is in nodes but not in graphs --> remove from nodes
-            elif graphs['node_start'].values.tolist().count(node) + graphs['node_end'].values.tolist().count(node) == 0:
+            # Check length of edge and remove if too low
+            if graphs.at[index_to_check, 'distance'] < 500:
                 nodes_to_drop.append(node)
+                edges_to_drop.append(index_to_check)
+                has_changed = True
 
-        graphs.drop(edges_to_drop, inplace=True)
-        line_data.drop(edges_to_drop, inplace=True)
-        nodes.drop(nodes_to_drop, inplace=True)
+        # If node is in nodes but not in graphs --> remove from nodes
+        elif (node_start_counts.get(node, 0) + node_end_counts.get(node, 0)) == 0:
+            nodes_to_drop.append(node)
+
+    graphs.drop(edges_to_drop, inplace=True)
+    line_data.drop(edges_to_drop, inplace=True)
+    nodes.drop(nodes_to_drop, inplace=True)
 
     return line_data, graphs, nodes

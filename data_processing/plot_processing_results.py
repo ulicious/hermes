@@ -190,7 +190,7 @@ path_config = os.path.dirname(os.getcwd()) + '/algorithm_configuration.yaml'
 yaml_file = open(path_config)
 config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-path_processed_data = config_file['paths']['project_folder'] + config_file['paths']['processed_data']
+path_processed_data = config_file['project_folder_path'] + 'processed_data/'
 
 if not config_file['use_minimal_example']:
     # use boundaries from config file
@@ -209,18 +209,18 @@ boundaries = {'min_latitude': min_lat - 2,
               'max_longitude': max_lon + 2}
 
 if config_file['use_provided_data']:
-    current_directory = os.path.dirname(os.getcwd()) + '/'
+    current_directory = os.getcwd() + '/'
     path_raw_data = current_directory + 'data/'
     path_techno_economic_data = current_directory + 'techno_economic_data/'
 else:
-    path_raw_data = config_file['project_folder'] + config_file['paths']['data']
-    path_techno_economic_data = config_file['paths']['techno_economic_data']
+    path_raw_data = config_file['project_folder_path'] + 'data/'
+    path_techno_economic_data = config_file['project_folder_path'] + 'data/'
 
 # plot original data
 # plot_original_pipeline_data()
 
 # plot unprocessed pipelines
-plot_unprocessed_pipelines()
+# plot_unprocessed_pipelines()
 
 # plot processed pipelines and ports
 fig, ax = plt.subplots()
