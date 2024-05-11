@@ -12,7 +12,7 @@ from shapely.geometry import Point, Polygon
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
-from algorithm.methods_geographic import calc_distance_single_to_single
+from algorithm.methods_geographic import calc_distance_single_to_single, calc_distance_list_to_list
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -190,11 +190,11 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, use_mi
     empty_rows = data[data['WKTFormat'] == '--'].index.tolist()
     data.drop(empty_rows, inplace=True)
 
-    lines = data['WKTFormat'].tolist()
-    lines = [li for li in lines if li != '--']
+    # drop duplicates
+    data.drop_duplicates(subset=['WKTFormat'], inplace=True)
 
     # construct geodataframe
-    data_new = gpd.GeoDataFrame(pd.Series(lines).apply(shapely.wkt.loads), columns=['geometry'])
+    data_new = gpd.GeoDataFrame(pd.Series(data['WKTFormat'].tolist()).apply(shapely.wkt.loads), columns=['geometry'])
     data_new.set_geometry('geometry')
     data_new_exploded = data_new.explode(ignore_index=True)
 
@@ -226,6 +226,9 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, use_mi
     df_sl = pd.DataFrame(single_lines, columns=['single_lines'])
     df_sl = df_sl.drop_duplicates(['single_lines'])
     single_lines = [i for i in df_sl['single_lines'].tolist()]
+
+    data_new = gpd.GeoDataFrame(pd.Series(single_lines), columns=['geometry'])
+    data_new.set_geometry('geometry')
 
     if use_minimal_example:
         # If the minimal example is applied, we set a frame on top of Europe and only consider pipelines within this frame

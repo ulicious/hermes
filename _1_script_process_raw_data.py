@@ -4,6 +4,7 @@ import os
 import shutil
 import logging
 import shapely
+import time
 
 import pandas as pd
 import geopandas as gpd
@@ -22,7 +23,7 @@ warnings.filterwarnings('ignore')
 
 logging.basicConfig(level=logging.INFO)
 
-print(os.getcwd())
+time_start = time.time()
 
 # load configuration file
 path_config = os.getcwd() + '/algorithm_configuration.yaml'
@@ -167,15 +168,15 @@ if not update_only_conversion_costs_and_efficiency:
         logging.info('Calculate inner infrastructure distances')
 
         if not (('inner_infrastructure_distances' in files_in_folder) & (not enforce_update_of_data)):
-            get_distances_within_networks(gas_graph, path_processed_data, use_low_memory=use_low_memory)
-            get_distances_within_networks(oil_graph, path_processed_data, use_low_memory=use_low_memory)
+            get_distances_within_networks(gas_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
+            get_distances_within_networks(oil_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
             calculate_searoute_distances(ports, num_cores, path_processed_data)
 
     # calculate closest infrastructure for each node
     logging.info('Calculate closest infrastructure')
     options = pd.concat([gas_nodes, oil_nodes, ports])
     if not (('minimal_distances.csv' in files_in_folder) & (not enforce_update_of_data)):
-        get_distances_of_closest_infrastructure(options, path_processed_data)
+        get_distances_of_closest_infrastructure(options, path_processed_data, num_cores)
 
 else:
     ports = pd.read_csv(path_processed_data + 'ports.csv', index_col=0)
@@ -189,3 +190,10 @@ logging.info('Calculate conversion costs and efficiency')
 conversion_costs_and_efficiency \
     = attach_conversion_costs_and_efficiency_to_locations(options, config_file, techno_economic_data_conversion)
 conversion_costs_and_efficiency.to_csv(path_processed_data + 'conversion_costs_and_efficiency.csv')
+
+if time.time() - time_start < 60:
+    print('total processing time [s]: ' + str(time.time() - time_start))
+elif time.time() - time_start < 3600:
+    print('total processing time [m]: ' + str((time.time() - time_start) / 60))
+else:
+    print('total processing time [h]: ' + str((time.time() - time_start) / 60 / 60))

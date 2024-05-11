@@ -1,3 +1,4 @@
+import itertools
 import os
 import math
 
@@ -110,7 +111,7 @@ def process_network_data_to_network_objects_no_additional_connection_points(name
         coords = line.coords
 
         # get start node of line
-        node_start = [round(coords.xy[0][0], 10), round(coords.xy[1][0], 10),
+        node_start = [round(coords.xy[0][0], 5), round(coords.xy[1][0], 5),
                       node_addition + '_Graph_' + str(graph_number)]
         if node_start not in existing_nodes:
             # if node does not exist, add new node information
@@ -125,7 +126,7 @@ def process_network_data_to_network_objects_no_additional_connection_points(name
                 list(existing_nodes_dict.values()).index(node_start)]
 
         # get start node of line
-        node_end = [round(coords.xy[0][-1], 10), round(coords.xy[1][-1], 10),
+        node_end = [round(coords.xy[0][-1], 5), round(coords.xy[1][-1], 5),
                     node_addition + '_Graph_' + str(graph_number)]
         if node_end not in existing_nodes:
             # if node does not exist, add new node information
@@ -147,8 +148,8 @@ def process_network_data_to_network_objects_no_additional_connection_points(name
         coords_before = None
         distance = 0
         for i_x, x in enumerate(coords.xy[0]):
-            x = round(x, 10)
-            y = round(coords.xy[1][i_x], 10)
+            x = round(x, 5)
+            y = round(coords.xy[1][i_x], 5)
 
             if coords_before is not None:
                 distance += vincenty((x, y), (coords_before[0], coords_before[1])) * 1000
@@ -298,7 +299,7 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
                     # current point c is start of line
 
                     # add p as node to graph
-                    node_start = [round(c.x, 10), round(c.y, 10)]
+                    node_start = [round(c.x, 5), round(c.y, 5)]
                     nodes.append(node_start)
                     node_number_local += 1
 
@@ -349,7 +350,7 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
                                 distance += calc_distance((coords_before.y, coords_before.x), (p.y, p.x)).meters
 
                                 # add p as node to graph
-                                node_end = [round(p.x, 10), round(p.y, 10)]
+                                node_end = [round(p.x, 5), round(p.y, 5)]
                                 nodes.append(node_end)
                                 node_number_local += 1
 
@@ -399,7 +400,7 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
                                                           (p.y, p.x)).meters
 
                                 # add p as node to graph
-                                node_end = [round(p.x, 10), round(p.y, 10)]
+                                node_end = [round(p.x, 5), round(p.y, 5)]
                                 nodes.append(node_end)
                                 node_number_local += 1
 
@@ -421,11 +422,11 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
             # distance is lower than minimal distance between nodes.
             # Therefore, add no more intermediate points and only use boundaries
 
-            node_start = [round(coords.xy[0][0], 10), round(coords.xy[1][0], 10)]
+            node_start = [round(coords.xy[0][0], 5), round(coords.xy[1][0], 5)]
             nodes.append(node_start)
             node_number_local += 1
 
-            node_end = [round(coords.xy[0][-1], 10), round(coords.xy[1][-1], 10)]
+            node_end = [round(coords.xy[0][-1], 5), round(coords.xy[1][-1], 5)]
             nodes.append(node_end)
             node_number_local += 1
 
@@ -457,7 +458,6 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
     return nodes, edges
 
 
-
 def process_network_data_to_network_objects_with_additional_connection_points(name_network, path_network_data,
                                                                               minimal_distance_between_node=50000,
                                                                               number_workers=1):
@@ -468,6 +468,7 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     @param str name_network: Name of the network ('gas_pipeline', 'oil_pipeline', or 'railroad').
     @param str path_network_data: Path to the directory containing the network data files.
     @param int minimal_distance_between_node: Minimal distance between node
+    @param int number_workers: number of works possible
 
     @return: A tuple containing three pandas DataFrames:
              - line_data: DataFrame containing information about the processed lines.
@@ -493,6 +494,7 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
         graph_number = int(file.split('_')[-1].split('.')[0])
         node_number = 0
         edge_number = 0
+        edge_mapping = {}
 
         was_processed = False
 
@@ -501,10 +503,84 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
 
         # Split Multilinestring / Linestring into separate LineStrings if intersections exist
         network = unary_union(lines)
+        network = shapely.line_merge(network)
 
+        import geopandas as gpd
         if isinstance(network, MultiLineString):
 
-            inputs = tqdm(network.geoms)
+            lines = [l for l in network.geoms]
+            line_gdf = gpd.GeoDataFrame(geometry=lines)
+
+            # start and end is same
+            line_gdf["geom_start"] = shapely.get_point(line_gdf.geometry, 0)
+            line_gdf["geom_end"] = shapely.get_point(line_gdf.geometry, -1)
+
+            # start is end and end is start
+            line_gdf_copy = line_gdf.copy()
+            line_gdf_copy.rename(columns={'geom_start': 'geom_end',
+                                          'geom_end': 'geom_start'}, inplace=True)
+
+            line_gdf = pd.concat([line_gdf, line_gdf_copy], ignore_index=True)
+
+            parallel_lines = line_gdf[line_gdf.duplicated(subset=['geom_start', 'geom_end'], keep=False)]
+
+            def process_parallel_lines(line_index):
+
+                parallel_lines_local = []
+
+                duplicates \
+                    = parallel_lines[(parallel_lines['geom_start'] == parallel_lines.at[line_index, 'geom_start'])
+                                     & (parallel_lines['geom_end'] == parallel_lines.at[line_index, 'geom_end'])].index
+
+                line_1_local = parallel_lines.at[line_index, 'geometry']
+
+                parallel_lines_local.append(line_1_local)
+
+                for d in duplicates:
+                    if line_index == d:
+                        continue
+
+                    line_2_local = parallel_lines.at[d, 'geometry']
+
+                    hausdorff_dist = line_1_local.hausdorff_distance(line_2_local)
+
+                    if hausdorff_dist < 1:
+                        parallel_lines_local.append(line_2_local)
+
+                if len(parallel_lines_local) > 1:
+                    return parallel_lines_local
+
+            inputs = tqdm(parallel_lines.index)
+            results = Parallel(n_jobs=number_workers)(delayed(process_parallel_lines)(i) for i in inputs)
+
+            lines_to_remove = []
+            for r in results:
+                if r is not None:
+                    line_1 = r[0]
+
+                    for i in range(1, len(r)):
+
+                        line_2 = r[i]
+
+                        if line_2 not in lines_to_remove:
+                            if line_1 not in lines_to_remove:
+                                lines_to_remove.append(line_1)
+
+            lines = [l for l in network.geoms if l not in lines_to_remove]
+            lines = MultiLineString(lines)
+            lines = shapely.line_merge(lines)
+
+            lines = [l for l in lines.geoms]
+
+            # import random
+            # import matplotlib.pyplot as plt
+            # get_colors = lambda n: ["#%06x" % random.randint(0, 0xFFFFFF) for _ in range(n)]
+            #
+            # df = gpd.GeoDataFrame(geometry=lines)
+            # df.plot(color=get_colors(len(lines)))
+            # plt.show()
+
+            inputs = tqdm(lines)
             results = Parallel(n_jobs=number_workers)(delayed(process_line_super)(i) for i in inputs)
 
             for r in results:
@@ -521,6 +597,9 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                     distance = e[2]
                     line = e[3]
 
+                    edge_string_start_end = str(e[0]) + '_' + str(e[1])
+                    edge_string_end_start = str(e[1]) + '_' + str(e[0])
+
                     node_start_name = existing_nodes_dict.get(tuple(start_node))
                     if node_start_name is None:
                         node_start_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(node_number)
@@ -533,61 +612,37 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                         existing_nodes_dict[tuple(end_node)] = node_end_name
                         node_number += 1
 
-                    edge_key = node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)
-                    existing_edges_dict[edge_key] = [node_addition + '_Graph_' + str(graph_number), node_start_name,
-                                                     node_end_name, distance, line]
-                    existing_lines_dict[edge_key] = line
-                    edge_number += 1
+                    # check if edge exists with same start and end. If so, keep shortest
+                    if ((edge_string_start_end not in edge_mapping.keys())
+                            | (edge_string_end_start not in edge_mapping.keys())):
 
-            # todo: remove after it was checked
-            # for r in tqdm(results):
-            #     if r[0] is None:
-            #         continue
-            #
-            #     edges = r[1]
-            #
-            #     for e in edges:
-            #         start_node = e[0].copy()
-            #         start_node.append(node_addition + '_Graph_' + str(graph_number))
-            #         end_node = e[1].copy()
-            #         end_node.append(node_addition + '_Graph_' + str(graph_number))
-            #         distance = e[2]
-            #         line = e[3]
-            #
-            #         if start_node not in existing_nodes:
-            #             existing_nodes.append(start_node)
-            #             node_start_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(
-            #                 node_number)
-            #             existing_nodes_dict[node_start_name] = start_node
-            #             node_number += 1
-            #         else:
-            #             # node is existing node
-            #             node_start_name = list(existing_nodes_dict.keys())[
-            #                 list(existing_nodes_dict.values()).index(start_node)]
-            #
-            #         if end_node not in existing_nodes:
-            #             existing_nodes.append(end_node)
-            #             node_end_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(node_number)
-            #             existing_nodes_dict[node_end_name] = end_node
-            #             node_number += 1
-            #         else:
-            #             # node is existing node
-            #             node_end_name = list(existing_nodes_dict.keys())[
-            #                 list(existing_nodes_dict.values()).index(end_node)]
-            #
-            #         # add edge
-            #         existing_edges_dict[node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)] \
-            #             = [node_addition + '_Graph_' + str(graph_number), node_start_name, node_end_name, distance,
-            #                line]
-            #
-            #         # add line
-            #         existing_lines_dict[
-            #             node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)] = line
-            #         edge_number += 1
-            #
-            #         # print(time.time() - now)
-            #
-            #         was_processed = True
+                        edge_key = node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)
+                        existing_edges_dict[edge_key] = [node_addition + '_Graph_' + str(graph_number),
+                                                         node_start_name,
+                                                         node_end_name, distance, line]
+                        existing_lines_dict[edge_key] = line
+                        edge_mapping[edge_string_start_end] = edge_key
+                        edge_mapping[edge_string_end_start] = edge_key
+                        edge_number += 1
+
+                    else:
+                        if edge_string_start_end in edge_mapping.keys():
+                            edge_key = edge_mapping[edge_string_start_end]
+                        else:
+                            edge_key = edge_mapping[edge_string_end_start]
+
+                        print('edge already existing')
+
+                        old_data = existing_edges_dict[edge_key]
+
+                        old_distance = old_data[3]
+
+                        # if distance of new edge is shorter than old one, update distance and line
+                        if distance < old_distance:
+                            existing_edges_dict[edge_key][3] = distance
+                            existing_edges_dict[edge_key][4] = line
+
+                            existing_lines_dict[edge_key] = line
 
         else:
             if network.is_empty:
@@ -608,6 +663,9 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                         distance = e[2]
                         line = e[3]
 
+                        edge_string_start_end = str(e[0]) + '_' + str(e[1])
+                        edge_string_end_start = str(e[1]) + '_' + str(e[0])
+
                         node_start_name = existing_nodes_dict.get(tuple(start_node))
                         if node_start_name is None:
                             node_start_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(
@@ -621,11 +679,37 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                             existing_nodes_dict[tuple(end_node)] = node_end_name
                             node_number += 1
 
-                        edge_key = node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)
-                        existing_edges_dict[edge_key] = [node_addition + '_Graph_' + str(graph_number), node_start_name,
-                                                         node_end_name, distance, line]
-                        existing_lines_dict[edge_key] = line
-                        edge_number += 1
+                        # check if edge exists with same start and end. If so, keep shortest
+                        if ((edge_string_start_end not in edge_mapping.keys())
+                                | (edge_string_end_start not in edge_mapping.keys())):
+
+                            edge_key = node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)
+                            existing_edges_dict[edge_key] = [node_addition + '_Graph_' + str(graph_number),
+                                                             node_start_name,
+                                                             node_end_name, distance, line]
+                            existing_lines_dict[edge_key] = line
+                            edge_mapping[edge_string_start_end] = edge_key
+                            edge_mapping[edge_string_end_start] = edge_key
+                            edge_number += 1
+
+                        else:
+                            if edge_string_start_end in edge_mapping.keys():
+                                edge_key = edge_mapping[edge_string_start_end]
+                            else:
+                                edge_key = edge_mapping[edge_string_end_start]
+
+                            print('edge already existing')
+
+                            old_data = existing_edges_dict[edge_key]
+
+                            old_distance = old_data[3]
+
+                            # if distance of new edge is shorter than old one, update distance and line
+                            if distance < old_distance:
+                                existing_edges_dict[edge_key][3] = distance
+                                existing_edges_dict[edge_key][4] = line
+
+                                existing_lines_dict[edge_key] = line
 
                         was_processed = True
 
@@ -641,6 +725,9 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                     distance = e[2]
                     line = e[3]
 
+                    edge_string_start_end = str(e[0]) + '_' + str(e[1])
+                    edge_string_end_start = str(e[1]) + '_' + str(e[0])
+
                     node_start_name = existing_nodes_dict.get(tuple(start_node))
                     if node_start_name is None:
                         node_start_name = node_addition + '_Graph_' + str(graph_number) + '_Node_' + str(node_number)
@@ -653,11 +740,37 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                         existing_nodes_dict[tuple(end_node)] = node_end_name
                         node_number += 1
 
-                    edge_key = node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)
-                    existing_edges_dict[edge_key] = [node_addition + '_Graph_' + str(graph_number), node_start_name,
-                                                     node_end_name, distance, line]
-                    existing_lines_dict[edge_key] = line
-                    edge_number += 1
+                    # check if edge exists with same start and end. If so, keep shortest
+                    if ((edge_string_start_end not in edge_mapping.keys())
+                            | (edge_string_end_start not in edge_mapping.keys())):
+
+                        edge_key = node_addition + '_Graph_' + str(graph_number) + '_Edge_' + str(edge_number)
+                        existing_edges_dict[edge_key] = [node_addition + '_Graph_' + str(graph_number),
+                                                         node_start_name,
+                                                         node_end_name, distance, line]
+                        existing_lines_dict[edge_key] = line
+                        edge_mapping[edge_string_start_end] = edge_key
+                        edge_mapping[edge_string_end_start] = edge_key
+                        edge_number += 1
+
+                    else:
+                        if edge_string_start_end in edge_mapping.keys():
+                            edge_key = edge_mapping[edge_string_start_end]
+                        else:
+                            edge_key = edge_mapping[edge_string_end_start]
+
+                        print('edge already existing')
+
+                        old_data = existing_edges_dict[edge_key]
+
+                        old_distance = old_data[3]
+
+                        # if distance of new edge is shorter than old one, update distance and line
+                        if distance < old_distance:
+                            existing_edges_dict[edge_key][3] = distance
+                            existing_edges_dict[edge_key][4] = line
+
+                            existing_lines_dict[edge_key] = line
 
                     was_processed = True
 
@@ -701,5 +814,12 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     graphs.drop(edges_to_drop, inplace=True)
     line_data.drop(edges_to_drop, inplace=True)
     nodes.drop(nodes_to_drop, inplace=True)
+
+    # remove duplicate edges and keep shortest
+    graphs.sort_values(by=['distance'], inplace=True)
+    graphs.drop_duplicates(subset=['node_start', 'node_end'], keep='first')
+
+    # todo: anhand der nodes könnte man schauen, welche nodes sehr nah beieinander liegen und dann
+    #  diese zusammenfassen
 
     return line_data, graphs, nodes

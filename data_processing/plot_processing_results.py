@@ -101,22 +101,37 @@ def get_infrastructure_figure(sub_axes, boundaries, link_to_data, fig_title=''):
                          'font.family': 'Times New Roman'})
 
     data_ports = 'ports.csv'
-    data_pipeline_gas = 'gas_pipeline_graphs.csv'
-    data_pipeline_oil = 'oil_pipeline_graphs.csv'
+    data_pipeline_gas_lines = 'gas_pipeline_graphs.csv'
+    data_pipeline_oil_lines = 'oil_pipeline_graphs.csv'
+    data_pipeline_gas_nodes = 'gas_pipeline_node_locations.csv'
+    data_pipeline_oil_nodes = 'oil_pipeline_node_locations.csv'
 
     data_ports = pd.read_csv(link_to_data + data_ports, index_col=0)
-    data_pipeline_gas = gpd.read_file(link_to_data + data_pipeline_gas)
-    data_pipeline_oil = gpd.read_file(link_to_data + data_pipeline_oil)
+    data_pipeline_gas_lines = gpd.read_file(link_to_data + data_pipeline_gas_lines)
+    data_pipeline_oil_lines = gpd.read_file(link_to_data + data_pipeline_oil_lines)
+    data_pipeline_gas_nodes = gpd.read_file(link_to_data + data_pipeline_gas_nodes)
+    data_pipeline_oil_nodes = gpd.read_file(link_to_data + data_pipeline_oil_nodes)
 
     for p in data_ports.index:
         data_ports.loc[p, 'geometry'] = Point([data_ports.loc[p, 'longitude'], data_ports.loc[p, 'latitude']])
     data_ports = gpd.GeoDataFrame(data_ports, geometry='geometry')
 
-    data_pipeline_gas['line'] = data_pipeline_gas['line'].apply(shapely.wkt.loads)
-    data_pipeline_gas = data_pipeline_gas.set_geometry('line')
+    data_pipeline_gas_lines['line'] = data_pipeline_gas_lines['line'].apply(shapely.wkt.loads)
+    data_pipeline_gas_lines = data_pipeline_gas_lines.set_geometry('line')
 
-    data_pipeline_oil['line'] = data_pipeline_oil['line'].apply(shapely.wkt.loads)
-    data_pipeline_oil = data_pipeline_oil.set_geometry('line')
+    data_pipeline_oil_lines['line'] = data_pipeline_oil_lines['line'].apply(shapely.wkt.loads)
+    data_pipeline_oil_lines = data_pipeline_oil_lines.set_geometry('line')
+
+    gas_nodes = []
+    for i in data_pipeline_gas_nodes.index:
+        gas_nodes.append(Point([data_pipeline_gas_nodes.at[i, 'longitude'], data_pipeline_gas_nodes.at[i, 'latitude']]))
+        # plt.text(x=float(data_pipeline_gas_nodes.at[i, 'longitude']), y=float(data_pipeline_gas_nodes.at[i, 'latitude']), s=data_pipeline_gas_nodes.at[i, 'field_1'])
+    data_pipeline_gas_nodes['geometry'] = gas_nodes
+
+    oil_nodes = []
+    for i in data_pipeline_oil_nodes.index:
+        oil_nodes.append(Point([data_pipeline_oil_nodes.at[i, 'longitude'], data_pipeline_oil_nodes.at[i, 'latitude']]))
+    data_pipeline_oil_nodes['geometry'] = oil_nodes
 
     # plot map on axis
     countries = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
@@ -125,18 +140,20 @@ def get_infrastructure_figure(sub_axes, boundaries, link_to_data, fig_title=''):
     countries.plot(color="lightgrey", ax=sub_axes)
 
     data_ports.plot(color="blue", ax=sub_axes, markersize=1, label='Port')
-    data_pipeline_gas.plot(color="red", ax=sub_axes, linewidth=0.5, label='Gas Pipeline')
-    data_pipeline_oil.plot(color="black", ax=sub_axes, linewidth=0.5, label='Oil Pipeline')
+    data_pipeline_gas_lines.plot(color="red", ax=sub_axes, linewidth=0.5, label='Gas Pipeline')
+    data_pipeline_oil_lines.plot(color="black", ax=sub_axes, linewidth=0.5, label='Oil Pipeline')
+    data_pipeline_gas_nodes.plot(color='orange', ax=sub_axes)
+    data_pipeline_oil_nodes.plot(color='grey', ax=sub_axes)
 
     sub_axes.grid(visible=True, alpha=0.5)
     sub_axes.text(0.6, 0.05, fig_title, transform=sub_axes.transAxes, va='bottom', ha='left')
 
-    sub_axes.set_ylabel('')
-    sub_axes.set_xlabel('')
-    sub_axes.set_yticklabels([])
-    sub_axes.set_xticklabels([])
-    sub_axes.set_xticks([])
-    sub_axes.set_yticks([])
+    # sub_axes.set_ylabel('')
+    # sub_axes.set_xlabel('')
+    # sub_axes.set_yticklabels([])
+    # sub_axes.set_xticklabels([])
+    # sub_axes.set_xticks([])
+    # sub_axes.set_yticks([])
 
     sub_axes.set_ylim(boundaries['min_latitude'],
                       boundaries['max_latitude'])
@@ -208,13 +225,8 @@ boundaries = {'min_latitude': min_lat - 2,
               'min_longitude': min_lon - 2,
               'max_longitude': max_lon + 2}
 
-if config_file['use_provided_data']:
-    current_directory = os.getcwd() + '/'
-    path_raw_data = current_directory + 'data/'
-    path_techno_economic_data = current_directory + 'techno_economic_data/'
-else:
-    path_raw_data = config_file['project_folder_path'] + 'data/'
-    path_techno_economic_data = config_file['project_folder_path'] + 'data/'
+path_raw_data = config_file['project_folder_path'] + 'raw_data/'
+path_techno_economic_data = config_file['project_folder_path'] + 'raw_data/'
 
 # plot original data
 # plot_original_pipeline_data()

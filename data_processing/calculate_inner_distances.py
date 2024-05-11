@@ -76,35 +76,81 @@ def calculate_searoute_distances(ports, num_cores, path_processed_data):
     ports_distances.to_csv(path_processed_data + 'inner_infrastructure_distances/' + 'port_distances.csv')
 
 
-def get_distances_within_networks(network_graph_data, path_processed_data, use_low_memory=False):
+def get_distances_within_networks(network_graph_data, path_processed_data, num_workers, use_low_memory=False):
 
     """
     Calculates distances between nodes within each network graph using Dijkstra and saves the distances as HDF5 files.
 
     @param pandas.DataFrame network_graph_data: A pandas DataFrame containing information about network graph edges.
     @param str path_processed_data: Path to the directory where the processed data will be saved.
-    @param bool use_low_memory: indicating of large matrixes can be used or not to calculate distances
+    @param int num_workers: numbers of threads to process distances
+    @param bool use_low_memory: indicating of large matrices can be used or not to calculate distances
 
     """
+
+    def save_distances_columnwise(c):
+        sub_df = all_distances_network_df[[c]]
+        sub_df.to_hdf(path_processed_data + '/inner_infrastructure_distances/' + c + '.h5', key=c, mode='w',
+                      format='table')
+
+    def save_distances_per_node(n):
+        distances = nx.single_source_dijkstra_path_length(graph, n)
+        distances = pd.DataFrame(distances.values(), index=[*distances.keys()], columns=[n])
+
+        # if distances.isnull().values.any():
+        #     print('nan')
+        #
+        # import numpy as np
+        # if not distances[(distances == np.inf).any(axis=1)].empty:
+        #     print('inf')
+
+        distances.to_hdf(path_processed_data + '/inner_infrastructure_distances/' + n + '.h5', n,
+                         mode='w', format='table')
+
+    def create_graphs(graph_id):
+        # create networkx graph
+        graph_local = nx.Graph()
+        edges_graph_local = network_graph_data[network_graph_data['graph'] == graph_id].index
+        for edge in edges_graph_local:
+            node_start = network_graph_data.loc[edge, 'node_start']
+            node_end = network_graph_data.loc[edge, 'node_end']
+            distance = network_graph_data.loc[edge, 'distance']
+            graph_local.add_edge(node_start, node_end, weight=distance)
+
+        if not use_low_memory:
+            all_distances_network = dict(nx.all_pairs_dijkstra_path_length(graph_local))
+            all_distances_network = pd.DataFrame(all_distances_network)
+
+            # save distances as hdf files
+            all_distances_network = all_distances_network.transpose()
+        else:
+            all_distances_network = None
+
+        return graph_id, graph_local, all_distances_network
 
     # save processed data in folder (each network own folder)
     name_folder = path_processed_data + 'inner_infrastructure_distances/'
     if 'inner_infrastructure_distances' not in os.listdir(path_processed_data):
         os.mkdir(name_folder)
 
-    graphs = set(network_graph_data['graph'])
+    graphs = set(sorted(network_graph_data['graph'].tolist()))
 
-    for g in tqdm(graphs):
+    inputs = tqdm(graphs)
+    results = Parallel(n_jobs=num_workers)(delayed(create_graphs)(i) for i in inputs)
 
-        # create networkx graph
-        graph = nx.Graph()
-        edges_graph = network_graph_data[network_graph_data['graph'] == g].index
-        for edge in edges_graph:
-            node_start = network_graph_data.loc[edge, 'node_start']
-            node_end = network_graph_data.loc[edge, 'node_end']
-            distance = network_graph_data.loc[edge, 'distance']
-            graph.add_edge(node_start, node_end, weight=distance)
+    graph_objects = {}
+    for r in results:
+        if not use_low_memory:
+            graph_objects[r[0]] = {'graph': r[1],
+                                   'distances': r[2]}
 
+        else:
+            graph_objects[r[0]] = {'graph': r[1],
+                                   'distances': None}
+
+    for g in graph_objects.keys():
+
+        graph = graph_objects[g]['graph']
         if not nx.is_connected(graph):
             # only for debugging if nodes of a graph are not connected to graph
 
@@ -120,54 +166,34 @@ def get_distances_within_networks(network_graph_data, path_processed_data, use_l
 
         # calculate distance and save in dataframe
         if not use_low_memory:
-            all_distances_network = dict(nx.all_pairs_dijkstra_path_length(graph))
-            all_distances_network_df = pd.DataFrame(all_distances_network)
 
-            # save distances as hdf files
-            all_distances_network_df = all_distances_network_df.transpose()
-            for column in all_distances_network_df.columns:
-                sub_df = all_distances_network_df[[column]]
-
-                sub_df.to_hdf(path_processed_data + '/inner_infrastructure_distances/' + column + '.h5', column, mode='w',
-                              format='table')
+            all_distances_network_df = graph_objects[g]['distances']
+            inputs = tqdm(all_distances_network_df.columns)
+            Parallel(n_jobs=num_workers)(delayed(save_distances_columnwise)(i) for i in inputs)
 
         else:
+            edges_graph = network_graph_data[network_graph_data['graph'] == g].index
             nodes = network_graph_data.loc[edges_graph, 'node_start'].tolist() + network_graph_data.loc[edges_graph, 'node_end'].tolist()
             nodes = list(set(nodes))
 
-            for n in nodes:
-
-                distances = nx.single_source_dijkstra_path_length(graph, n)
-                distances = pd.DataFrame(distances.values(), index=[*distances.keys()], columns=[n])
-
-                if distances.isnull().values.any():
-                    print('nan')
-
-                import numpy as np
-                if not distances[(distances == np.inf).any(axis=1)].empty:
-                    print('inf')
-
-                distances.to_hdf(path_processed_data + '/inner_infrastructure_distances/' + n + '.h5', n,
-                                 mode='w', format='table')
+            inputs = tqdm(nodes)
+            Parallel(n_jobs=num_workers)(delayed(save_distances_per_node)(i) for i in inputs)
 
 
-def get_distances_of_closest_infrastructure(options, path_processed_data):
+def get_distances_of_closest_infrastructure(options, path_processed_data, number_workers):
 
     """
     Finds the distances to the closest infrastructure nodes for each option.
 
     @param pandas.DataFrame options: A DataFrame containing the options data, including latitude, longitude, and graph information.
     @param str path_processed_data: The path to save the processed data.
+    @param int number_workers: Number of threads to process distances
 
     @return: A DataFrame containing the minimal distances and the corresponding closest nodes for each option.
     @rtype: pandas.DataFrame
     """
 
-    minimal_values = {}
-    minimal_value_nodes = {}
-    for i in tqdm(options.index.tolist()):
-
-        minimal_values[i] = math.inf
+    def calculate_distance(i):
 
         latitude = options.at[i, 'latitude']
         longitude = options.at[i, 'longitude']
@@ -177,22 +203,30 @@ def get_distances_of_closest_infrastructure(options, path_processed_data):
         # if we keep i in options, distance will always be 0
         options_without_i = options.copy().drop(i)
 
-        # if i belongs to a infrastructure, remove infrastructure options
+        # if i belongs to an infrastructure, remove options of this infrastructure
         if graph_1 is not None:
             other_options = options_without_i[options_without_i['graph'] != graph_1]
         else:
             other_options = options_without_i.copy()
 
-        distances = pd.DataFrame()
-        distances.index = other_options.index
-        distances['direct_distance'] = calc_distance_list_to_single(other_options['latitude'],
-                                                                    other_options['longitude'],
-                                                                    latitude, longitude)
+        direct_distances = calc_distance_list_to_single(other_options['latitude'], other_options['longitude'],
+                                                        latitude, longitude)
 
-        minimal_values[i] = distances['direct_distance'].min()
-        minimal_value_nodes[i] = distances['direct_distance'].idxmin()
+        distances_df = pd.Series(direct_distances, index=other_options.index)
 
-    distances = pd.DataFrame({'minimal_distance': minimal_values.values(),
-                              'closest_node': minimal_value_nodes.values()},
-                             index=list(minimal_values.keys()))
+        return distances_df.min(), distances_df.idxmin()
+
+    inputs = tqdm(options.index)
+    results = Parallel(n_jobs=number_workers)(delayed(calculate_distance)(i) for i in inputs)
+
+    min_distances = []
+    min_nodes = []
+
+    for r in results:
+        min_distances.append(r[0])
+        min_nodes.append(r[1])
+
+    distances = pd.DataFrame({'minimal_distance': min_distances,
+                              'closest_node': min_nodes},
+                             index=options.index)
     distances.to_csv(path_processed_data + 'minimal_distances.csv')
