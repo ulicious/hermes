@@ -4,10 +4,11 @@ import math
 
 import pandas as pd
 import numpy as np
+import geopandas as gpd
 
 import shapely
 from shapely.geometry import LineString, MultiLineString, Point
-from shapely.ops import unary_union, nearest_points
+from shapely.ops import unary_union
 from vincenty import vincenty
 from geopy.distance import geodesic as calc_distance
 from joblib import Parallel, delayed
@@ -502,14 +503,14 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
         lines = [shapely.wkt.loads(line) for line in network_data['geometry']]
 
         # Split Multilinestring / Linestring into separate LineStrings if intersections exist
+        # merge split lines into single linestring if no intersection exists
         network = unary_union(lines)
         network = shapely.line_merge(network)
 
-        import geopandas as gpd
         if isinstance(network, MultiLineString):
 
-            lines = [l for l in network.geoms]
-            line_gdf = gpd.GeoDataFrame(geometry=lines)
+            network_geoms = [l for l in network.geoms]
+            line_gdf = gpd.GeoDataFrame(geometry=network_geoms)
 
             # start and end is same
             line_gdf["geom_start"] = shapely.get_point(line_gdf.geometry, 0)
@@ -526,15 +527,13 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
 
             def process_parallel_lines(line_index):
 
-                parallel_lines_local = []
+                duplicate_lines = []
 
                 duplicates \
                     = parallel_lines[(parallel_lines['geom_start'] == parallel_lines.at[line_index, 'geom_start'])
                                      & (parallel_lines['geom_end'] == parallel_lines.at[line_index, 'geom_end'])].index
 
                 line_1_local = parallel_lines.at[line_index, 'geometry']
-
-                parallel_lines_local.append(line_1_local)
 
                 for d in duplicates:
                     if line_index == d:
@@ -545,10 +544,10 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                     hausdorff_dist = line_1_local.hausdorff_distance(line_2_local)
 
                     if hausdorff_dist < 1:
-                        parallel_lines_local.append(line_2_local)
+                        duplicate_lines.append([line_index, d])
 
-                if len(parallel_lines_local) > 1:
-                    return parallel_lines_local
+                if duplicate_lines:
+                    return duplicate_lines
 
             inputs = tqdm(parallel_lines.index)
             results = Parallel(n_jobs=number_workers)(delayed(process_parallel_lines)(i) for i in inputs)
@@ -556,26 +555,30 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
             lines_to_remove = []
             for r in results:
                 if r is not None:
-                    line_1 = r[0]
 
-                    for i in range(1, len(r)):
+                    for i in r:
+                        line_1 = i[0]
+                        line_2 = i[1]
 
-                        line_2 = r[i]
-
-                        if line_2 not in lines_to_remove:
-                            if line_1 not in lines_to_remove:
+                        if line_1 not in lines_to_remove:
+                            if line_2 not in lines_to_remove:
                                 lines_to_remove.append(line_1)
-
-            lines = [l for l in network.geoms if l not in lines_to_remove]
-            lines = MultiLineString(lines)
-            lines = shapely.line_merge(lines)
-
-            lines = [l for l in lines.geoms]
 
             # import random
             # import matplotlib.pyplot as plt
             # get_colors = lambda n: ["#%06x" % random.randint(0, 0xFFFFFF) for _ in range(n)]
-            #
+
+            # remove parallel lines and duplicates
+            line_gdf.drop(lines_to_remove, inplace=True)
+            line_gdf.drop_duplicates(subset=['geometry'], inplace=True)
+
+            # merge line segments to whole lines
+            lines = MultiLineString(line_gdf['geometry'].tolist())
+            lines = shapely.line_merge(lines)
+
+            lines = [l for l in lines.geoms]
+            # print(len(lines))
+
             # df = gpd.GeoDataFrame(geometry=lines)
             # df.plot(color=get_colors(len(lines)))
             # plt.show()
