@@ -20,6 +20,8 @@ warnings.filterwarnings('ignore')
 
 def close_gaps(line_combinations, gap_distance=20000):
 
+    # todo: this is way to simple. A lot of unnecessary lines are added
+
     """
     checks all combinations of lines if the distance between the two lines is less than 20,000. If so, a new line is
     added to close the gap
@@ -37,7 +39,7 @@ def close_gaps(line_combinations, gap_distance=20000):
         closest_points = ops.nearest_points(l1, l2)
         distance = calc_distance_single_to_single(closest_points[0].y, closest_points[0].x,
                                                   closest_points[1].y, closest_points[1].x)
-        if distance <= gap_distance:
+        if 100 <= distance <= gap_distance:
             new_line_points = ops.nearest_points(l1, l2)
             l3 = geometry.LineString(new_line_points)
 
@@ -196,6 +198,7 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, use_mi
     # construct geodataframe
     data_new = gpd.GeoDataFrame(pd.Series(data['WKTFormat'].tolist()).apply(shapely.wkt.loads), columns=['geometry'])
     data_new.set_geometry('geometry')
+
     data_new_exploded = data_new.explode(ignore_index=True)
 
     def divide_data(lines_local, chunk_size=100):

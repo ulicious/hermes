@@ -104,7 +104,7 @@ def get_distances_within_networks(network_graph_data, path_processed_data, num_w
         # if not distances[(distances == np.inf).any(axis=1)].empty:
         #     print('inf')
 
-        distances.to_hdf(path_processed_data + '/inner_infrastructure_distances/' + n + '.h5', n,
+        distances.to_hdf(path_processed_data + '/inner_infrastructure_distances/' + n + '.h5', key=n,
                          mode='w', format='table')
 
     def create_graphs(graph_id):
