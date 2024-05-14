@@ -1,6 +1,7 @@
 import itertools
 import os
 import math
+import logging
 
 import pandas as pd
 import numpy as np
@@ -463,10 +464,9 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
 
 def remove_short_edges(graphs, line_data, nodes, number_workers):
 
-    while True:
+    for g in graphs['graph'].unique():
 
-        changes_applied = False
-        for g in graphs['graph'].unique():
+        while True:
 
             g_graphs = graphs[graphs['graph'] == g]
 
@@ -492,63 +492,86 @@ def remove_short_edges(graphs, line_data, nodes, number_workers):
             node_end_df = edges_of_affected_nodes.groupby('node_end')['node_start'].agg(list).to_dict()
 
             from collections import defaultdict
-            combinations = defaultdict(list)
+            nodes_by_nodes = defaultdict(list)
 
             for key in set().union(node_start_df, node_end_df):
                 for dic in [node_start_df, node_end_df]:
                     if key in dic:
-                        combinations[key] += dic[key]
+                        nodes_by_nodes[key] += dic[key]
 
             g_graphs['index'] = g_graphs.index
             node_start_index_df = g_graphs.groupby('node_start')['index'].agg(list).to_dict()
             node_end_index_df = g_graphs.groupby('node_end')['index'].agg(list).to_dict()
 
-            index_of_nodes = defaultdict(list)
+            edges_by_nodes = defaultdict(list)
             for key in set().union(node_start_index_df, node_end_index_df):
                 for dic in [node_start_index_df, node_end_index_df]:
                     if key in dic:
-                        index_of_nodes[key] += dic[key]
+                        edges_by_nodes[key] += dic[key]
 
-            to_process_nodes = set()
+            nodes_by_edges = graphs[['node_start', 'node_end']].to_dict('index')
+
+            to_process_nodes = {}
             simulated_processed_nodes = set()
-            # Iterate over keys (nodes) in reverse order
-            for n in reversed(list(all_nodes)):
+            filtered_nodes = [set()]
+            last_n = None
+            for i, n in enumerate(reversed(list(all_nodes))):
 
                 if n in simulated_processed_nodes:
-                    # If n has been processed before, skip
-                    continue
+                    filtered_nodes.append(filtered_nodes[i-1])
                 else:
-                    # If n has not been processed before, add n and its affected nodes to to_process_nodes
-                    to_process_nodes.add(n)
 
-                    # Add n and its related nodes to simulated_processed_nodes
-                    simulated_processed_nodes.update(combinations[n])
+                    if last_n is None:
+                        to_process_nodes[n] = set()
+
+                    else:
+                        # previously processed nodes are
+                        # 1. the previous node n
+                        # 2. all connected nodes to n where the edge is smaller than the set minimal edge length (=nodes_to_remove)
+                        # 3. all nodes which are connected to the nodes_to_remove as the edges have been processed
+                        # 4. all previously processed node of all n before last_n
+
+                        connected_nodes = []
+                        for node_to_remove in nodes_by_nodes[last_n]:
+                            connected_nodes += nodes_by_nodes[node_to_remove]
+
+                        previously_processed_nodes = set(list(filtered_nodes[i-1]) + [last_n] + nodes_by_nodes[last_n] + connected_nodes)
+
+                        filtered_nodes.append(previously_processed_nodes)
+
+                        to_process_nodes[n] = previously_processed_nodes
+
+                        # add all "processed" nodes to the overall set of all "processed" nodes
+                        simulated_processed_nodes.update(list(filtered_nodes[i-1]) + [last_n] + nodes_by_nodes[last_n] + connected_nodes)
+
+                last_n = n
 
             print(len(to_process_nodes))
 
-            import time
-
-            def process_node(input_local):
-
-                now = time.time()
-
-                n_local = input_local[0]
+            def process_node(n_local):
+                # n_local = input_local[0]
 
                 # print(n_local)
-
-                # graphs_local = input_local[1]
-                # nodes_local = input_local[2]
                 #
+                # print('previously processed nodes')
+                # print(to_process_nodes[n_local])
+                #
+                # print('nodes to remove')
+                # print(nodes_by_nodes[n_local])
+                #
+                # print('nodes connected to nodes to remove')
+
                 processed_edges_local = []
                 edges_to_drop_local = []
 
                 if n_local not in set(affected_nodes):
                     return None
 
-                node_start_object_local = input_local[1]
-                node_end_object_local = input_local[2]
+                # if the node was already processed
+                if n_local in to_process_nodes[n_local]:
+                    return None
 
-                for edge_idx in index_of_nodes[n_local]:
+                for edge_idx in edges_by_nodes[n_local]:
 
                     related_edge = graphs.loc[edge_idx]
 
@@ -557,28 +580,24 @@ def remove_short_edges(graphs, line_data, nodes, number_workers):
 
                     edges_to_drop_local.append(edge_idx)
 
-                    node_start_expression = 'node_start != ' + n_local
-                    node_starts = node_start_object_local.select('/node_start', where=node_start_expression)
-
-                    if edge_idx in node_starts.index:
-                        node_to_remove = node_starts.at[edge_idx]
-
+                    if nodes_by_edges[edge_idx]['node_start'] == n_local:
+                        node_to_remove_local = nodes_by_edges[edge_idx]['node_end']
                     else:
-                        node_end_expression = 'node_end != ' + n_local
-                        node_ends = node_end_object_local.select('/node_end', where=node_end_expression)
+                        node_to_remove_local = nodes_by_edges[edge_idx]['node_start']
 
-                        node_to_remove = node_ends.at[edge_idx]
+                    if node_to_remove_local in to_process_nodes[n_local]:
+                        continue
 
-                    print(node_to_remove)
+                    # print(nodes_by_nodes[node_to_remove_local])
 
-                    for o in index_of_nodes[node_to_remove]:
+                    for o in edges_by_nodes[node_to_remove_local]:
                         if o in edges_to_drop_local:
                             continue
 
                         edge = graphs.loc[[o]]
 
                         # Replace node_to_remove with n and adjust linestring
-                        if edge.at[o, 'node_start'] == node_to_remove:
+                        if edge.at[o, 'node_start'] == node_to_remove_local:
                             edge.at[o, 'node_start'] = n_local
 
                             line = edge.at[o, 'line']
@@ -625,34 +644,14 @@ def remove_short_edges(graphs, line_data, nodes, number_workers):
 
                         processed_edges_local.append(edge)
 
-                # print(n_local + '_last_' + str(time.time() - now))
-                #
-                # return processed_edges_local, edges_to_drop_local
+                # print('--')
 
-            g_graphs_copy = g_graphs.copy()
-            g_graphs_copy['line'] = g_graphs_copy['line'].astype(str)
+                return processed_edges_local, edges_to_drop_local
 
-            node_start_object = pd.HDFStore('node_start.h5', 'w')
-            node_start_object.put('node_start', g_graphs_copy['node_start'], format='table',
-                                  data_columns=['node_start'])
+            inputs = tqdm([*to_process_nodes.keys()])
+            # inputs = tqdm(zip(to_process_nodes, itertools.repeat(node_start_object), itertools.repeat(node_end_object)))
 
-            node_end_object = pd.HDFStore('node_end.h5', 'w')
-            node_end_object.put('node_end', g_graphs_copy['node_end'], format='table', data_columns=['node_end'])
-
-            line_object = pd.HDFStore('line.h5', 'w')
-            line_object.put('line', g_graphs_copy['line'], format='table', data_columns=['line'])
-
-            # inputs = zip(to_process_nodes, itertools.repeat(g_graphs.copy()), itertools.repeat(nodes.copy()))
-            # inputs = to_process_nodes
-            inputs = zip(to_process_nodes, itertools.repeat(node_start_object), itertools.repeat(node_end_object))
-
-            inputs = tqdm(to_process_nodes)
-            results = Parallel(n_jobs=number_workers, prefer="threads")(delayed(process_node)(i) for i in inputs)
-
-            node_start_object.close()
-            node_end_object.close()
-            line_object.close()
-
+            results = Parallel(n_jobs=1, prefer="threads")(delayed(process_node)(i) for i in inputs)
 
             edges_to_drop = []
             processed_edges = []
@@ -667,12 +666,8 @@ def remove_short_edges(graphs, line_data, nodes, number_workers):
             if edges_to_drop:
                 graphs.drop(set(edges_to_drop), inplace=True)
                 line_data.drop(set(edges_to_drop), inplace=True)
-                changes_applied = True
             else:
-                continue
-
-        if not changes_applied:
-            break
+                break
 
     return graphs, line_data
 
@@ -1145,10 +1140,12 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     #
     # graphs = pd.concat(sub_graphs)
 
+    logging.info('Remove short edges')
     graphs, line_data = remove_short_edges(graphs, line_data, nodes, number_workers)
     all_nodes = list(set(graphs['node_start'].tolist() + graphs['node_end'].tolist()))
     nodes = nodes.loc[all_nodes]
 
+    logging.info('Concentrate network nodes')
     graphs, line_data = concentrate_nodes(graphs, line_data, nodes, number_workers)
     all_nodes = list(set(graphs['node_start'].tolist() + graphs['node_end'].tolist()))
     nodes = nodes.loc[all_nodes]
