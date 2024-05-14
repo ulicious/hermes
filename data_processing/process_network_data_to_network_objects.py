@@ -14,6 +14,7 @@ from vincenty import vincenty
 from geopy.distance import geodesic as calc_distance
 from joblib import Parallel, delayed
 from tqdm import tqdm
+from collections import Counter, defaultdict
 
 from algorithm.methods_geographic import calc_distance_list_to_list
 
@@ -471,15 +472,14 @@ def remove_short_edges(graphs, line_data, nodes, number_workers):
             g_graphs = graphs[graphs['graph'] == g]
 
             short_edges = g_graphs[g_graphs['distance'] < 100]
-            print(len(short_edges.index))
+            if len(short_edges.index) == 0:
+                break
 
             affected_nodes = set(short_edges['node_start'].tolist() + short_edges['node_end'].tolist())
             edges_of_affected_nodes = g_graphs[(g_graphs['node_start'].isin(affected_nodes)) | (g_graphs['node_end'].isin(affected_nodes))]
             edges_of_affected_nodes.sort_values(by=['distance'], ascending=False, inplace=True)
 
             node_list = g_graphs['node_start'].tolist() + g_graphs['node_end'].tolist()
-
-            from collections import Counter
 
             # Count occurrences of elements
             counts = Counter(node_list)
@@ -491,7 +491,6 @@ def remove_short_edges(graphs, line_data, nodes, number_workers):
             node_start_df = edges_of_affected_nodes.groupby('node_start')['node_end'].agg(list).to_dict()
             node_end_df = edges_of_affected_nodes.groupby('node_end')['node_start'].agg(list).to_dict()
 
-            from collections import defaultdict
             nodes_by_nodes = defaultdict(list)
 
             for key in set().union(node_start_df, node_end_df):
@@ -513,12 +512,11 @@ def remove_short_edges(graphs, line_data, nodes, number_workers):
 
             to_process_nodes = {}
             simulated_processed_nodes = set()
-            filtered_nodes = [set()]
             last_n = None
-            for i, n in enumerate(reversed(list(all_nodes))):
+            for n in reversed(list(all_nodes)):
 
                 if n in simulated_processed_nodes:
-                    filtered_nodes.append(filtered_nodes[i-1])
+                    continue
                 else:
 
                     if last_n is None:
@@ -531,22 +529,18 @@ def remove_short_edges(graphs, line_data, nodes, number_workers):
                         # 3. all nodes which are connected to the nodes_to_remove as the edges have been processed
                         # 4. all previously processed node of all n before last_n
 
-                        connected_nodes = []
+                        connected_nodes = set()
                         for node_to_remove in nodes_by_nodes[last_n]:
-                            connected_nodes += nodes_by_nodes[node_to_remove]
-
-                        previously_processed_nodes = set(list(filtered_nodes[i-1]) + [last_n] + nodes_by_nodes[last_n] + connected_nodes)
-
-                        filtered_nodes.append(previously_processed_nodes)
-
-                        to_process_nodes[n] = previously_processed_nodes
+                            connected_nodes.update(nodes_by_nodes[node_to_remove])
 
                         # add all "processed" nodes to the overall set of all "processed" nodes
-                        simulated_processed_nodes.update(list(filtered_nodes[i-1]) + [last_n] + nodes_by_nodes[last_n] + connected_nodes)
+                        simulated_processed_nodes.update([last_n] + nodes_by_nodes[last_n] + list(connected_nodes))
+
+                        to_process_nodes[n] = simulated_processed_nodes.copy()
+
+                        simulated_processed_nodes.update(n)
 
                 last_n = n
-
-            print(len(to_process_nodes))
 
             def process_node(n_local):
                 # n_local = input_local[0]
@@ -594,7 +588,7 @@ def remove_short_edges(graphs, line_data, nodes, number_workers):
                         if o in edges_to_drop_local:
                             continue
 
-                        edge = graphs.loc[[o]]
+                        edge = graphs.loc[[o]].copy()
 
                         # Replace node_to_remove with n and adjust linestring
                         if edge.at[o, 'node_start'] == node_to_remove_local:
@@ -649,9 +643,8 @@ def remove_short_edges(graphs, line_data, nodes, number_workers):
                 return processed_edges_local, edges_to_drop_local
 
             inputs = tqdm([*to_process_nodes.keys()])
-            # inputs = tqdm(zip(to_process_nodes, itertools.repeat(node_start_object), itertools.repeat(node_end_object)))
 
-            results = Parallel(n_jobs=1, prefer="threads")(delayed(process_node)(i) for i in inputs)
+            results = Parallel(n_jobs=number_workers, prefer="threads")(delayed(process_node)(i) for i in inputs)
 
             edges_to_drop = []
             processed_edges = []
@@ -1141,13 +1134,27 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     # graphs = pd.concat(sub_graphs)
 
     logging.info('Remove short edges')
+    number_edges_before = len(graphs.index)
+    number_nodes_before = len(nodes.index)
+
     graphs, line_data = remove_short_edges(graphs, line_data, nodes, number_workers)
     all_nodes = list(set(graphs['node_start'].tolist() + graphs['node_end'].tolist()))
     nodes = nodes.loc[all_nodes]
 
+    delta_edges = number_edges_before - len(graphs.index)
+    delta_nodes = number_nodes_before - len(nodes.index)
+    logging.info('Remove edges: ' + str(delta_edges) + ' | removed nodes: ' + str(delta_nodes))
+
     logging.info('Concentrate network nodes')
+    number_edges_before = len(graphs.index)
+    number_nodes_before = len(nodes.index)
+
     graphs, line_data = concentrate_nodes(graphs, line_data, nodes, number_workers)
     all_nodes = list(set(graphs['node_start'].tolist() + graphs['node_end'].tolist()))
     nodes = nodes.loc[all_nodes]
+
+    delta_edges = number_edges_before - len(graphs.index)
+    delta_nodes = number_nodes_before - len(nodes.index)
+    logging.info('Remove edges: ' + str(delta_edges) + ' | removed nodes: ' + str(delta_nodes))
 
     return line_data, graphs, nodes
