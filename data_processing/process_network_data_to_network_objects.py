@@ -1343,7 +1343,7 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     number_edges_before = len(graphs.index)
     number_nodes_before = len(nodes.index)
 
-    graphs.to_csv('/home/localadmin/Dokumente/Transportmodell/graph_pre_removing.csv')
+    # graphs.to_csv('/home/localadmin/Dokumente/Transportmodell/graph_pre_removing.csv')
 
     graphs = remove_short_edges(graphs, nodes, number_workers)
     all_nodes = list(set(graphs['node_start'].tolist() + graphs['node_end'].tolist()))
@@ -1353,7 +1353,7 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     delta_nodes = number_nodes_before - len(nodes.index)
     logging.info('Remove edges: ' + str(delta_edges) + ' | removed nodes: ' + str(delta_nodes))
 
-    graphs.to_csv('/home/localadmin/Dokumente/Transportmodell/graph_post_removing.csv')
+    # graphs.to_csv('/home/localadmin/Dokumente/Transportmodell/graph_post_removing.csv')
 
     # logging.info('Concentrate network nodes')
     # number_edges_before = len(graphs.index)

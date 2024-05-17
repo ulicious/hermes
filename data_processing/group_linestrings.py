@@ -72,7 +72,7 @@ def close_gaps(line_combinations, existing_lines, gap_distance=20000, apply_dupl
 
     new_lines = {}
     line_combinations_dict = {}
-    for lines in tqdm(line_combinations):
+    for lines in line_combinations:
         l1 = lines[0]
         l2 = lines[1]
 
@@ -86,39 +86,27 @@ def close_gaps(line_combinations, existing_lines, gap_distance=20000, apply_dupl
             new_line_points = ops.nearest_points(l1, l2)
             if extend_lines:
 
-                if distance == 0: # todo: make this nice --> check if line 1 or line 2 should be used for new coordinate based on distance --> shorter = better
-                    coords = list(l1.coords)
-                    index = coords.index(new_line_points[0])
+                if distance < 0.001:
+                    # sometimes distances are very short. Here it is possible to get issues with floating
+                    # point errors. Therefore, very short distances are addressed by building a rectangle
+                    # around the connection point and add all 4 edges to the graph
+                    center = Point(closest_points[0])
 
-                    if index == 0:
-                        closest_next_coordinate_1 = Point(coords[index + 1])
-                    elif index == len(coords) - 1:
-                        closest_next_coordinate_1 = Point(coords[index - 1])
-                    else:
-                        if Point(new_line_points[0]).distance(Point(coords[index + 1])) < Point(new_line_points[0]).distance(Point(coords[index - 1])):
-                            closest_next_coordinate_1 = Point(coords[index + 1])
-                        else:
-                            closest_next_coordinate_1 = Point(coords[index - 1])
+                    p1 = Point([center.x - 0.01, center.y + 0.01])
+                    p2 = Point([center.x + 0.01, center.y + 0.01])
+                    p3 = Point([center.x + 0.01, center.y - 0.01])
+                    p4 = Point([center.x - 0.01, center.y - 0.01])
 
-                    if False:
-                        coords = list(l2.coords)
-                        index = coords.index(new_line_points[0])
+                    polygon_around_center = Polygon([p1, p2, p3, p4])
+                    exterior = polygon_around_center.boundary.coords
+                    exterior = [LineString(exterior[k:k + 2]) for k in range(len(exterior) - 1)]
 
-                        if index == 0:
-                            closest_next_coordinate_2 = Point(coords[index + 1])
-                        elif index == len(coords) - 1:
-                            closest_next_coordinate_2 = Point(coords[index - 1])
-                        else:
-                            if Point(new_line_points[0]).distance(Point(coords[index + 1])) < Point(
-                                    new_line_points[0]).distance(Point(coords[index - 1])):
-                                closest_next_coordinate_2 = Point(coords[index + 1])
-                            else:
-                                closest_next_coordinate_2 = Point(coords[index - 1])
+                    for exterior_line in exterior:
+                        if exterior_line not in existing_lines:
+                            new_lines[exterior_line] = 0
 
-                    l3 = extend_line_in_both_directions(closest_next_coordinate_1, new_line_points[1], 0.1)
-
+                    continue
                 else:
-
                     l3 = extend_line_in_both_directions(new_line_points[0], new_line_points[1], 0.1)
 
             else:
@@ -151,8 +139,6 @@ def close_gaps(line_combinations, existing_lines, gap_distance=20000, apply_dupl
                             l3_segments = [l3]
 
                         line_combinations_dict[l1] += l3_segments
-
-    print(len(new_lines))
 
     if apply_duplicate_removing:
 
