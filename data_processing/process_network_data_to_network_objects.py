@@ -6,6 +6,7 @@ import logging
 import pandas as pd
 import numpy as np
 import geopandas as gpd
+import matplotlib.pyplot as plt
 
 import shapely
 from shapely.geometry import LineString, MultiLineString, Point
@@ -17,6 +18,7 @@ from tqdm import tqdm
 from collections import Counter, defaultdict
 
 from algorithm.methods_geographic import calc_distance_list_to_list
+from data_processing._helpers_raw_data_processing import create_random_colors
 
 
 def extend_line_in_one_direction(direction_coordinate, support_coordinate, extension_percentage):
@@ -89,7 +91,7 @@ def extend_line_in_both_directions(coord1, coord2, extension_percentage):
     return extended_linestring
 
 
-def process_network_data_to_network_objects_no_additional_connection_points(name_network, path_network_data):
+def process_network_data_to_network_objects_no_additional_connection_points(name_network, path_network_data, rounding_precision):
 
     """
     This method connects LineStrings of networks to one common network. It does not add additional connection points.
@@ -116,7 +118,7 @@ def process_network_data_to_network_objects_no_additional_connection_points(name
         coords = line.coords
 
         # get start node of line
-        node_start = [round(coords.xy[0][0], 5), round(coords.xy[1][0], 5),
+        node_start = [round(coords.xy[0][0], rounding_precision), round(coords.xy[1][0], rounding_precision),
                       node_addition + '_Graph_' + str(graph_number)]
         if node_start not in existing_nodes:
             # if node does not exist, add new node information
@@ -131,7 +133,7 @@ def process_network_data_to_network_objects_no_additional_connection_points(name
                 list(existing_nodes_dict.values()).index(node_start)]
 
         # get start node of line
-        node_end = [round(coords.xy[0][-1], 5), round(coords.xy[1][-1], 5),
+        node_end = [round(coords.xy[0][-1], rounding_precision), round(coords.xy[1][-1], rounding_precision),
                     node_addition + '_Graph_' + str(graph_number)]
         if node_end not in existing_nodes:
             # if node does not exist, add new node information
@@ -153,8 +155,8 @@ def process_network_data_to_network_objects_no_additional_connection_points(name
         coords_before = None
         distance = 0
         for i_x, x in enumerate(coords.xy[0]):
-            x = round(x, 5)
-            y = round(coords.xy[1][i_x], 5)
+            x = round(x, rounding_precision)
+            y = round(coords.xy[1][i_x], rounding_precision)
 
             if coords_before is not None:
                 distance += vincenty((x, y), (coords_before[0], coords_before[1])) * 1000
@@ -222,7 +224,7 @@ def process_network_data_to_network_objects_no_additional_connection_points(name
     return line_data, graphs, geodata
 
 
-def process_line_super(original_line, minimal_distance_between_node=50000, single_line=False):
+def process_line_super(original_line, minimal_distance_between_node=50000, single_line=False, rounding_precision=10):
     def process_line():
 
         """
@@ -230,7 +232,7 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
 
         if line is longer than minimal_distance_between_node:
         1.) it decides on how many connection points should exist --> at least every minimal_distance_between_node km
-        2.) It iterates over all coordinatess of the line
+        2.) It iterates over all coordinates of the line
             If the coordinate is also a point, node is added
             If the coordinate is not a point, we check if the point lies on the line between two coordinates --> add new node from point coordinate
 
@@ -304,7 +306,7 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
                     # current point c is start of line
 
                     # add p as node to graph
-                    node_start = [round(c.x, 5), round(c.y, 5)]
+                    node_start = [round(c.x, rounding_precision), round(c.y, rounding_precision)]
                     nodes.append(node_start)
                     node_number_local += 1
 
@@ -355,7 +357,7 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
                                 distance += calc_distance((coords_before.y, coords_before.x), (p.y, p.x)).meters
 
                                 # add p as node to graph
-                                node_end = [round(p.x, 5), round(p.y, 5)]
+                                node_end = [round(p.x, rounding_precision), round(p.y, rounding_precision)]
                                 nodes.append(node_end)
                                 node_number_local += 1
 
@@ -405,7 +407,7 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
                                                           (p.y, p.x)).meters
 
                                 # add p as node to graph
-                                node_end = [round(p.x, 5), round(p.y, 5)]
+                                node_end = [round(p.x, rounding_precision), round(p.y, rounding_precision)]
                                 nodes.append(node_end)
                                 node_number_local += 1
 
@@ -427,11 +429,11 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
             # distance is lower than minimal distance between nodes.
             # Therefore, add no more intermediate points and only use boundaries
 
-            node_start = [round(coords.xy[0][0], 5), round(coords.xy[1][0], 5)]
+            node_start = [round(coords.xy[0][0], rounding_precision), round(coords.xy[1][0], rounding_precision)]
             nodes.append(node_start)
             node_number_local += 1
 
-            node_end = [round(coords.xy[0][-1], 5), round(coords.xy[1][-1], 5)]
+            node_end = [round(coords.xy[0][-1], rounding_precision), round(coords.xy[1][-1], rounding_precision)]
             nodes.append(node_end)
             node_number_local += 1
 
@@ -463,9 +465,13 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
     return nodes, edges
 
 
-def remove_short_edges(graphs, line_data, nodes, number_workers, min_distance=5000):
+def remove_short_edges(graphs, nodes, number_workers, min_distance=5000):
 
     for g in graphs['graph'].unique():
+
+        print(g)
+
+        print(len(graphs[graphs['graph'] == g].index))
 
         while True:
 
@@ -475,17 +481,18 @@ def remove_short_edges(graphs, line_data, nodes, number_workers, min_distance=50
             if len(short_edges.index) == 0:
                 break
 
+            print(len(short_edges))
+
             affected_nodes = set(short_edges['node_start'].tolist() + short_edges['node_end'].tolist())
             edges_of_affected_nodes = g_graphs[(g_graphs['node_start'].isin(affected_nodes)) | (g_graphs['node_end'].isin(affected_nodes))]
             edges_of_affected_nodes.sort_values(by=['distance'], ascending=False, inplace=True)
 
             node_list = g_graphs['node_start'].tolist() + g_graphs['node_end'].tolist()
 
-            # Count occurrences of elements
+            # Count occurrences of elements --> nodes with the most short edges will be processed first
             counts = Counter(node_list)
             counts = {element: counts.get(element, 0) for element in affected_nodes}
             counts = dict(sorted(counts.items(), key=lambda item: item[1]))
-            all_nodes = set(counts.keys())
 
             # create dictionary which has affected nodes as key and all connected nodes as values
             node_start_df = edges_of_affected_nodes.groupby('node_start')['node_end'].agg(list).to_dict()
@@ -512,15 +519,17 @@ def remove_short_edges(graphs, line_data, nodes, number_workers, min_distance=50
 
             to_process_nodes = {}
             simulated_processed_nodes = set()
+            simulated_processed_edges = set()
             last_n = None
-            for n in reversed(list(all_nodes)):
+
+            for n in reversed([*counts.keys()]):
 
                 if n in simulated_processed_nodes:
                     continue
                 else:
-
                     if last_n is None:
-                        to_process_nodes[n] = set()
+                        to_process_nodes[n] = {'nodes': set(),
+                                               'edges': set()}
 
                     else:
                         # previously processed nodes are
@@ -532,86 +541,113 @@ def remove_short_edges(graphs, line_data, nodes, number_workers, min_distance=50
                         connected_nodes = set()
                         for node_to_remove in nodes_by_nodes[last_n]:
                             connected_nodes.update(nodes_by_nodes[node_to_remove])
+                            simulated_processed_edges.update(edges_by_nodes[node_to_remove])
 
                         # add all "processed" nodes to the overall set of all "processed" nodes
                         simulated_processed_nodes.update([last_n] + nodes_by_nodes[last_n] + list(connected_nodes))
 
                         # if all to n connected nodes would be processed in an earlier step, then don't process n
                         if not set(nodes_by_nodes[n]).issubset(simulated_processed_nodes):
-                            to_process_nodes[n] = simulated_processed_nodes.copy()
+                            to_process_nodes[n] = {'nodes': simulated_processed_nodes.copy(),
+                                                   'edges': simulated_processed_edges.copy()}
 
-                        simulated_processed_nodes.update(n)
+                        simulated_processed_nodes.update([n])
 
                 last_n = n
 
-            def process_node(n_local):
-                # n_local = input_local[0]
+            print(len(to_process_nodes))
 
-                # print(n_local)
-                #
-                # print('previously processed nodes')
-                # print(to_process_nodes[n_local])
-                #
-                # print('nodes to remove')
-                # print(nodes_by_nodes[n_local])
-                #
-                # print('nodes connected to nodes to remove')
+            def process_node(n_local):
 
                 processed_edges_local = []
-                edges_to_drop_local = []
+                processed_edge_index = set()
+                edges_to_drop_local = set()
 
                 if n_local not in set(affected_nodes):
                     return None
 
                 # if the node was already processed
-                if n_local in to_process_nodes[n_local]:
+                if n_local in to_process_nodes[n_local]['nodes']:
                     return None
 
                 for edge_idx in edges_by_nodes[n_local]:
 
-                    related_edge = graphs.loc[edge_idx]
+                    edge_to_remove = graphs.loc[edge_idx]
 
-                    if related_edge['distance'] >= 100:
+                    # if edge is not smaller than the min distance, it is not removed
+                    if edge_to_remove['distance'] >= min_distance:
                         continue
 
-                    edges_to_drop_local.append(edge_idx)
+                    # if edge will be removed, we don't need to adjust it again
+                    if edge_idx in edges_to_drop_local:
+                        continue
 
+                    if edge_idx in to_process_nodes[n_local]['edges']:
+                        continue
+
+                    # get the node which will be removed
                     if nodes_by_edges[edge_idx]['node_start'] == n_local:
                         node_to_remove_local = nodes_by_edges[edge_idx]['node_end']
                     else:
                         node_to_remove_local = nodes_by_edges[edge_idx]['node_start']
 
-                    if node_to_remove_local in to_process_nodes[n_local]:
+                    if node_to_remove_local in to_process_nodes[n_local]['nodes']:
                         continue
 
-                    # print(nodes_by_nodes[node_to_remove_local])
-
                     for o in edges_by_nodes[node_to_remove_local]:
+
+                        if edge_idx == o:
+                            edges_to_drop_local.update([o])
+                            continue
+
                         if o in edges_to_drop_local:
                             continue
 
-                        edge = graphs.loc[[o]].copy()
+                        if o in processed_edge_index:
+                            continue
+
+                        # check if edge was processed by a previous node
+                        if o in to_process_nodes[n_local]['edges']:
+                            continue
+
+                        # if an edge exists which is between two nodes to remove, we remove the edge
+                        for node_to_remove_local_2 in nodes_by_nodes[node_to_remove_local]:
+                            if node_to_remove_local in to_process_nodes[n_local]['nodes']:
+                                continue
+
+                            edges_node_to_remove_2 = edges_by_nodes[node_to_remove_local_2]
+
+                            if o in edges_node_to_remove_2:
+                                edges_to_drop_local.update([o])
+                                processed_edge_index.update([o])
+                                continue
+
+                        edge_to_adjust = graphs.loc[[o]].copy()
+
+                        if edge_to_adjust.loc[o, 'distance'] == 0:
+                            edge_to_remove.update([o])
+                            continue
 
                         # Replace node_to_remove with n and adjust linestring
-                        if edge.at[o, 'node_start'] == node_to_remove_local:
-                            edge.at[o, 'node_start'] = n_local
+                        if edge_to_adjust.at[o, 'node_start'] == node_to_remove_local:
+                            edge_to_adjust.at[o, 'node_start'] = n_local
 
-                            line = edge.at[o, 'line']
+                            line = edge_to_adjust.at[o, 'line']
                             new_coords = [Point([nodes.at[n_local, 'longitude'], nodes.at[n_local, 'latitude']])]
                             for coords in line.coords[1:]:
                                 new_coords.append(coords)
 
                         else:
-                            edge.at[o, 'node_end'] = n_local
+                            edge_to_adjust.at[o, 'node_end'] = n_local
 
-                            line = edge.at[o, 'line']
+                            line = edge_to_adjust.at[o, 'line']
                             new_coords = []
                             for coords in line.coords[:-1]:
                                 new_coords.append(coords)
                             new_coords.append(Point([nodes.at[n_local, 'longitude'], nodes.at[n_local, 'latitude']]))
 
                         # Update line and distance
-                        edge.at[o, 'line'] = LineString(new_coords)
+                        edge_to_adjust.at[o, 'line'] = LineString(new_coords)
 
                         c_before = None
                         distance = 0
@@ -635,12 +671,40 @@ def remove_short_edges(graphs, line_data, nodes, number_workers, min_distance=50
 
                             c_before = c
 
-                        edge.at[o, 'distance'] = distance
-                        edges_to_drop_local.append(edge_idx)
+                        edge_to_adjust.at[o, 'distance'] = distance
 
-                        processed_edges_local.append(edge)
+                        edges_to_drop_local.update([edge_idx])
 
-                # print('--')
+                        processed_edges_local.append(edge_to_adjust)
+                        processed_edge_index.update([o])
+                        processed_edge_index.update([edge_idx])
+
+                # todo remove if no issues
+                # fig, ax = plt.subplots()
+                # g_graphs = graphs[graphs['graph'] == g]
+                # test = gpd.GeoDataFrame(geometry=g_graphs['line'])
+                # test.plot(ax=ax, color='blue')
+                #
+                # test = gpd.GeoDataFrame(geometry=[Point([nodes.loc[n_local, 'longitude'], nodes.loc[n_local, 'latitude']])])
+                # test.plot(ax=ax, color='yellow')
+                #
+                # fig, ax = plt.subplots()
+                #
+                # test = g_graphs.copy().drop(list(edges_to_drop_local) + list(processed_edge_index))
+                # test = gpd.GeoDataFrame(geometry=test['line'])
+                # test.plot(ax=ax, color='blue')
+                #
+                # test_df = pd.concat(processed_edges_local)
+                # test = gpd.GeoDataFrame(geometry=test_df['line'])
+                # test.plot(ax=ax, color='green')
+                #
+                # test = gpd.GeoDataFrame(geometry=g_graphs.loc[list(edges_to_drop_local), 'line'])
+                # test.plot(ax=ax, color='red', linestyle='dashed')
+                #
+                # test = gpd.GeoDataFrame(geometry=[Point([nodes.loc[n_local, 'longitude'], nodes.loc[n_local, 'latitude']])])
+                # test.plot(ax=ax, color='yellow')
+                #
+                # plt.show()
 
                 return processed_edges_local, edges_to_drop_local
 
@@ -655,20 +719,52 @@ def remove_short_edges(graphs, line_data, nodes, number_workers, min_distance=50
                     processed_edges += r[0]
                     edges_to_drop += r[1]
 
-            if not processed_edges:
-                break
+            # todo remove if no issues
 
-            adjusted_edges = pd.concat(processed_edges)
-            graphs = pd.concat([graphs, adjusted_edges]).reset_index().drop_duplicates(subset='index',
-                                                                                       keep='last').set_index('index')
+            # fig, ax = plt.subplots()
+            #
+            # test = g_graphs.copy().drop(list(edges_to_drop))
+            # test = gpd.GeoDataFrame(geometry=test['line'])
+            # test.plot(ax=ax, color='blue')
+            #
+            # test_df = pd.concat(processed_edges)
+            # test = gpd.GeoDataFrame(geometry=test_df['line'])
+            # test.plot(ax=ax, color='green')
+            #
+            # test = gpd.GeoDataFrame(geometry=g_graphs.loc[edges_to_drop, 'line'])
+            # test.plot(ax=ax, color='red', linestyle='dashed')
+            # plt.show()
 
             if edges_to_drop:
-                graphs.drop(set(edges_to_drop), inplace=True)
-                line_data.drop(set(edges_to_drop), inplace=True)
+                edges_to_drop = set(graphs.index.tolist()).intersection(edges_to_drop)
+                graphs.drop(list(edges_to_drop), inplace=True)
             else:
                 break
 
-    return graphs, line_data
+            if not processed_edges:
+                continue
+
+            # pack all processed edges in a dataframe and remove duplicates
+            adjusted_edges = pd.concat(processed_edges)
+            duplicate_index = adjusted_edges.index.drop_duplicates(keep='first')
+            adjusted_edges = adjusted_edges.loc[duplicate_index]
+
+            # pack old and new edges in single dataframe and remove old ones if duplicates to new ones
+            graphs = pd.concat([graphs, adjusted_edges]).reset_index().drop_duplicates(subset='index',
+                                                                                       keep='last').set_index('index')
+
+            # Some line used same nodes but differently direction regarding start and end
+            dummy_graphs = pd.DataFrame(np.sort(graphs[['node_start', 'node_end']], axis=1), index=graphs.index)
+            affected_index = dummy_graphs[dummy_graphs.duplicated(subset=[0, 1])].index
+            graphs.drop(list(set(affected_index)), inplace=True)
+
+            # import matplotlib.pyplot as plt
+            # g_graphs = graphs[graphs['graph'] == g]
+            # test = gpd.GeoDataFrame(geometry=g_graphs['line'])
+            # test.plot()
+            # plt.show()
+
+    return graphs
 
 
 def concentrate_nodes(graphs, line_data, nodes, number_workers, min_distance=5000):
@@ -677,6 +773,7 @@ def concentrate_nodes(graphs, line_data, nodes, number_workers, min_distance=500
     for g in graphs['graph'].unique():
         while True:
             nodes_g = nodes[nodes['graph'] == g]
+            graph_g = graphs[graphs['graph'] == g]
 
             node_latitude = nodes_g['latitude']
             node_longitude = nodes_g['longitude']
@@ -691,33 +788,71 @@ def concentrate_nodes(graphs, line_data, nodes, number_workers, min_distance=500
                 break
 
             node_order = distances['level_0'].value_counts()
-            print(len(list(set(graphs['node_start'].tolist() + graphs['node_end'].tolist()))))
+            print(len(node_order.index))
 
-            # Since we process nodes in parallel, we cannot assess which nodes have been processed in one of the parallel
-            # processes. Therefore, define beforehand which nodes would have been processed for each node
+            # create dictionary which has affected nodes as key and all connected nodes as values
+            node_start_df = graph_g.groupby('node_start')['node_end'].agg(list).to_dict()
+            node_end_df = graph_g.groupby('node_end')['node_start'].agg(list).to_dict()
 
-            to_process_nodes = []
-            filtered_nodes = [[]]
-            simulated_processed_nodes = []
-            i = 0
+            nodes_by_node = defaultdict(list)
+
+            for key in set().union(node_start_df, node_end_df):
+                for dic in [node_start_df, node_end_df]:
+                    if key in dic:
+                        nodes_by_node[key] += dic[key]
+
+            graph_g['index'] = graph_g.index
+            node_start_index_df = graph_g.groupby('node_start')['index'].agg(list).to_dict()
+            node_end_index_df = graph_g.groupby('node_end')['index'].agg(list).to_dict()
+
+            edges_by_nodes = defaultdict(list)
+            for key in set().union(node_start_index_df, node_end_index_df):
+                for dic in [node_start_index_df, node_end_index_df]:
+                    if key in dic:
+                        edges_by_nodes[key] += dic[key]
+
+            nodes_by_edges = graphs[['node_start', 'node_end']].to_dict('index')
+
+            # Since we process nodes in parallel, we cannot assess which nodes have been processed in one of
+            # the parallel processes. Therefore, define beforehand which nodes would have been processed for each node
+            to_process_nodes = {}
+            simulated_processed_nodes = set()
+            last_n = None
+
             for n in node_order.index:
 
                 if n in simulated_processed_nodes:
-                    # if n had been processed before, no new nodes are processed
                     continue
                 else:
-                    # if n had not been processed before, n and all affected nodes will be processed
-                    to_process_nodes.append(n)
-                    filtered_nodes.append(filtered_nodes[i] + [n] + distances[distances['level_0'] == n]['level_1'].values.tolist())
-                    simulated_processed_nodes += [n]
-                    simulated_processed_nodes += distances[distances['level_0'] == n]['level_1'].values.tolist()
 
-                    i += 1
+                    if last_n is None:
+                        to_process_nodes[n] = set()
 
-            def process_node(input_local):
+                    else:
+                        # previously processed nodes are
+                        # 1. the previous node n
+                        # 2. all connected nodes to n where the edge is smaller than the set minimal edge length (=nodes_to_remove)
+                        # 3. all nodes which are connected to the nodes_to_remove as the edges have been processed
+                        # 4. all previously processed node of all n before last_n
 
-                n_local = input_local[0]
-                filtered_nodes_local = input_local[1]
+                        connected_nodes = set()
+                        for node_to_remove in nodes_by_node[last_n]:
+                            connected_nodes.update(nodes_by_node[node_to_remove])
+
+                        # add all "processed" nodes to the overall set of all "processed" nodes
+                        simulated_processed_nodes.update([last_n] + nodes_by_node[last_n] + list(connected_nodes))
+
+                        # if all to n connected nodes would be processed in an earlier step, then don't process n
+                        if not set(nodes_by_node[n]).issubset(simulated_processed_nodes):
+                            to_process_nodes[n] = simulated_processed_nodes.copy()
+
+                        simulated_processed_nodes.update(n)
+
+                last_n = n
+
+            def process_node(n_local):
+
+                filtered_nodes_local = to_process_nodes[n_local]
 
                 changed_edges = []
                 edges_to_drop_local = []
@@ -725,23 +860,17 @@ def concentrate_nodes(graphs, line_data, nodes, number_workers, min_distance=500
                 if n_local in filtered_nodes_local:
                     return None
 
-                affected_nodes = distances[distances['level_0'] == n_local]['level_1'].values
-
-                for node_to_remove in affected_nodes:
-
-                    # nodes don't belong to same graph --> no concentration
-                    if nodes_g.at[node_to_remove, 'graph'] != nodes_g.at[n_local, 'graph']:
-                        continue
+                for node_to_remove_local in nodes_by_node[n_local]:
 
                     # get all edges which are connected to node_to_remove
-                    other_edges = graphs[(graphs['node_start'] == node_to_remove) | (graphs['node_end'] == node_to_remove)]
+                    for o in edges_by_nodes[node_to_remove_local]:
+                        if o in edges_to_drop_local:
+                            continue
 
-                    for o in other_edges.index:
-
-                        edge = other_edges.loc[[o], :]
+                        edge = graphs.loc[[o], :]
 
                         # replace node_to_remove with n
-                        if edge.at[o, 'node_start'] == node_to_remove:
+                        if edge.at[o, 'node_start'] == node_to_remove_local:
                             edge.at[o, 'node_start'] = n_local
 
                             # process linestring accordingly
@@ -795,11 +924,7 @@ def concentrate_nodes(graphs, line_data, nodes, number_workers, min_distance=500
 
                 return changed_edges, edges_to_drop_local
 
-            inputs = []
-            for i, n in enumerate(to_process_nodes):
-                inputs.append([n, filtered_nodes[i]])
-
-            inputs = tqdm(inputs)
+            inputs = tqdm([*to_process_nodes.keys()])
             results = Parallel(n_jobs=number_workers)(delayed(process_node)(i) for i in inputs)
 
             edges_to_drop = []
@@ -817,20 +942,19 @@ def concentrate_nodes(graphs, line_data, nodes, number_workers, min_distance=500
             graphs = pd.concat([graphs, adjusted_edges]).reset_index().drop_duplicates(subset='index',
                                                                                        keep='last').set_index('index')
 
-            graphs.drop(edges_to_drop, inplace=True)
+            graphs.drop(list(set(edges_to_drop)), inplace=True)
 
             dummy_graphs = pd.DataFrame(np.sort(graphs[['node_start', 'node_end']], axis=1), index=graphs.index)
             affected_index = dummy_graphs[dummy_graphs.duplicated(subset=[0, 1])].index
 
             graphs.drop(affected_index, inplace=True)
-            line_data.drop(affected_index, inplace=True)
 
-            all_nodes = list(set(graphs['node_start'].tolist() + graphs['node_end'].tolist()))
-            print(len(all_nodes))
+            import matplotlib.pyplot as plt
+            test = gpd.GeoDataFrame(geometry=graphs['line'])
+            test.plot()
+            plt.show()
 
-            nodes = nodes.loc[all_nodes]
-
-    return graphs, line_data
+    return graphs
 
 
 def process_network_data_to_network_objects_with_additional_connection_points(name_network, path_network_data,
@@ -851,6 +975,8 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
              - geodata: DataFrame containing geospatial information about the nodes.
     """
 
+    rounding_precision = 10
+
     existing_nodes_dict = {}
     existing_edges_dict = {}
     existing_lines_dict = {}
@@ -866,15 +992,21 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     files = sorted(os.listdir(path_network_data))
     for file in tqdm(files):
 
+        # if '566' not in file:
+        #     continue
+
         graph_number = int(file.split('_')[-1].split('.')[0])
         node_number = 0
         edge_number = 0
-        edge_mapping = {}
 
         was_processed = False
 
         network_data = pd.read_csv(path_network_data + file, index_col=0, sep=';')
         lines = [shapely.wkt.loads(line) for line in network_data['geometry']]
+
+        # test = gpd.GeoDataFrame(geometry=lines)
+        # test.plot()
+        # plt.show()
 
         # Split Multilinestring / Linestring into separate LineStrings if intersections exist
         # merge split lines into single linestring if no intersection exists
@@ -934,13 +1066,10 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                         line_1 = i[0]
                         line_2 = i[1]
 
+                        # only one of the parallel lines is removed
                         if line_1 not in lines_to_remove:
                             if line_2 not in lines_to_remove:
                                 lines_to_remove.append(line_1)
-
-            import random
-            import matplotlib.pyplot as plt
-            get_colors = lambda n: ["#%06x" % random.randint(0, 0xFFFFFF) for _ in range(n)]
 
             # remove parallel lines and duplicates
             line_gdf.drop(lines_to_remove, inplace=True)
@@ -950,10 +1079,9 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
             lines = MultiLineString(line_gdf['geometry'].tolist())
             lines = shapely.line_merge(lines)
             lines = [l for l in lines.geoms]
-            # print(len(lines))
 
-            # df = gpd.GeoDataFrame(geometry=lines)
-            # df.plot(color=get_colors(len(lines)))
+            # test = gpd.GeoDataFrame(geometry=lines)
+            # test.plot(color=create_random_colors(len(test.index)))
             # plt.show()
 
             inputs = tqdm(lines)
@@ -966,12 +1094,44 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                 edges = r[1]
 
                 for e in edges:
-                    start_node = e[0].copy()
-                    start_node.append(node_addition + '_Graph_' + str(graph_number))
-                    end_node = e[1].copy()
-                    end_node.append(node_addition + '_Graph_' + str(graph_number))
+                    e = e.copy()
+
+                    if e[0] == e[1]:
+                        continue
+
+                    start_node = [round(e[0][0], rounding_precision), round(e[0][1], rounding_precision),
+                                  node_addition + '_Graph_' + str(graph_number)]
+                    end_node = [round(e[1][0], rounding_precision), round(e[1][1], rounding_precision),
+                                node_addition + '_Graph_' + str(graph_number)]
                     distance = e[2]
                     line = e[3]
+
+                    if distance == 0:
+                        continue
+
+                    if line.is_closed:
+                        new_coords = []
+                        old_coord = None
+                        distance = 0
+                        for coord in line.coords:
+                            if coord not in new_coords:
+                                new_coords.append((round(coord[0], rounding_precision), round(coord[1], rounding_precision)))
+
+                                if old_coord is not None:
+                                    distance += calc_distance((round(old_coord[1], rounding_precision), round(old_coord[0], rounding_precision)),
+                                                              (round(coord[1], rounding_precision), round(coord[0], rounding_precision))).meters
+
+                            old_coord = coord
+
+                        if distance == 0:
+                            continue
+
+                        line = LineString(new_coords)
+
+                        start_node = list(line.coords[0])
+                        start_node.append(node_addition + '_Graph_' + str(graph_number))
+                        end_node = list(line.coords[-1])
+                        end_node.append(node_addition + '_Graph_' + str(graph_number))
 
                     node_start_name = existing_nodes_dict.get(tuple(start_node))
                     if node_start_name is None:
@@ -1004,12 +1164,44 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                     nodes, edges = process_line_super(line)
 
                     for e in edges:
-                        start_node = e[0].copy()
-                        start_node.append(node_addition + '_Graph_' + str(graph_number))
-                        end_node = e[1].copy()
-                        end_node.append(node_addition + '_Graph_' + str(graph_number))
+                        e = e.copy()
+
+                        if e[0] == e[1]:
+                            continue
+
+                        start_node = [round(e[0][0], rounding_precision), round(e[0][1], rounding_precision),
+                                      node_addition + '_Graph_' + str(graph_number)]
+                        end_node = [round(e[1][0], rounding_precision), round(e[1][1], rounding_precision),
+                                    node_addition + '_Graph_' + str(graph_number)]
                         distance = e[2]
                         line = e[3]
+
+                        if distance == 0:
+                            continue
+
+                        if line.is_closed:
+                            new_coords = []
+                            old_coord = None
+                            distance = 0
+                            for coord in line.coords:
+                                if coord not in new_coords:
+                                    new_coords.append((round(coord[0], rounding_precision), round(coord[1], rounding_precision)))
+
+                                    if old_coord is not None:
+                                        distance += calc_distance((round(old_coord[1], rounding_precision), round(old_coord[0], rounding_precision)),
+                                                                  (round(coord[1], rounding_precision), round(coord[0], rounding_precision))).meters
+
+                                old_coord = coord
+
+                            if distance == 0:
+                                continue
+
+                            line = LineString(new_coords)
+
+                            start_node = list(line.coords[0])
+                            start_node.append(node_addition + '_Graph_' + str(graph_number))
+                            end_node = list(line.coords[-1])
+                            end_node.append(node_addition + '_Graph_' + str(graph_number))
 
                         node_start_name = existing_nodes_dict.get(tuple(start_node))
                         if node_start_name is None:
@@ -1038,12 +1230,42 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
                 nodes, edges = process_line_super(line, single_line=True)
 
                 for e in edges:
-                    start_node = e[0].copy()
-                    start_node.append(node_addition + '_Graph_' + str(graph_number))
-                    end_node = e[1].copy()
-                    end_node.append(node_addition + '_Graph_' + str(graph_number))
+                    e = e.copy()
+
+                    if e[0] == e[1]:
+                        continue
+
+                    start_node = [round(e[0][0], rounding_precision), round(e[0][1], rounding_precision), node_addition + '_Graph_' + str(graph_number)]
+                    end_node = [round(e[1][0], rounding_precision), round(e[1][1], rounding_precision), node_addition + '_Graph_' + str(graph_number)]
                     distance = e[2]
                     line = e[3]
+
+                    if distance == 0:
+                        continue
+
+                    if line.is_closed:
+                        new_coords = []
+                        old_coord = None
+                        distance = 0
+                        for coord in line.coords:
+                            if coord not in new_coords:
+                                new_coords.append((round(coord[0], rounding_precision), round(coord[1], rounding_precision)))
+
+                                if old_coord is not None:
+                                    distance += calc_distance((round(old_coord[1], rounding_precision), round(old_coord[0], rounding_precision)),
+                                                              (round(coord[1], rounding_precision), round(coord[0], rounding_precision))).meters
+
+                            old_coord = coord
+
+                        if distance == 0:
+                            continue
+
+                        line = LineString(new_coords)
+
+                        start_node = list(line.coords[0])
+                        start_node.append(node_addition + '_Graph_' + str(graph_number))
+                        end_node = list(line.coords[-1])
+                        end_node.append(node_addition + '_Graph_' + str(graph_number))
 
                     node_start_name = existing_nodes_dict.get(tuple(start_node))
                     if node_start_name is None:
@@ -1076,6 +1298,11 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     nodes = pd.DataFrame.from_dict(existing_nodes_dict, orient='index', columns=['longitude', 'latitude', 'graph'])
     line_data = pd.DataFrame.from_dict(existing_lines_dict, orient='index', columns=['geometry'])
 
+    # Some line used same nodes but differently direction regarding start and end
+    dummy_graphs = pd.DataFrame(np.sort(graphs[['node_start', 'node_end']], axis=1), index=graphs.index)
+    affected_index = dummy_graphs[dummy_graphs.duplicated(subset=[0, 1])].index
+    graphs.drop(list(set(affected_index)), inplace=True)
+
     # finally, remove lines which are not used to connect other lines and are less than 10 km long
     # Such have been added in the scaling process to ensure that lines are properly connected
     edges_to_drop = []
@@ -1107,47 +1334,18 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     line_data.drop(edges_to_drop, inplace=True)
     nodes.drop(nodes_to_drop, inplace=True)
 
-    # # divide data into sub data for fast processing
-    # # Define the bounding box of the world
-    # world_bounds = (-180, -90, 180, 90)  # (minx, miny, maxx, maxy)
-    #
-    # # Define the number of rows and columns
-    # num_rows = 3
-    # num_cols = 4
-    #
-    # # Calculate the width and height of each cell
-    # cell_width = (world_bounds[2] - world_bounds[0]) / num_cols
-    # cell_height = (world_bounds[3] - world_bounds[1]) / num_rows
-    #
-    # # Create polygons for each cell
-    # sub_graphs = []
-    # for row in range(num_rows):
-    #     for col in range(num_cols):
-    #         minx = world_bounds[0] + col * cell_width
-    #         miny = world_bounds[1] + row * cell_height
-    #         maxx = minx + cell_width
-    #         maxy = miny + cell_height
-    #         polygon = shapely.geometry.Polygon([(minx, miny), (minx, maxy), (maxx, maxy), (maxx, miny)])
-    #
-    #         sub_graph = graphs[graphs['line'].apply(lambda line: line.within(polygon))]
-    #
-    #         # remove duplicate edges and keep shortest
-    #         sub_graph.sort_values(by=['distance'], inplace=True)
-    #         # graphs.drop_duplicates(subset=['node_start', 'node_end'], keep='first')
-    #
-    #         sub_graph, line_data = remove_short_edges(sub_graph, line_data, nodes, number_workers)
-    #
-    #         # sub_graph, line_data = concentrate_nodes(sub_graph, line_data, nodes, number_workers)
-    #
-    #         sub_graphs.append(sub_graph)
-    #
-    # graphs = pd.concat(sub_graphs)
+    # Some line used same nodes but differently direction regarding start and end
+    dummy_graphs = pd.DataFrame(np.sort(graphs[['node_start', 'node_end']], axis=1), index=graphs.index)
+    affected_index = dummy_graphs[dummy_graphs.duplicated(subset=[0, 1])].index
+    graphs.drop(list(set(affected_index)), inplace=True)
 
     logging.info('Remove short edges')
     number_edges_before = len(graphs.index)
     number_nodes_before = len(nodes.index)
 
-    graphs, line_data = remove_short_edges(graphs, line_data, nodes, number_workers)
+    graphs.to_csv('/home/localadmin/Dokumente/Transportmodell/graph_pre_removing.csv')
+
+    graphs = remove_short_edges(graphs, nodes, number_workers)
     all_nodes = list(set(graphs['node_start'].tolist() + graphs['node_end'].tolist()))
     nodes = nodes.loc[all_nodes]
 
@@ -1155,16 +1353,20 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     delta_nodes = number_nodes_before - len(nodes.index)
     logging.info('Remove edges: ' + str(delta_edges) + ' | removed nodes: ' + str(delta_nodes))
 
-    logging.info('Concentrate network nodes')
-    number_edges_before = len(graphs.index)
-    number_nodes_before = len(nodes.index)
+    graphs.to_csv('/home/localadmin/Dokumente/Transportmodell/graph_post_removing.csv')
 
-    graphs, line_data = concentrate_nodes(graphs, line_data, nodes, number_workers)
-    all_nodes = list(set(graphs['node_start'].tolist() + graphs['node_end'].tolist()))
-    nodes = nodes.loc[all_nodes]
+    # logging.info('Concentrate network nodes')
+    # number_edges_before = len(graphs.index)
+    # number_nodes_before = len(nodes.index)
+    #
+    # graphs, line_data = concentrate_nodes(graphs, line_data, nodes, number_workers)
+    # all_nodes = list(set(graphs['node_start'].tolist() + graphs['node_end'].tolist()))
+    # nodes = nodes.loc[all_nodes]
+    #
+    # delta_edges = number_edges_before - len(graphs.index)
+    # delta_nodes = number_nodes_before - len(nodes.index)
+    # logging.info('Remove edges: ' + str(delta_edges) + ' | removed nodes: ' + str(delta_nodes))
 
-    delta_edges = number_edges_before - len(graphs.index)
-    delta_nodes = number_nodes_before - len(nodes.index)
-    logging.info('Remove edges: ' + str(delta_edges) + ' | removed nodes: ' + str(delta_nodes))
+    plt.show()
 
-    return line_data, graphs, nodes
+    return graphs, nodes

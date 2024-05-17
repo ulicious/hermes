@@ -112,46 +112,42 @@ if not update_only_conversion_costs_and_efficiency:
     path_gas_pipeline_data = path_processed_data + 'gas_network_data/'
     path_oil_pipeline_data = path_processed_data + 'oil_network_data/'
 
-    if not (('gas_pipeline_graphs_object.csv' in files_in_folder) & ('gas_pipeline_graphs.csv' in files_in_folder)
-            & ('gas_pipeline_node_locations.csv' in files_in_folder) & (not enforce_update_of_data)):
+    if not (('gas_pipeline_graphs.csv' in files_in_folder) & ('gas_pipeline_node_locations.csv' in files_in_folder)
+            & (not enforce_update_of_data)):
         if use_minimal_example:
-            gas_lines, gas_graph, gas_nodes \
+            gas_graph, gas_nodes \
                 = process_network_data_to_network_objects_with_additional_connection_points('gas_pipeline', path_gas_pipeline_data,
                                                                                             minimal_distance_between_node=100000,
                                                                                             number_workers=num_cores)
         else:
-            gas_lines, gas_graph, gas_nodes \
+            gas_graph, gas_nodes \
                 = process_network_data_to_network_objects_with_additional_connection_points('gas_pipeline',
                                                                                             path_gas_pipeline_data,
                                                                                             number_workers=num_cores)
 
-        gas_lines.to_csv(path_processed_data + 'gas_pipeline_graphs_object.csv')
         gas_graph.to_csv(path_processed_data + 'gas_pipeline_graphs.csv')
         gas_nodes.to_csv(path_processed_data + 'gas_pipeline_node_locations.csv')
 
     else:
-        gas_lines = pd.read_csv(path_processed_data + 'gas_pipeline_graphs_object.csv', index_col=0)
         gas_graph = pd.read_csv(path_processed_data + 'gas_pipeline_graphs.csv', index_col=0)
         gas_nodes = pd.read_csv(path_processed_data + 'gas_pipeline_node_locations.csv', index_col=0)
 
-    if not (('oil_pipeline_graphs_object.csv' in files_in_folder) & ('oil_pipeline_graphs.csv' in files_in_folder)
-            & ('oil_pipeline_node_locations.csv' in files_in_folder) & (not enforce_update_of_data)):
+    if not (('oil_pipeline_graphs.csv' in files_in_folder) & ('oil_pipeline_node_locations.csv' in files_in_folder)
+            & (not enforce_update_of_data)):
         if use_minimal_example:
-            oil_lines, oil_graph, oil_nodes \
+            oil_graph, oil_nodes \
                 = process_network_data_to_network_objects_with_additional_connection_points('oil_pipeline', path_oil_pipeline_data,
                                                                                             minimal_distance_between_node=100000,
                                                                                             number_workers=num_cores)
         else:
-            oil_lines, oil_graph, oil_nodes \
+            oil_graph, oil_nodes \
                 = process_network_data_to_network_objects_with_additional_connection_points('oil_pipeline', path_oil_pipeline_data,
                                                                                             number_workers=num_cores)
 
-        oil_lines.to_csv(path_processed_data + 'oil_pipeline_graphs_object.csv')
         oil_graph.to_csv(path_processed_data + 'oil_pipeline_graphs.csv')
         oil_nodes.to_csv(path_processed_data + 'oil_pipeline_node_locations.csv')
 
     else:
-        oil_lines = pd.read_csv(path_processed_data + 'oil_pipeline_graphs_object.csv', index_col=0)
         oil_graph = pd.read_csv(path_processed_data + 'oil_pipeline_graphs.csv', index_col=0)
         oil_nodes = pd.read_csv(path_processed_data + 'oil_pipeline_node_locations.csv', index_col=0)
 
@@ -168,7 +164,7 @@ if not update_only_conversion_costs_and_efficiency:
         logging.info('Calculate inner infrastructure distances')
 
         if not (('inner_infrastructure_distances' in files_in_folder) & (not enforce_update_of_data)):
-            get_distances_within_networks(gas_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
+            # get_distances_within_networks(gas_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
             get_distances_within_networks(oil_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
             calculate_searoute_distances(ports, num_cores, path_processed_data)
 

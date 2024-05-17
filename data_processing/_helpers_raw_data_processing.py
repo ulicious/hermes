@@ -32,3 +32,9 @@ def calculate_conversion_costs(specific_investment, depreciation_period, fixed_m
         + nitrogen_costs * nitrogen_demand + heat_demand * heat_costs
 
     return conversion_costs
+
+
+def create_random_colors(n):
+    import random
+
+    return ["#%06x" % random.randint(0, 0xFFFFFF) for _ in range(n)]

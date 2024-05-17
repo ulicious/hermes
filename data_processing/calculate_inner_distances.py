@@ -88,21 +88,25 @@ def get_distances_within_networks(network_graph_data, path_processed_data, num_w
 
     """
 
-    def save_distances_columnwise(c):
-        sub_df = all_distances_network_df[[c]]
-        sub_df.to_hdf(path_processed_data + '/inner_infrastructure_distances/' + c + '.h5', key=c, mode='w',
+    def save_distances_columnwise(inp):
+        # sub_df = all_distances_network_df[[c]]
+
+        column_index = inp[0]
+        column = inp[1]
+
+        sub_df = pd.DataFrame(all_distances_network_np[column_index], index=all_distances_index, columns=[column])
+        sub_df.fillna(math.inf, inplace=True)
+
+        sub_df.to_hdf(path_processed_data + '/inner_infrastructure_distances/' + column + '.h5', key=column, mode='w',
                       format='table')
+
+        # sub_df.to_hdf(path_processed_data + '/inner_infrastructure_distances/' + c + '.h5', key=c, mode='w',
+        #               format='table')
 
     def save_distances_per_node(n):
         distances = nx.single_source_dijkstra_path_length(graph, n)
         distances = pd.DataFrame(distances.values(), index=[*distances.keys()], columns=[n])
-
-        # if distances.isnull().values.any():
-        #     print('nan')
-        #
-        # import numpy as np
-        # if not distances[(distances == np.inf).any(axis=1)].empty:
-        #     print('inf')
+        distances.fillna(math.inf, inplace=True)
 
         distances.to_hdf(path_processed_data + '/inner_infrastructure_distances/' + n + '.h5', key=n,
                          mode='w', format='table')
@@ -123,6 +127,7 @@ def get_distances_within_networks(network_graph_data, path_processed_data, num_w
 
             # save distances as hdf files
             all_distances_network = all_distances_network.transpose()
+
         else:
             all_distances_network = None
 
@@ -160,15 +165,82 @@ def get_distances_within_networks(network_graph_data, path_processed_data, num_w
             subgraph_nodes = []
             i = 0
             for i, nodes in enumerate(sub_graphs):
+                print(len(nodes))
                 subgraph_nodes.append(nodes)
 
-            print('number of subgraphs: ' + str(i+1))
+            print('number of subgraphs: ' + str(i + 1))
+
+            # from data_processing.group_linestrings import process_line_strings
+            # import shapely
+            #
+            # s = network_graph_data[network_graph_data['graph'] == g]['line'].apply(shapely.wkt.loads).tolist()
+            # s = process_line_strings(s, num_workers)
+            #
+            # if len(s) > 1:
+            #     # if two geometries, just create two graphs
+            #     print('updated does fit but two graphs')
+            # else:
+            #     s = s[0]
+            #
+            #     s = shapely.unary_union(s)
+            #     graph = nx.Graph()
+            #     nodes = {}
+            #     node_number = 0
+            #     edge_number = 0
+            #     edges = []
+            #     edges_to_linestring = {}
+            #     for line_string in s.geoms:
+            #         start_point = (round(line_string.coords[0][0], 10), round(line_string.coords[0][1], 10))
+            #         if start_point not in [*nodes.keys()]:
+            #             nodes[start_point] = node_number
+            #             node_number += 1
+            #
+            #         end_point = (round(line_string.coords[-1][0], 10), round(line_string.coords[-1][1], 10))
+            #         if end_point not in [*nodes.keys()]:
+            #             nodes[end_point] = node_number
+            #             node_number += 1
+            #
+            #         graph.add_edge(nodes[start_point], nodes[end_point], name=edge_number)
+            #         edges.append((nodes[start_point], nodes[end_point]))
+            #         edges_to_linestring[(nodes[start_point], nodes[end_point])] = line_string
+            #         edges_to_linestring[(nodes[end_point], nodes[start_point])] = line_string
+            #         edge_number += 1
+            #
+            #     if not nx.is_connected(graph):
+            #         # sub_graphs = nx.connected_components(graph)
+            #         # for sg_nodes in sub_graphs:
+            #         #     sg_edges = graph.subgraph(sg_nodes).edges
+            #         #
+            #         #     subgraph_lines = []
+            #         #     for e in sg_edges:
+            #         #         subgraph_lines.append(edges_to_linestring[e])
+            #         #
+            #         #     checked_single_lines.update([MultiLineString(subgraph_lines)])
+            #         #
+            #         # break
+            #         print('updated does not fit')
+            #     else:
+            #         print('updated data fits')
+            #
+            # continue
 
         # calculate distance and save in dataframe
         if not use_low_memory:
 
             all_distances_network_df = graph_objects[g]['distances']
-            inputs = tqdm(all_distances_network_df.columns)
+
+            all_distances_columns = all_distances_network_df.columns
+            all_distances_index = all_distances_network_df.index
+
+            all_distances_network_np = all_distances_network_df.to_numpy()
+
+            inputs = []
+            for i, c in enumerate(all_distances_columns):
+                inputs.append((i, c))
+
+            inputs = tqdm(inputs)
+
+            # inputs = tqdm(all_distances_network_df.columns)
             Parallel(n_jobs=num_workers)(delayed(save_distances_columnwise)(i) for i in inputs)
 
         else:

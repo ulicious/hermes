@@ -187,20 +187,22 @@ def plot_unprocessed_pipelines():
                 colors.append('#%02x%02x%02x' % (int(r * 255), int(g * 255), int(b * 255)))
             return colors
 
-        c = generate_random_colors(len(lines))
+        c = generate_random_colors(len(lines))[0]
 
         gdf = gpd.GeoDataFrame(geometry=lines)
 
-        gdf.plot(color=c)
-
-        plt.show()
+        gdf.plot(color=c, ax=ax)
 
     networks = os.listdir(path_processed_data + 'gas_network_data/')
+    fig, ax = plt.subplots()
     for n in networks:
+
         network_csv = pd.read_csv(path_processed_data + 'gas_network_data/' + n, index_col=0, sep=';')
         lines = [shapely.wkt.loads(line) for line in network_csv['geometry']]
 
         plot_geometry_list()
+
+    plt.show()
 
 # load configuration file
 path_config = os.path.dirname(os.getcwd()) + '/algorithm_configuration.yaml'
@@ -232,10 +234,10 @@ path_techno_economic_data = config_file['project_folder_path'] + 'raw_data/'
 # plot_original_pipeline_data()
 
 # plot unprocessed pipelines
-# plot_unprocessed_pipelines()
+plot_unprocessed_pipelines()
 
 # plot processed pipelines and ports
 fig, ax = plt.subplots()
-ax = get_infrastructure_figure(ax, boundaries, path_processed_data)
+# ax = get_infrastructure_figure(ax, boundaries, path_processed_data)
 
 plt.show()
