@@ -14,7 +14,7 @@ from data_processing.group_linestrings import group_LineStrings
 from data_processing.process_network_data_to_network_objects import \
     process_network_data_to_network_objects_with_additional_connection_points
 from data_processing.process_ports import process_ports
-from data_processing.calculate_inner_distances import get_distances_within_networks, get_distances_of_closest_infrastructure
+from data_processing.calculate_inner_distances import get_distances_within_networks, get_distances_of_closest_infrastructure, calculate_searoute_distances
 from data_processing.attach_conversion_costs_and_efficiency_to_locations import attach_conversion_costs_and_efficiency_to_locations
 
 import warnings
@@ -164,8 +164,8 @@ if not update_only_conversion_costs_and_efficiency:
 
         if not (('inner_infrastructure_distances' in files_in_folder) & (not enforce_update_of_data)):
             get_distances_within_networks(gas_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
-            # get_distances_within_networks(oil_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
-            # calculate_searoute_distances(ports, num_cores, path_processed_data)
+            get_distances_within_networks(oil_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
+            calculate_searoute_distances(ports, num_cores, path_processed_data)
 
     # calculate closest infrastructure for each node
     logging.info('Calculate closest infrastructure')

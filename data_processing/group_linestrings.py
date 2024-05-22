@@ -345,51 +345,7 @@ def process_line_strings(lines_local, num_cores, with_adding_lines=False, extend
 
         combinations = list(itertools.combinations(lines_local, 2))
         new_lines = close_gaps(combinations, lines_local, extend_lines=extend_lines)
-        # data_new = gpd.GeoDataFrame(geometry=lines_local + new_lines)
         lines_local = lines_local + new_lines
-
-        if False:
-
-            # the above implemented code does not add new lines and seems to have issue to connect all network with each other
-            # therefore, in the code below all networks are combine with each other and connected
-            rerun = True
-            while rerun:
-                rerun = False
-
-                lines_local = set(lines_local)
-
-                processed_geometry = set()
-                combinations = list(itertools.combinations(lines_local, 2))
-                for combination in combinations:
-                    s1 = combination[0]
-                    s2 = combination[1]
-                    if (s1 in processed_geometry) | (s2 in processed_geometry):
-                        continue
-                    closest_points = ops.nearest_points(s1, s2)
-                    distance = calc_distance_single_to_single(closest_points[0].y, closest_points[0].x,
-                                                              closest_points[1].y, closest_points[1].x)
-                    if distance <= 20000:
-                        lines_local.remove(s1)
-                        lines_local.remove(s2)
-                        processed_geometry.update([s1, s2])
-
-                        # s3 = [extend_line_in_both_directions(closest_points[0], closest_points[1], 0.1)]
-                        s3 = [geometry.LineString(closest_points)]
-
-                        if isinstance(s1, shapely.MultiLineString):
-                            s1 = [s_local for s_local in s1.geoms]
-                        else:
-                            s1 = [s1]
-
-                        if isinstance(s2, shapely.MultiLineString):
-                            s2 = [s_local for s_local in s2.geoms]
-                        else:
-                            s2 = [s2]
-
-                        new_geometry = shapely.MultiLineString(s1 + s2 + s3)
-                        lines_local.update([new_geometry])
-
-                        rerun = True
 
     # process for fast accumulation of common networks
     runs = 0
@@ -405,7 +361,6 @@ def process_line_strings(lines_local, num_cores, with_adding_lines=False, extend
         for s_local in lines_local:
             inputs.append([s_local.copy(), s_local.copy()])
 
-        inputs = tqdm(inputs)
         results = Parallel(n_jobs=num_cores)(delayed(find_group_in_data)(i) for i in inputs)
 
         lines_local = []
@@ -418,8 +373,6 @@ def process_line_strings(lines_local, num_cores, with_adding_lines=False, extend
         else:
             # if lines have been connected, run is reset
             runs = 0
-
-
 
     return list(lines_local)
 
@@ -566,8 +519,6 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, use_mi
 
                         if len(s) > 1:
                             print('still disconnected')
-                        else:
-                            print('successfully connected')
 
                         checked_single_lines.update(s)
                         break
