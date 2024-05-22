@@ -139,6 +139,9 @@ def get_routes_figure(sub_axes, routes, starting_locations, line_styles, line_wi
 
                             last_coordinate = coordinate
 
+                        if len(line_coordinates) < 2:
+                            continue
+
                         line = LineString(line_coordinates)
 
                         line_networks[(commodity, transport_mean)].append(line)

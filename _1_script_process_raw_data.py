@@ -164,9 +164,9 @@ if not update_only_conversion_costs_and_efficiency:
         logging.info('Calculate inner infrastructure distances')
 
         if not (('inner_infrastructure_distances' in files_in_folder) & (not enforce_update_of_data)):
-            # get_distances_within_networks(gas_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
-            get_distances_within_networks(oil_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
-            calculate_searoute_distances(ports, num_cores, path_processed_data)
+            get_distances_within_networks(gas_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
+            # get_distances_within_networks(oil_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
+            # calculate_searoute_distances(ports, num_cores, path_processed_data)
 
     # calculate closest infrastructure for each node
     logging.info('Calculate closest infrastructure')

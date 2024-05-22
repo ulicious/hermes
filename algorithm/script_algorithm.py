@@ -75,7 +75,8 @@ def run_algorithm(args):
     techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
     conversions_location_data \
-        = attach_conversion_costs_and_efficiency_to_locations(location_data, config_file, techno_economic_data_conversion)
+        = attach_conversion_costs_and_efficiency_to_locations(location_data, config_file,
+                                                              techno_economic_data_conversion, with_tqdm=False)
     conversion_costs_and_efficiencies = pd.concat([data['conversion_costs_and_efficiencies'], conversions_location_data])
     data['conversion_costs_and_efficiencies'] = conversion_costs_and_efficiencies
 

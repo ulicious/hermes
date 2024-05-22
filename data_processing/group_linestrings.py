@@ -494,6 +494,7 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, use_mi
     # single_lines += new_lines
 
     single_lines = process_line_strings(single_lines, num_cores, with_adding_lines=True)
+    single_lines = process_line_strings(single_lines, num_cores, with_adding_lines=True, extend_lines=True)
 
     import networkx as nx
 

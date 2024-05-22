@@ -355,6 +355,9 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
                 # drop all nodes which cannot be visited
                 road_distances = road_distances.stack().dropna()
+                road_distances = road_distances.apply(pd.to_numeric, errors='coerce').dropna()
+
+                # todo: some values are b'' --> why?
 
                 all_road_distances.append(road_distances)
 
@@ -405,51 +408,46 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
     # Create new branches for road options
     if not road_options.empty:
 
-        if not road_options.empty:
+        # all distance below tolerance are 0
+        below_tolerance = road_options[road_options['current_distance'] <= tolerance_distance].index
+        road_options.loc[below_tolerance, 'current_distance'] = 0
 
-            # all distance below tolerance are 0
-            below_tolerance = road_options[road_options['current_distance'] <= tolerance_distance].index
-            road_options.loc[below_tolerance, 'current_distance'] = 0
+        # add further information
+        road_options['current_distance'] = road_options['current_distance'] * no_road_multiplier
 
-            # add further information
-            road_options['current_distance'] = road_options['current_distance'] * no_road_multiplier
+        branch_list = road_options['previous_branch'].tolist()
+        options_list = road_options['current_node'].tolist()
 
-            branch_list = road_options['previous_branch'].tolist()
-            options_list = road_options['current_node'].tolist()
+        road_options['current_commodity'] = branches.loc[branch_list, 'current_commodity'].tolist()
+        road_options['current_commodity_object'] = branches.loc[branch_list, 'current_commodity_object'].tolist()
+        road_options['specific_transportation_costs'] = road_transportation_costs.loc[branch_list].tolist()
+        road_options['previous_total_costs'] = branches.loc[branch_list, 'current_total_costs'].tolist()
+        road_options['current_transport_mean'] = 'Road'
+        road_options['latitude'] = complete_infrastructure.loc[options_list, 'latitude'].tolist()
+        road_options['longitude'] = complete_infrastructure.loc[options_list, 'longitude'].tolist()
+        road_options['current_continent'] = branches.loc[branch_list, 'current_continent'].tolist()
 
-            road_options['current_commodity'] = branches.loc[branch_list, 'current_commodity'].tolist()
-            road_options['current_commodity_object'] = branches.loc[branch_list, 'current_commodity_object'].tolist()
-            road_options['specific_transportation_costs'] = road_transportation_costs.loc[branch_list].tolist()
-            road_options['previous_total_costs'] = branches.loc[branch_list, 'current_total_costs'].tolist()
-            road_options['current_transport_mean'] = 'Road'
-            road_options['latitude'] = complete_infrastructure.loc[options_list, 'latitude'].tolist()
-            road_options['longitude'] = complete_infrastructure.loc[options_list, 'longitude'].tolist()
-            road_options['current_continent'] = branches.loc[branch_list, 'current_continent'].tolist()
+        taken_route = [(branches.at[road_options.at[i, 'previous_branch'], 'current_node'], 'Road',
+                        road_options.at[i, 'current_distance'], road_options.at[i, 'current_node'])
+                       for i in road_options.index]
+        road_options['taken_route'] = taken_route
 
-            taken_route = [(branches.at[road_options.at[i, 'previous_branch'], 'current_node'], 'Road',
-                            road_options.at[i, 'current_distance'], road_options.at[i, 'current_node'])
-                           for i in road_options.index]
-            road_options['taken_route'] = taken_route
+        # calculate costs and remove all above benchmark
+        road_options['current_transportation_costs'] \
+            = road_options['current_distance'] * road_options['specific_transportation_costs'] / 1000
+        road_options['current_total_costs'] \
+            = road_options['previous_total_costs'] + road_options['current_transportation_costs']
 
-            # calculate costs and remove all above benchmark
-            road_options['current_transportation_costs'] \
-                = road_options['current_distance'] * road_options['specific_transportation_costs'] / 1000
-            road_options['current_total_costs'] \
-                = road_options['previous_total_costs'] + road_options['current_transportation_costs']
+        road_options = road_options[road_options['current_total_costs'] <= benchmark]
 
-            road_options = road_options[road_options['current_total_costs'] <= benchmark]
+        road_options['distance_type'] = 'road'
 
-            road_options['distance_type'] = 'road'
-
-            # remove duplicates based on node/port, commodity and costs
-            road_options['comparison_index'] = [road_options.at[ind, 'current_node'] + '-'
-                                                + road_options.at[ind, 'current_commodity']
-                                                for ind in road_options.index]
-            road_options.sort_values(['current_total_costs'], inplace=True)
-            road_options = road_options.drop_duplicates(subset=['comparison_index'], keep='first')
-
-        else:
-            road_options = pd.DataFrame()
+        # remove duplicates based on node/port, commodity and costs
+        road_options['comparison_index'] = [road_options.at[ind, 'current_node'] + '-'
+                                            + road_options.at[ind, 'current_commodity']
+                                            for ind in road_options.index]
+        road_options.sort_values(['current_total_costs'], inplace=True)
+        road_options = road_options.drop_duplicates(subset=['comparison_index'], keep='first')
 
     else:
         road_options = pd.DataFrame()

@@ -81,7 +81,8 @@ def extend_line_in_both_directions(coord1, coord2, extension_percentage):
     return extended_linestring
 
 
-def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, techno_economic_data_conversion):
+def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, techno_economic_data_conversion,
+                                                        with_tqdm=True):
 
     """
     Iterates over all locations and calculates conversion costs and efficiency at specific location
@@ -89,6 +90,7 @@ def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, 
     @param pandas.DataFrame locations: dataframe with the different locations and levelized costs
     @param dict config_file: dictionary with configuration
     @param dict techno_economic_data_conversion: dictionary with techno economic parameters
+    @param bool with_tqdm: boolean to show progress bar (default = True)
 
     @return: updated dataframe with added columns showing conversion costs and efficiency at each location
     """
@@ -252,7 +254,12 @@ def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, 
 
                 country_options[c] = levelized_costs_country.loc[country, c]
 
-    for i in tqdm.tqdm(country_options.index):
+    if with_tqdm:
+        options_index = tqdm.tqdm(country_options.index)
+    else:
+        options_index = country_options.index
+
+    for i in options_index:
 
         if 'H' in i:
             adjusted_latitude = round_to_quarter(country_options.loc[i, 'latitude_on_coastline'])

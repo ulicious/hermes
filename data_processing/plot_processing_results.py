@@ -234,10 +234,10 @@ path_techno_economic_data = config_file['project_folder_path'] + 'raw_data/'
 # plot_original_pipeline_data()
 
 # plot unprocessed pipelines
-plot_unprocessed_pipelines()
+# plot_unprocessed_pipelines()
 
 # plot processed pipelines and ports
 fig, ax = plt.subplots()
-# ax = get_infrastructure_figure(ax, boundaries, path_processed_data)
+ax = get_infrastructure_figure(ax, boundaries, path_processed_data)
 
 plt.show()

@@ -8,7 +8,7 @@ import geopandas as gpd
 import cartopy.io.shapereader as shpreader
 
 from algorithm.methods_geographic import calc_distance_list_to_single
-from _0_helpers_raw_data_processing import calculate_conversion_costs
+from data_processing._helpers_raw_data_processing import calculate_conversion_costs
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -226,7 +226,7 @@ def apply_conversion():
                     locations[commodity_2] = (locations[commodity] + conversion_costs_2) / conversion_efficiency_2
 
 
-path_config = os.path.dirname(os.getcwd()) + '/algorithm_configuration.yaml'
+path_config = os.getcwd() + '/algorithm_configuration.yaml'
 yaml_file = open(path_config)
 config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
