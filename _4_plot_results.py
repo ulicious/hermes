@@ -2,15 +2,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 import yaml
-import shapely
 import math
 import ast
 import numpy as np
 import matplotlib as mpl
 import matplotlib.lines as mlines
 
-from _0_helpers_plotting import load_data, get_complete_infrastructure
-from _11_get_figures import get_routes_figure, get_cost_figure, get_production_costs_figure, get_infrastructure_figure, \
+from plotting.helpers_plotting import load_data, get_complete_infrastructure
+from plotting.get_figures import get_routes_figure, get_cost_figure, get_production_costs_figure, get_infrastructure_figure, \
     get_energy_carrier_figure
 
 # load configuration file
