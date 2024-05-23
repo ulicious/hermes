@@ -261,7 +261,7 @@ if plot_routes:
 
 else:
     # commodity legend
-    fig.legend(handles=commodity_handles, loc='upper center', ncols=3,
+    fig.legend(handles=commodity_handles, loc='upper center', ncols=2,
                bbox_to_anchor=(0.255, 0.15),
                labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5)
 
