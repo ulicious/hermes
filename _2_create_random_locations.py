@@ -1,6 +1,7 @@
 import math
 import random
 import os
+import logging
 import yaml
 
 import pandas as pd
@@ -12,6 +13,8 @@ from data_processing.helpers_raw_data_processing import calculate_conversion_cos
 
 import warnings
 warnings.filterwarnings("ignore")
+
+logging.basicConfig(level=logging.INFO)
 
 
 def randlatlon1(min_latitude, max_latitude, min_longitude, max_longitude):
@@ -232,6 +235,8 @@ config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
 path_techno_economic_data = config_file['project_folder_path'] + 'raw_data/'
 
+update_only_techno_economic_data = config_file['update_only_conversion_costs_and_efficiency']
+
 if not config_file['use_minimal_example']:
     # use boundaries from config file
     minimal_latitude = config_file['minimal_latitude']
@@ -249,46 +254,105 @@ levelized_costs_country = pd.read_csv(path_techno_economic_data + 'levelized_cos
 yaml_file = open(path_techno_economic_data + 'techno_economic_data_conversion.yaml')
 techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
-world = gpd.read_file(country_shapefile)
+if not update_only_techno_economic_data:
 
-origin_continents = config_file['origin_continents']
-if config_file['use_minimal_example']:  # overwrite origin continent if minimal example
-    origin_continents = ['Europe']
+    logging.info('Create locations')
 
-i = 0
-processed_coords = []
-locations = pd.DataFrame()
-while i < config_file['number_locations']:
+    country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
+    world = gpd.read_file(country_shapefile)
 
-    restart = False
+    origin_continents = config_file['origin_continents']
+    if config_file['use_minimal_example']:  # overwrite origin continent if minimal example
+        origin_continents = ['Europe']
 
-    coords = randlatlon1(minimal_latitude, maximal_latitude, minimal_longitude, maximal_longitude)
+    i = 0
+    processed_coords = []
+    locations = pd.DataFrame()
+    while i < config_file['number_locations']:
 
-    if coords is not None:
+        restart = False
 
-        start_lat = coords[1]
-        start_lon = coords[0]
+        coords = randlatlon1(minimal_latitude, maximal_latitude, minimal_longitude, maximal_longitude)
 
-        new_location = pd.DataFrame([start_lon, start_lat]).transpose()
-        new_location.columns = ['longitude', 'latitude']
+        if coords is not None:
 
-        # add country information to options
-        gdf = gpd.GeoDataFrame(geometry=gpd.points_from_xy([start_lon], [start_lat])).set_crs('EPSG:4326')
-        result = gpd.sjoin(gdf, world, how='left')
-        country_start = result.at[result.index[0], 'NAME_EN']
-        continent_start = result.at[result.index[0], 'CONTINENT']
+            start_lat = coords[1]
+            start_lon = coords[0]
 
-        if isinstance(country_start, float):
-            # country is nan
-            continue
+            new_location = pd.DataFrame([start_lon, start_lat]).transpose()
+            new_location.columns = ['longitude', 'latitude']
 
-        if origin_continents:
-            if continent_start not in origin_continents:
+            # add country information to options
+            gdf = gpd.GeoDataFrame(geometry=gpd.points_from_xy([start_lon], [start_lat])).set_crs('EPSG:4326')
+            result = gpd.sjoin(gdf, world, how='left')
+            country_start = result.at[result.index[0], 'NAME_EN']
+            continent_start = result.at[result.index[0], 'CONTINENT']
+
+            if isinstance(country_start, float):
+                # country is nan
                 continue
 
-        adjusted_latitude = round_to_quarter(start_lat)
-        adjusted_longitude = round_to_quarter(start_lon)
+            if origin_continents:
+                if continent_start not in origin_continents:
+                    continue
+
+            adjusted_latitude = round_to_quarter(start_lat)
+            adjusted_longitude = round_to_quarter(start_lon)
+            adjusted_coords = str(int(adjusted_longitude * 100)) + 'x' + str(int(adjusted_latitude * 100))
+
+            # get cost of location
+            for c in [*config_file['cost_type'].keys()]:
+
+                cost_type = config_file['cost_type'][c]
+
+                if cost_type == 'uniform':
+                    locations.loc[i, c] = techno_economic_data_conversion['uniform_costs'][c]
+                elif cost_type == 'country':
+                    if country_start not in levelized_costs_country.index:
+                        try:
+                            locations.loc[i, c] = levelized_costs_country.loc[country_start, c]
+                        except IndexError:
+                            print(country_start + ' is not in levelized costs country file')
+                else:
+
+                    # apply small grid search to get the closest location
+                    sub_locations = levelized_costs_location[
+                        (levelized_costs_location['latitude'] <= adjusted_latitude + 0.5) &
+                        (levelized_costs_location['latitude'] >= adjusted_latitude - 0.5) &
+                        (levelized_costs_location['longitude'] <= adjusted_longitude + 0.5) &
+                        (levelized_costs_location['longitude'] >= adjusted_longitude - 0.5)]
+
+                    if not sub_locations.empty:
+                        distances = calc_distance_list_to_single(sub_locations['latitude'], sub_locations['longitude'],
+                                                                 adjusted_latitude, adjusted_longitude)
+                        distances = pd.DataFrame(distances, index=sub_locations.index)
+
+                        idxmin = distances.idxmin().values[0]
+                        locations.loc[i, c] = levelized_costs_location.loc[idxmin, c]
+
+                    else:
+                        restart = True
+                        break
+
+            if restart:
+                continue
+
+            locations.loc[i, 'country_start'] = country_start
+            locations.loc[i, 'continent_start'] = continent_start
+
+            locations.loc[i, 'longitude'] = start_lon
+            locations.loc[i, 'latitude'] = start_lat
+
+            i += 1
+
+else:
+    locations = pd.read_excel(config_file['project_folder_path'] + 'start_destination_combinations.xlsx', index_col=0)
+
+    for i in locations.index:
+        country_start = locations.at[i, 'country_start']
+
+        adjusted_latitude = round_to_quarter(locations.at[i, 'latitude'])
+        adjusted_longitude = round_to_quarter(locations.at[i, 'longitude'])
         adjusted_coords = str(int(adjusted_longitude * 100)) + 'x' + str(int(adjusted_latitude * 100))
 
         # get cost of location
@@ -321,21 +385,7 @@ while i < config_file['number_locations']:
                     idxmin = distances.idxmin().values[0]
                     locations.loc[i, c] = levelized_costs_location.loc[idxmin, c]
 
-                else:
-                    restart = True
-                    break
-
-        if restart:
-            continue
-
-        locations.loc[i, 'country_start'] = country_start
-        locations.loc[i, 'continent_start'] = continent_start
-
-        locations.loc[i, 'longitude'] = start_lon
-        locations.loc[i, 'latitude'] = start_lat
-
-        i += 1
-
+logging.info('Calculate conversion costs and efficiency')
 apply_conversion()
 
 columns_to_keep = ['longitude', 'latitude', 'country_start', 'continent_start'] + config_file['available_commodity']

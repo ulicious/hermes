@@ -25,6 +25,8 @@ to other nodes is not possible anymore.
 
 # Important things to consider:
 
+- If techno-economic data and assumptions are changed, conversion costs need to be updated 
+  - run "1_script_process_raw_data" and "2_create_random_locations" with the setting update_only_conversion_costs_and_efficiency = True
 - Data processing is quite time-consuming and heavily depends on the resources of you computer
 - The processed data will take quite some storage space (distances are not calculate if 'use_low_storage' = True)
   - Minimal example: 22 MB (without distances) | 7.2 GB (with distances)

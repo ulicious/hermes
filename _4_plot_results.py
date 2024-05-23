@@ -13,11 +13,11 @@ from plotting.get_figures import get_routes_figure, get_cost_figure, get_product
     get_energy_carrier_figure
 
 # load configuration file
-path_config = os.path.dirname(os.getcwd()) + '/algorithm_configuration.yaml'
+path_config = os.getcwd() + '/algorithm_configuration.yaml'
 yaml_file = open(path_config)
 config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-path_config = os.path.dirname(os.getcwd()) + '/plotting_configuration.yaml'
+path_config = os.getcwd() + '/plotting_configuration.yaml'
 yaml_file = open(path_config)
 config_file_plotting = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
@@ -180,7 +180,7 @@ cmap_chosen = mpl.colormaps['viridis_r']
 norm = mpl.colors.Normalize(vmin=min_costs, vmax=max_costs)
 sm = plt.cm.ScalarMappable(cmap=cmap_chosen, norm=norm)
 
-height = 18
+height = 14
 fig, ax = plt.subplots(2, 2, figsize=(15.69 * centimeter_to_inch, height * centimeter_to_inch))
 
 plot_routes = False
@@ -229,11 +229,11 @@ else:
                                 boundaries)
 
         fig_routes.legend(handles=handels_list_transport_means, loc='upper center', ncols=3,
-                          bbox_to_anchor=(0.25, 0.19), title='Transport Mean',
+                          bbox_to_anchor=(0.5, 0.22), title='Transport Mean',
                           labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1)
 
         fig_routes.legend(handles=handels_list_commodities, loc='upper center', ncol=2,
-                          bbox_to_anchor=(0.25, 0.12), title='Commodity',
+                          bbox_to_anchor=(0.5, 0.12), title='Commodity',
                           labelspacing=0.1, handletextpad=0.1, columnspacing=0.25)
 
         fig_routes.savefig(path_saving + '_routes.png', bbox_inches='tight', dpi=600)
@@ -245,24 +245,24 @@ infrastructure_axis = get_infrastructure_figure(infrastructure_axis, boundaries,
 
 # color bar
 height_bar = 7.5 / height * 0.02
-cbar_ax = fig.add_axes([0.05, 0.6, 0.9, height_bar])  # [left, bottom, width, height]
+cbar_ax = fig.add_axes([0.05, 0.54, 0.9, height_bar])  # [left, bottom, width, height]
 cbar = fig.colorbar(sm, cax=cbar_ax, orientation='horizontal')
 cbar.set_label('€ / MWh', rotation=0, labelpad=5)
 
 if plot_routes:
     # route legend
     fig.legend(handles=handels_list_transport_means, loc='upper center', ncols=3,
-               bbox_to_anchor=(0.25, 0.19), title='Transport Mean',
+               bbox_to_anchor=(0.5, 0.19), title='Transport Mean',
                labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1)
 
     fig.legend(handles=handels_list_commodities, loc='upper center', ncol=2,
-               bbox_to_anchor=(0.25, 0.12), title='Commodity',
+               bbox_to_anchor=(0.5, 0.12), title='Commodity',
                labelspacing=0.1, handletextpad=0.1, columnspacing=0.25)
 
 else:
     # commodity legend
     fig.legend(handles=commodity_handles, loc='upper center', ncols=3,
-               bbox_to_anchor=(0.255, 0.19),
+               bbox_to_anchor=(0.255, 0.15),
                labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5)
 
 # infrastructure legend
@@ -276,11 +276,11 @@ handels_list_infrastructure = [mlines.Line2D([], [], color='blue', marker='.',
                                              linestyle='-', markersize=5,
                                              label='Oil Pipeline')]
 
-fig.legend(handles=handels_list_infrastructure, loc='upper center', ncol=3, bbox_to_anchor=(0.74, 0.19),
+fig.legend(handles=handels_list_infrastructure, loc='upper center', ncol=3, bbox_to_anchor=(0.74, 0.15),
            labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5)
 
 fig.tight_layout()
-plt.subplots_adjust(bottom=0.15, hspace=0.15)
+plt.subplots_adjust(bottom=0.3)
 
 fig.savefig(path_saving + '_all_graphs.png', bbox_inches='tight', dpi=600)
 fig.savefig(path_saving + '_all_graphs.svg', bbox_inches='tight')
