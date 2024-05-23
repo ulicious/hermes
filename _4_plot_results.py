@@ -165,7 +165,7 @@ boundaries = {'min_latitude': min_lat - 2,
               'max_longitude': max_lon + 2}
 
 centimeter_to_inch = 1 / 2.54
-plt.rcParams.update({'font.size': 11,
+plt.rcParams.update({'font.size': 9,
                      'font.family': 'Times New Roman'})
 
 data = pd.DataFrame.from_dict(data,
