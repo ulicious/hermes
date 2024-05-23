@@ -49,9 +49,9 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
 
     complete_infrastructure.sort_values(['distance_to_destination'], inplace=True)
     distance_to_destination = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= max_length].index.tolist()
-    distance_to_destination.remove('Destination')
+    # distance_to_destination.remove('Destination')
 
-    # we want the Destination and at least 10 harbours within these options where we calculate the reachability
+    # we want at least 10 harbours within these options where we calculate the reachability
     complete_infrastructure.sort_values(['distance_to_start'], inplace=True)
 
     first_ten_harbours = []
@@ -95,13 +95,8 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
                                                                 coastlines,
                                                                 get_only_availability=True)
 
-        if (reachable_from_start != (None, None)) & (reachable_from_destination != (None, None)):
-            complete_infrastructure.loc[distance_to_start[:1000], 'reachable_from_start'] = reachable_from_start[0]
-            complete_infrastructure.loc[distance_to_destination[:1000], 'reachable_from_destination'] = reachable_from_destination[0]
-
-        else:
-            complete_infrastructure['reachable_from_start'] = False
-            complete_infrastructure['reachable_from_destination'] = False
+        complete_infrastructure.loc[distance_to_start[:1000], 'reachable_from_start'] = reachable_from_start
+        complete_infrastructure.loc[distance_to_destination[:1000], 'reachable_from_destination'] = reachable_from_destination
 
     return complete_infrastructure
 

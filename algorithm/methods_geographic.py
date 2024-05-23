@@ -150,8 +150,12 @@ def check_if_reachable_on_land(start_location, list_longitude, list_latitude, co
     @return: returns tuple with the boolean if reachable by road (within the same polygon) and the index of the polygon
     """
 
+    import math
+    import shapely
+
     df_start = gpd.GeoSeries.from_wkt(['Point(' + str(start_location.x) + ' ' + str(start_location.y) + ')'])
     gdf_start = gpd.GeoDataFrame(df_start, geometry=0)
+    start_point = shapely.geometry.Point([start_location.x, start_location.y])
 
     points = []
     for i in list_latitude.index:
@@ -162,36 +166,53 @@ def check_if_reachable_on_land(start_location, list_longitude, list_latitude, co
 
     polygons = sjoin(gdf_start, coastline, predicate='within', how='right').dropna(subset=['index_left'])
 
+    # alternative: check which polygon is closest to start and which one is closest to end. If both the same, then true
+    smallest_distance_to_start = math.inf
+    start_polygon = None
+    for p in coastline['geometry']:
+        if p.distance(start_point) < smallest_distance_to_start:
+            smallest_distance_to_start = p.distance(start_point)
+            start_polygon = p
+
     if len(polygons.index) > 0:
 
         index_poly_start = polygons.index[0]
         index_poly_target = sjoin(gdf_target, coastline, predicate='within', how='right')
 
-        if not get_only_poly:
+        result = []
+        for i in gdf_target.index:
+            if i in index_poly_target['index_left'].values.tolist():
+                poly = index_poly_target[index_poly_target['index_left'] == i].index[0]
 
-            def get_availability(n):
-
-                if n in index_poly_target['index_left'].values.tolist():
-                    poly = index_poly_target[index_poly_target['index_left'] == n].index[0]
-
-                    if index_poly_start == poly:
-                        return True
-                    else:
-                        return False
-
+                if index_poly_start == poly:
+                    result.append(True)
                 else:
-                    return False
-
-            result = []
-            for i in gdf_target.index:
-                result.append(get_availability(i))
-
-            if not get_only_availability:
-                return result, index_poly_start
+                    result.append(False)
             else:
-                return result, None
-        else:
-            return None, index_poly_start
+                result.append(False)
 
+        gdf_target['reachable'] = result
     else:
-        return None, None
+        gdf_target['reachable'] = False
+
+    # check all not reachable locations again to make sure
+    not_reachable = gdf_target[~gdf_target['reachable']]
+    result = []
+    for i in not_reachable.index:
+        target_point = not_reachable.at[i, 0]
+        # smallest_distance_to_target = math.inf
+        # target_polygon = None
+        # for p in coastline['geometry']:
+        #     if p.distance(target_point) < smallest_distance_to_target:
+        #         smallest_distance_to_target = p.distance(target_point)
+        #         target_polygon = p
+
+        if start_polygon.distance(target_point) < 0.00001:
+            result.append(True)
+        else:
+            result.append(False)
+
+    not_reachable['reachable'] = result
+    gdf_target.loc[not_reachable.index, 'reachable'] = not_reachable['reachable']
+
+    return gdf_target['reachable'].tolist()
