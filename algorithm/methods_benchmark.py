@@ -49,7 +49,7 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
 
     complete_infrastructure.sort_values(['distance_to_destination'], inplace=True)
     distance_to_destination = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= max_length].index.tolist()
-    # distance_to_destination.remove('Destination')
+    distance_to_destination.remove('Destination')
 
     # we want at least 10 harbours within these options where we calculate the reachability
     complete_infrastructure.sort_values(['distance_to_start'], inplace=True)
@@ -598,10 +598,10 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
         min_value_before = min_value
 
         for c in final_commodities:
-            if commodity_object.get_conversion_options_specific_commodity(c):
+            if c in commodity_object.get_conversion_options():
 
                 conversion_costs = commodity_object.get_conversion_costs_specific_commodity('Destination', c)
-                conversion_efficiency = commodity_object.get_conversion_efficiency_specific_commodity(c)
+                conversion_efficiency = commodity_object.get_conversion_efficiency_specific_commodity('Destination', c)
 
                 conversion_costs = (min_value + conversion_costs) / conversion_efficiency
 
