@@ -256,7 +256,7 @@ techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
 if not update_only_techno_economic_data:
 
-    logging.info('Create locations')
+    logging.info('Create new locations')
 
     country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
     world = gpd.read_file(country_shapefile)
@@ -346,6 +346,7 @@ if not update_only_techno_economic_data:
             i += 1
 
 else:
+    logging.info('Update existing locations')
     locations = pd.read_excel(config_file['project_folder_path'] + 'start_destination_combinations.xlsx', index_col=0)
 
     for i in locations.index:

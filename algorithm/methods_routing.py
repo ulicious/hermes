@@ -674,7 +674,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                 if not current_commodity_object.get_transportation_options_specific_mean_of_transport(mot):
                     continue
 
-                if (current_commodity_object == 'Hydrogen_Gas') & (not configuration['H2_ready_infrastructure']):
+                if (current_commodity_object.get_name() == 'Hydrogen_Gas') & (not configuration['H2_ready_infrastructure']):
                     # if pipelines are not H2 ready, we cannot use pipelines if current commodity is H2
                     continue
 
@@ -901,7 +901,7 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
                 # pass branch if commodity cannot be transported via pipeline
                 continue
 
-            if (current_commodity_object == 'Hydrogen_Gas') & (not configuration['H2_ready_infrastructure']):
+            if (current_commodity_object.get_name() == 'Hydrogen_Gas') & (not configuration['H2_ready_infrastructure']):
                 # pass branch if commodity is H2 but pipeline is set to not H2 ready pipelines
                 continue
 
