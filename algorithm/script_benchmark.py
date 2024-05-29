@@ -1,3 +1,4 @@
+import itertools
 import math
 
 from algorithm.methods_benchmark import find_shipping_benchmark_solution, find_pipeline_shipping_solution, find_pipeline_solution
@@ -16,95 +17,186 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
     @return: value of route with minimal costs
     """
 
-    pipeline_commodity = data['commodities']['commodity_objects']['Methane_Gas']
-    shipping_commodity = data['commodities']['commodity_objects']['Methane_Liquid']
-
-    min_value_1, used_commodities, used_transport_means, used_nodes, distances, costs \
-        = find_pipeline_shipping_solution(data, configuration, complete_infrastructure, pipeline_commodity,
-                                          shipping_commodity)
-
     print_benchmark_info = configuration['print_benchmark_info']
-    if print_benchmark_info:
-        print(min_value_1)
-        print(used_commodities)
-        print(used_transport_means)
-        print(used_nodes)
-        print(distances)
-        print(costs)
+    min_values = []
 
-    if configuration['H2_ready_infrastructure']:
-        pipeline_commodity = data['commodities']['commodity_objects']['Hydrogen_Gas']
-        shipping_commodity = data['commodities']['commodity_objects']['Ammonia']
+    commodities = [*data['commodities']['commodity_objects'].keys()]
+    commodity_combinations = itertools.combinations_with_replacement(commodities, 2)
+    for combination in commodity_combinations:
 
-        min_value_2, used_commodities, used_transport_means, used_nodes, distances, costs \
-            = find_pipeline_shipping_solution(data, configuration, complete_infrastructure, pipeline_commodity,
-                                              shipping_commodity)
+        commodity_1 = data['commodities']['commodity_objects'][combination[0]]
+        commodity_2 = data['commodities']['commodity_objects'][combination[1]]
 
-        if print_benchmark_info:
-            print(min_value_2)
-            print(used_commodities)
-            print(used_transport_means)
-            print(used_nodes)
-            print(distances)
-            print(costs)
-    else:
-        min_value_2 = math.inf
+        conversion_into_each_other_possible = False
+        if (commodity_1.get_conversion_options()[commodity_2.get_name()]) & (commodity_2.get_conversion_options()[commodity_1.get_name()]):
+            conversion_into_each_other_possible = True
+        elif commodity_1 == commodity_2:
+            conversion_into_each_other_possible = True
 
-    if configuration['H2_ready_infrastructure']:
-        pipeline_commodity = data['commodities']['commodity_objects']['Hydrogen_Gas']
-        road_commodity = data['commodities']['commodity_objects']['DBT']
+        if conversion_into_each_other_possible:
+            # pipeline solutions always depend on conversion. If commodity 1 is not convertible into commodity 2 or
+            # both commodities are the same, then we don't use these benchmarks
 
-        min_value_3, used_commodities, used_transport_means, used_nodes, distances, costs \
-            = find_pipeline_solution(data, configuration, complete_infrastructure, pipeline_commodity, road_commodity)
-        # todo: pipeline type als option geben
+            if commodity_1.get_transportation_options_specific_mean_of_transport('Pipeline_Gas'):
+                if ((commodity_1.get_name() == 'Hydrogen_Gas') & configuration['H2_ready_infrastructure']) | (commodity_1.get_name() != 'Hydrogen_Gas'):
+                    if commodity_2.get_transportation_options_specific_mean_of_transport('Shipping'):
 
-        if print_benchmark_info:
-            print(min_value_3)
-            print(used_commodities)
-            print(used_transport_means)
-            print(used_nodes)
-            print(distances)
-            print(costs)
+                        min_value, used_commodities, used_transport_means, used_nodes, distances, costs \
+                            = find_pipeline_shipping_solution(data, configuration, complete_infrastructure, commodity_1,
+                                                              commodity_2, pipeline_type='Pipeline_Gas')
 
-    else:
-        min_value_3 = math.inf
+                        min_values.append(min_value)
 
-    shipping_commodity = data['commodities']['commodity_objects']['Ammonia']
-    min_value_4, used_commodities, used_transport_means, used_nodes, distances, costs \
-        = find_shipping_benchmark_solution(data, configuration, complete_infrastructure, shipping_commodity)
+                        if print_benchmark_info:
+                            print(min_value)
+                            print(used_commodities)
+                            print(used_transport_means)
+                            print(used_nodes)
+                            print(distances)
+                            print(costs)
 
-    if print_benchmark_info:
-        print(min_value_4)
-        print(used_commodities)
-        print(used_transport_means)
-        print(used_nodes)
-        print(distances)
-        print(costs)
+            if commodity_2.get_transportation_options_specific_mean_of_transport('Pipeline_Gas'):
+                if ((commodity_2.get_name() == 'Hydrogen_Gas') & configuration['H2_ready_infrastructure']) | (commodity_2.get_name() != 'Hydrogen_Gas'):
+                    if commodity_1.get_transportation_options_specific_mean_of_transport('Shipping'):
 
-    shipping_commodity = data['commodities']['commodity_objects']['Methanol']
-    min_value_5, used_commodities, used_transport_means, used_nodes, distances, costs \
-        = find_shipping_benchmark_solution(data, configuration, complete_infrastructure, shipping_commodity)
+                        min_value, used_commodities, used_transport_means, used_nodes, distances, costs \
+                            = find_pipeline_shipping_solution(data, configuration, complete_infrastructure, commodity_2,
+                                                              commodity_1, pipeline_type='Pipeline_Gas')
 
-    if print_benchmark_info:
-        print(min_value_5)
-        print(used_commodities)
-        print(used_transport_means)
-        print(used_nodes)
-        print(distances)
-        print(costs)
+                        min_values.append(min_value)
 
-    shipping_commodity = data['commodities']['commodity_objects']['DBT']
-    min_value_6, used_commodities, used_transport_means, used_nodes, distances, costs \
-        = find_shipping_benchmark_solution(data, configuration, complete_infrastructure, shipping_commodity)
+                        if print_benchmark_info:
+                            print(min_value)
+                            print(used_commodities)
+                            print(used_transport_means)
+                            print(used_nodes)
+                            print(distances)
+                            print(costs)
 
-    if print_benchmark_info:
-        print(min_value_6)
-        print(used_commodities)
-        print(used_transport_means)
-        print(used_nodes)
-        print(distances)
-        print(costs)
+            if commodity_1.get_transportation_options_specific_mean_of_transport('Pipeline_Liquid'):
+                if commodity_2.get_transportation_options_specific_mean_of_transport('Shipping'):
 
-    benchmark = math.ceil(min(min_value_1, min_value_2, min_value_3, min_value_4, min_value_5, min_value_6))
+                    min_value, used_commodities, used_transport_means, used_nodes, distances, costs \
+                        = find_pipeline_shipping_solution(data, configuration, complete_infrastructure, commodity_1,
+                                                          commodity_2, pipeline_type='Pipeline_Liquid')
+
+                    min_values.append(min_value)
+
+                    if print_benchmark_info:
+                        print(min_value)
+                        print(used_commodities)
+                        print(used_transport_means)
+                        print(used_nodes)
+                        print(distances)
+                        print(costs)
+
+            if commodity_2.get_transportation_options_specific_mean_of_transport('Pipeline_Liquid'):
+                if commodity_1.get_transportation_options_specific_mean_of_transport('Shipping'):
+
+                    min_value, used_commodities, used_transport_means, used_nodes, distances, costs \
+                        = find_pipeline_shipping_solution(data, configuration, complete_infrastructure, commodity_2,
+                                                          commodity_1, pipeline_type='Pipeline_Liquid')
+
+                    min_values.append(min_value)
+
+                    if print_benchmark_info:
+                        print(min_value)
+                        print(used_commodities)
+                        print(used_transport_means)
+                        print(used_nodes)
+                        print(distances)
+                        print(costs)
+
+            if commodity_1.get_transportation_options_specific_mean_of_transport('Pipeline_Gas'):
+                if ((commodity_1.get_name() == 'Hydrogen_Gas') & configuration['H2_ready_infrastructure']) | (
+                        commodity_1.get_name() != 'Hydrogen_Gas'):
+                    if commodity_2.get_transportation_options_specific_mean_of_transport('Road'):
+
+                        min_value, used_commodities, used_transport_means, used_nodes, distances, costs \
+                            = find_pipeline_solution(data, configuration, complete_infrastructure, commodity_1,
+                                                     commodity_2, pipeline_type='Pipeline_Gas')
+
+                        min_values.append(min_value)
+
+                        if print_benchmark_info:
+                            print(min_value)
+                            print(used_commodities)
+                            print(used_transport_means)
+                            print(used_nodes)
+                            print(distances)
+                            print(costs)
+
+            if commodity_2.get_transportation_options_specific_mean_of_transport('Pipeline_Gas'):
+                if ((commodity_2.get_name() == 'Hydrogen_Gas') & configuration['H2_ready_infrastructure']) | (
+                        commodity_2.get_name() != 'Hydrogen_Gas'):
+                    if commodity_1.get_transportation_options_specific_mean_of_transport('Road'):
+
+                        min_value, used_commodities, used_transport_means, used_nodes, distances, costs \
+                            = find_pipeline_solution(data, configuration, complete_infrastructure, commodity_2,
+                                                     commodity_1,
+                                                     pipeline_type='Pipeline_Gas')
+
+                        min_values.append(min_value)
+
+                        if print_benchmark_info:
+                            print(min_value)
+                            print(used_commodities)
+                            print(used_transport_means)
+                            print(used_nodes)
+                            print(distances)
+                            print(costs)
+
+            if commodity_1.get_transportation_options_specific_mean_of_transport('Pipeline_Liquid'):
+                if commodity_2.get_transportation_options_specific_mean_of_transport('Road'):
+
+                    min_value, used_commodities, used_transport_means, used_nodes, distances, costs \
+                        = find_pipeline_solution(data, configuration, complete_infrastructure, commodity_1,
+                                                 commodity_2, pipeline_type='Pipeline_Liquid')
+
+                    min_values.append(min_value)
+
+                    if print_benchmark_info:
+                        print(min_value)
+                        print(used_commodities)
+                        print(used_transport_means)
+                        print(used_nodes)
+                        print(distances)
+                        print(costs)
+
+            if commodity_2.get_transportation_options_specific_mean_of_transport('Pipeline_Liquid'):
+                if commodity_1.get_transportation_options_specific_mean_of_transport('Road'):
+
+                    min_value, used_commodities, used_transport_means, used_nodes, distances, costs \
+                        = find_pipeline_solution(data, configuration, complete_infrastructure, commodity_2,
+                                                 commodity_1, pipeline_type='Pipeline_Liquid')
+
+                    min_values.append(min_value)
+
+                    if print_benchmark_info:
+                        print(min_value)
+                        print(used_commodities)
+                        print(used_transport_means)
+                        print(used_nodes)
+                        print(distances)
+                        print(costs)
+
+        if ((commodity_1 == commodity_1) & commodity_1.get_transportation_options_specific_mean_of_transport('Shipping')
+                & commodity_1.get_transportation_options_specific_mean_of_transport('Road')):
+            min_value, used_commodities, used_transport_means, used_nodes, distances, costs \
+                = find_shipping_benchmark_solution(data, configuration, complete_infrastructure, commodity_1)
+
+            min_values.append(min_value)
+
+            if print_benchmark_info:
+                print(min_value)
+                print(used_commodities)
+                print(used_transport_means)
+                print(used_nodes)
+                print(distances)
+                print(costs)
+
+    benchmark = math.inf
+    if len(set(min_values)) > 1:
+        benchmark = math.ceil(min(min_values))
 
     return benchmark

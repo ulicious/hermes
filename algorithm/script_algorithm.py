@@ -101,6 +101,10 @@ def run_algorithm(args):
 
     # calculate benchmarks
     benchmark = calculate_benchmark(data, configuration, complete_infrastructure)
+    if math.isinf(benchmark):
+        print('Not able to calculate benchmark')
+        return None
+
     initial_benchmark_costs = benchmark
 
     # remove initial branches if they exceed benchmark

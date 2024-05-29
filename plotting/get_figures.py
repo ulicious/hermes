@@ -110,41 +110,38 @@ def get_routes_figure(sub_axes, routes, starting_locations, line_styles, line_wi
                                     if coordinate == route.geometry['coordinates'][1]:
                                         line_coordinates.append(last_coordinate)
 
-                                    if (last_coordinate[0] == 180) & (coordinate[0] == 180):
-                                        # when route crosses the 180° longitude, coordinates get higher than 180
-                                        # --> not allowed
+                                        if (((last_coordinate[0] == 180) & (coordinate[0] == 180))
+                                                | ((last_coordinate[0] == -180) & (coordinate[0] == -180))):
+                                            # when route crosses the 180° longitude, coordinates get higher than 180
+                                            # or vice versa
+                                            # --> not allowed
 
-                                        # plot line which is on left side of graph or vice versa
-                                        line = LineString(line_coordinates)
-                                        line_networks[(commodity, transport_mean)].append(line)
+                                            # finis line till 180 / -180
+                                            if len(line_coordinates) > 1:
+                                                line = LineString(line_coordinates)
+                                                line_networks[(commodity, transport_mean)].append(line)
 
-                                        # start new line
-                                        line_coordinates = []
+                                            # start new line
+                                            line_coordinates = []
 
-                                        split_line = True
+                                            split_line = True
 
-                                    if not split_line:
-                                        if direction == 'left_to_right':
+                                        if not split_line:
                                             line_coordinates.append(coordinate)
                                         else:
-                                            line_coordinates.append((coordinate[0] - 360, coordinate[1]))
-                                    else:
-                                        if direction == 'left_to_right':
-                                            line_coordinates.append((coordinate[0] - 360, coordinate[1]))
-                                        else:
-                                            line_coordinates.append(coordinate)
+                                            if direction == 'left_to_right':
+                                                line_coordinates.append((coordinate[0] + 360, coordinate[1]))
+                                            else:
+                                                line_coordinates.append((coordinate[0] - 360, coordinate[1]))
 
-                                    processed_coordinates.append((last_coordinate, coordinate, commodity))
-                                    processed_coordinates.append((coordinate, last_coordinate, commodity))
+                                        processed_coordinates.append((last_coordinate, coordinate, commodity))
+                                        processed_coordinates.append((coordinate, last_coordinate, commodity))
 
-                            last_coordinate = coordinate
+                                    last_coordinate = coordinate
 
-                        if len(line_coordinates) < 2:
-                            continue
-
-                        line = LineString(line_coordinates)
-
-                        line_networks[(commodity, transport_mean)].append(line)
+                                if len(line_coordinates) > 1:
+                                    line = LineString(line_coordinates)
+                                    line_networks[(commodity, transport_mean)].append(line)
 
                         processed_combinations.append((start, destination, commodity))
 

@@ -36,9 +36,9 @@ update_only_conversion_costs_and_efficiency = config_file['update_only_conversio
 
 num_cores = config_file['number_cores']
 if num_cores == 'max':
-    num_cores = multiprocessing.cpu_count()
+    num_cores = multiprocessing.cpu_count() - 1
 else:
-    num_cores = min(num_cores, multiprocessing.cpu_count())
+    num_cores = min(num_cores, multiprocessing.cpu_count() - 1)
 
 path_overall_data = config_file['project_folder_path']
 path_raw_data = path_overall_data + 'raw_data/'

@@ -43,9 +43,9 @@ if __name__ == '__main__':
 
         num_cores = config_file['number_cores']
         if num_cores == 'max':
-            num_cores = multiprocessing.cpu_count()
+            num_cores = multiprocessing.cpu_count() - 1
         else:
-            num_cores = min(num_cores, multiprocessing.cpu_count())
+            num_cores = min(num_cores, multiprocessing.cpu_count() - 1)
 
         # Create a pool of worker processes
         pool = multiprocessing.Pool(processes=num_cores, maxtasksperchild=1)
