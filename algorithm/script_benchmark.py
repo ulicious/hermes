@@ -18,7 +18,8 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
     """
 
     print_benchmark_info = configuration['print_benchmark_info']
-    min_values = []
+    min_value_overall = math.inf
+    min_value_info = None
 
     commodities = [*data['commodities']['commodity_objects'].keys()]
     commodity_combinations = itertools.combinations_with_replacement(commodities, 2)
@@ -45,15 +46,10 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
                             = find_pipeline_shipping_solution(data, configuration, complete_infrastructure, commodity_1,
                                                               commodity_2, pipeline_type='Pipeline_Gas')
 
-                        min_values.append(min_value)
+                        if min_value < min_value_overall:
+                            min_value_overall = min_value
 
-                        if print_benchmark_info:
-                            print(min_value)
-                            print(used_commodities)
-                            print(used_transport_means)
-                            print(used_nodes)
-                            print(distances)
-                            print(costs)
+                            min_value_info = [used_commodities, used_transport_means, used_nodes, distances, costs]
 
             if commodity_2.get_transportation_options_specific_mean_of_transport('Pipeline_Gas'):
                 if ((commodity_2.get_name() == 'Hydrogen_Gas') & configuration['H2_ready_infrastructure']) | (commodity_2.get_name() != 'Hydrogen_Gas'):
@@ -63,15 +59,10 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
                             = find_pipeline_shipping_solution(data, configuration, complete_infrastructure, commodity_2,
                                                               commodity_1, pipeline_type='Pipeline_Gas')
 
-                        min_values.append(min_value)
+                        if min_value < min_value_overall:
+                            min_value_overall = min_value
 
-                        if print_benchmark_info:
-                            print(min_value)
-                            print(used_commodities)
-                            print(used_transport_means)
-                            print(used_nodes)
-                            print(distances)
-                            print(costs)
+                            min_value_info = [used_commodities, used_transport_means, used_nodes, distances, costs]
 
             if commodity_1.get_transportation_options_specific_mean_of_transport('Pipeline_Liquid'):
                 if commodity_2.get_transportation_options_specific_mean_of_transport('Shipping'):
@@ -80,15 +71,10 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
                         = find_pipeline_shipping_solution(data, configuration, complete_infrastructure, commodity_1,
                                                           commodity_2, pipeline_type='Pipeline_Liquid')
 
-                    min_values.append(min_value)
+                    if min_value < min_value_overall:
+                        min_value_overall = min_value
 
-                    if print_benchmark_info:
-                        print(min_value)
-                        print(used_commodities)
-                        print(used_transport_means)
-                        print(used_nodes)
-                        print(distances)
-                        print(costs)
+                        min_value_info = [used_commodities, used_transport_means, used_nodes, distances, costs]
 
             if commodity_2.get_transportation_options_specific_mean_of_transport('Pipeline_Liquid'):
                 if commodity_1.get_transportation_options_specific_mean_of_transport('Shipping'):
@@ -97,15 +83,10 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
                         = find_pipeline_shipping_solution(data, configuration, complete_infrastructure, commodity_2,
                                                           commodity_1, pipeline_type='Pipeline_Liquid')
 
-                    min_values.append(min_value)
+                    if min_value < min_value_overall:
+                        min_value_overall = min_value
 
-                    if print_benchmark_info:
-                        print(min_value)
-                        print(used_commodities)
-                        print(used_transport_means)
-                        print(used_nodes)
-                        print(distances)
-                        print(costs)
+                        min_value_info = [used_commodities, used_transport_means, used_nodes, distances, costs]
 
             if commodity_1.get_transportation_options_specific_mean_of_transport('Pipeline_Gas'):
                 if ((commodity_1.get_name() == 'Hydrogen_Gas') & configuration['H2_ready_infrastructure']) | (
@@ -116,15 +97,10 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
                             = find_pipeline_solution(data, configuration, complete_infrastructure, commodity_1,
                                                      commodity_2, pipeline_type='Pipeline_Gas')
 
-                        min_values.append(min_value)
+                        if min_value < min_value_overall:
+                            min_value_overall = min_value
 
-                        if print_benchmark_info:
-                            print(min_value)
-                            print(used_commodities)
-                            print(used_transport_means)
-                            print(used_nodes)
-                            print(distances)
-                            print(costs)
+                            min_value_info = [used_commodities, used_transport_means, used_nodes, distances, costs]
 
             if commodity_2.get_transportation_options_specific_mean_of_transport('Pipeline_Gas'):
                 if ((commodity_2.get_name() == 'Hydrogen_Gas') & configuration['H2_ready_infrastructure']) | (
@@ -136,15 +112,10 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
                                                      commodity_1,
                                                      pipeline_type='Pipeline_Gas')
 
-                        min_values.append(min_value)
+                        if min_value < min_value_overall:
+                            min_value_overall = min_value
 
-                        if print_benchmark_info:
-                            print(min_value)
-                            print(used_commodities)
-                            print(used_transport_means)
-                            print(used_nodes)
-                            print(distances)
-                            print(costs)
+                            min_value_info = [used_commodities, used_transport_means, used_nodes, distances, costs]
 
             if commodity_1.get_transportation_options_specific_mean_of_transport('Pipeline_Liquid'):
                 if commodity_2.get_transportation_options_specific_mean_of_transport('Road'):
@@ -153,15 +124,10 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
                         = find_pipeline_solution(data, configuration, complete_infrastructure, commodity_1,
                                                  commodity_2, pipeline_type='Pipeline_Liquid')
 
-                    min_values.append(min_value)
+                    if min_value < min_value_overall:
+                        min_value_overall = min_value
 
-                    if print_benchmark_info:
-                        print(min_value)
-                        print(used_commodities)
-                        print(used_transport_means)
-                        print(used_nodes)
-                        print(distances)
-                        print(costs)
+                        min_value_info = [used_commodities, used_transport_means, used_nodes, distances, costs]
 
             if commodity_2.get_transportation_options_specific_mean_of_transport('Pipeline_Liquid'):
                 if commodity_1.get_transportation_options_specific_mean_of_transport('Road'):
@@ -170,33 +136,26 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
                         = find_pipeline_solution(data, configuration, complete_infrastructure, commodity_2,
                                                  commodity_1, pipeline_type='Pipeline_Liquid')
 
-                    min_values.append(min_value)
+                    if min_value < min_value_overall:
+                        min_value_overall = min_value
 
-                    if print_benchmark_info:
-                        print(min_value)
-                        print(used_commodities)
-                        print(used_transport_means)
-                        print(used_nodes)
-                        print(distances)
-                        print(costs)
+                        min_value_info = [used_commodities, used_transport_means, used_nodes, distances, costs]
 
         if ((commodity_1 == commodity_1) & commodity_1.get_transportation_options_specific_mean_of_transport('Shipping')
                 & commodity_1.get_transportation_options_specific_mean_of_transport('Road')):
             min_value, used_commodities, used_transport_means, used_nodes, distances, costs \
                 = find_shipping_benchmark_solution(data, configuration, complete_infrastructure, commodity_1)
 
-            min_values.append(min_value)
+            if min_value < min_value_overall:
+                min_value_overall = min_value
 
-            if print_benchmark_info:
-                print(min_value)
-                print(used_commodities)
-                print(used_transport_means)
-                print(used_nodes)
-                print(distances)
-                print(costs)
+                min_value_info = [used_commodities, used_transport_means, used_nodes, distances, costs]
 
-    benchmark = math.inf
-    if len(set(min_values)) > 1:
-        benchmark = math.ceil(min(min_values))
+    benchmark = math.ceil(min_value_overall)
+
+    if print_benchmark_info:
+        print(benchmark)
+        for i in min_value_info:
+            print(i)
 
     return benchmark

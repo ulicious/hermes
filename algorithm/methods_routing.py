@@ -180,7 +180,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         road_distances = road_distances[branches_to_keep_road]
         road_transportation_costs = pd.Series(road_transportation_costs.values(), index=road_transportation_costs.keys())
 
-        # remove road options where distance is above allowed configuration
+        # remove road options where distance is above allowed configuration  # todo: hier müssen alle transporte von gleicher zur gleichen nfrasktrutur entfernt werden
         road_options = road_distances[road_distances <= max_length_road / no_road_multiplier]
         road_options = road_options.transpose().stack().dropna().reset_index()
         road_options.columns = ['previous_branch', 'current_node', 'current_distance']
@@ -235,7 +235,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                                                        branches_no_duplicates['longitude'])
 
             elif limitation == 'no_pipelines':
-                reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'H' in i]
+                reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'H' in i] + ['Destination']
                 distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                        complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                        branches_no_duplicates['latitude'],
@@ -296,6 +296,11 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                         = {'nodes': data['Pipeline_Liquid'][visited_infrastructure]['NodeLocations'].index.tolist(),
                            'branches': affected_branches}
 
+                else:
+                    branches_to_remove_based_on_visited_infrastructure[visited_infrastructure] \
+                        = {'nodes': [visited_infrastructure],
+                           'branches': affected_branches}
+
         # iterate over all commodities. Necessary to look at each commodity to check if applicable for road or
         # new pipeline and to get costs of transport
         for c in branches['current_commodity'].unique():
@@ -348,6 +353,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 road_distances.drop(columns=['max_length', 'road_applicable'], inplace=True)
 
                 # remove options based on previous used infrastructure
+                # todo: das scheint weder bei Häfen noch bei Pipelines richtig zu funktionieren --> new pipelines zwischen gleichen grafen
                 for visited_infrastructure in branches_to_remove_based_on_visited_infrastructure.keys():
                     affected_branches \
                         = list(set(road_distances.index.tolist()).intersection(branches_to_remove_based_on_visited_infrastructure[visited_infrastructure]['branches']))
@@ -385,10 +391,20 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 mask = new_distances[columns].values > new_distances['max_length'].values[:, None]
                 new_distances.loc[:, columns] = np.where(mask, np.nan, new_distances[columns].values)
 
-                # drop unnecessary columns and infrastructure which cannot be used (is nan)
-                new_distances.drop(columns=['minimal_distance', 'max_length', 'pipeline_gas_applicable', 'pipeline_liquid_applicable'],
-                                   inplace=True)
+                # remove unnecessary columns
+                new_distances.drop(
+                    columns=['minimal_distance', 'max_length', 'pipeline_gas_applicable', 'pipeline_liquid_applicable'],
+                    inplace=True)
+
+                # remove used infrastructure
+                for visited_infrastructure in branches_to_remove_based_on_visited_infrastructure.keys():
+                    affected_branches \
+                        = list(set(new_distances.index.tolist()).intersection(branches_to_remove_based_on_visited_infrastructure[visited_infrastructure]['branches']))
+                    new_distances.loc[affected_branches, branches_to_remove_based_on_visited_infrastructure[visited_infrastructure]['nodes']] = np.nan
+
+                # restructure
                 new_distances = new_distances.stack().dropna()
+                new_distances = new_distances.apply(pd.to_numeric, errors='coerce').dropna()
                 all_new_distances.append(new_distances)
 
         if all_road_distances:
@@ -406,7 +422,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             new_infrastructure_options = pd.DataFrame()
 
     # Create new branches for road options
-    if not road_options.empty:
+    if not road_options.empty:  # todo: Man könnte noch alle optionen entfernen, die gleiche start und end node haben (--> kein transport)
 
         # all distance below tolerance are 0
         below_tolerance = road_options[road_options['current_distance'] <= tolerance_distance].index
@@ -637,7 +653,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                 starting_points += [start_infrastructure] * length_index
                 branch_list += [s] * length_index
 
-                current_infrastructure += ['Shipping'] * length_index
+                current_infrastructure += current_total_costs_distances.index.tolist()
                 transport_mean += ['Shipping'] * length_index
 
                 transportation_costs_list += [transportation_costs] * length_index

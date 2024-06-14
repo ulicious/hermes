@@ -394,17 +394,15 @@ def run_algorithm(args):
                 # we don't have to assess the pipeline type for this branch
                 no_pipeline_gas_branches \
                     = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] > benchmark)
-                                              & (out_infrastructure_branches[
-                                                     'min_costs_pipeline_liquid'] <= benchmark)].index.tolist()
+                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] <= benchmark)].index.tolist()
 
                 no_pipeline_liquid_branches \
                     = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] <= benchmark)
-                                              & (out_infrastructure_branches[
-                                                     'min_costs_pipeline_liquid'] > benchmark)].index.tolist()
+                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] > benchmark)].index.tolist()
+
                 only_shipping_branches \
                     = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] > benchmark)
-                                              & (out_infrastructure_branches[
-                                                     'min_costs_pipeline_liquid'] > benchmark)].index.tolist()
+                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] > benchmark)].index.tolist()
 
                 no_limitation \
                     = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] <= benchmark)

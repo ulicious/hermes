@@ -266,7 +266,7 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
     travelled_distances.append(shipping_options.at[idx[1], 'distance_to_destination'])
 
     # if second harbor is in tolerance to destination, then we convert at second harbor. Else in destination
-    if shipping_options.at[idx[1], 'distance_to_destination'] == 0:
+    if shipping_options.at[idx[1], 'distance_to_destination'] <= configuration['to_final_destination_tolerance']:
         final_node_to_calculate = idx[1]
     else:
         final_node_to_calculate = 'Destination'
@@ -301,8 +301,16 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
         for c in final_commodities:
             if conversion_options[c]:
 
-                conversion_costs_c = conversion_costs.at[final_node_to_calculate, c]
-                conversion_efficiency = conversion_losses.at[final_node_to_calculate, c]
+                if final_node_to_calculate != 'Destination':
+                    if conversion_costs.at[final_node_to_calculate, c] > conversion_costs.at['Destination', c]:
+                        conversion_costs_c = conversion_costs.at[final_node_to_calculate, c]
+                        conversion_efficiency = conversion_losses.at[final_node_to_calculate, c]
+                    else:
+                        conversion_costs_c = conversion_costs.at['Destination', c]
+                        conversion_efficiency = conversion_losses.at['Destination', c]
+                else:
+                    conversion_costs_c = conversion_costs.at['Destination', c]
+                    conversion_efficiency = conversion_losses.at['Destination', c]
 
                 conversion_costs_c = (min_value + conversion_costs_c) / conversion_efficiency
 
