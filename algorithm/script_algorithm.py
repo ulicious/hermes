@@ -143,8 +143,7 @@ def run_algorithm(args):
 
             # Conversion is applied twice as we always go the route of conversion
             # from commodity X to H2 and from H2 to commodity Y
-            # todo: first conversion is mostly from a energy carrier to hydrogen. Check if hydrogen was already used
-            #  at location --> if this hydrogen is cheaper than after the conversion, then no second conversion is needed
+            # todo (for further increase of speed): comparison to local benchmarks
 
             if not branches.empty:
                 branches, potential_final_solution, branch_number, benchmark, local_benchmarks = \

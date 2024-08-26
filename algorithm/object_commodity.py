@@ -1,4 +1,5 @@
 import pandas as pd
+import math
 
 
 class Commodity:
@@ -150,7 +151,7 @@ def create_commodity_objects(location_data,
 
         # -- transportation
         potential_transport_means = techno_economic_data_transportation[source_commodity]['potential_transportation']
-        transportation_costs = pd.Series(0, index=potential_transport_means)
+        transportation_costs = pd.Series(math.inf, index=potential_transport_means)
         transportation_options = {}
 
         for mean_of_transport in all_transport_means:
@@ -159,8 +160,8 @@ def create_commodity_objects(location_data,
                 transportation_options[mean_of_transport] = True
 
                 if (not config_file['H2_ready_infrastructure']) & (source_commodity == 'Hydrogen_Gas') \
-                        & (mean_of_transport in ['Pipeline_Gas', 'New_Pipeline_Gas']):
-                    # if set in configuration, don't allow  pipelines
+                        & (mean_of_transport in ['Pipeline_Gas']):
+                    # if set in configuration, don't allow retrofit pipelines --> costs will be infinity
                     continue
 
                 transportation_costs.loc[mean_of_transport] \

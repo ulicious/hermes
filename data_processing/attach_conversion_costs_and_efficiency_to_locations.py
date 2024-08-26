@@ -1,4 +1,5 @@
 import tqdm
+import math
 
 import pandas as pd
 import numpy as np
@@ -130,8 +131,6 @@ def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, 
         @return: updated dataframe including conversion costs and efficiency
         """
 
-        interest_rate = techno_economic_data_conversion['uniform_interest_rate']
-
         # some support materials are not necessarily needed -> 0 costs
         if 'Electricity' in [*config_file['cost_type'].keys()]:
             electricity_costs = locations_to_process['Electricity']
@@ -159,6 +158,8 @@ def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, 
                 fixed_maintenance = techno_economic_data_conversion[c1_local][c2_local]['fixed_maintenance']
                 lifetime = techno_economic_data_conversion[c1_local][c2_local]['lifetime']
                 operating_hours = techno_economic_data_conversion[c1_local][c2_local]['operating_hours']
+
+                interest_rate = locations_to_process['interest_rate']
 
                 if heat_demand == 0:
                     conversion_costs \
@@ -221,61 +222,155 @@ def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, 
 
     path_raw_data = config_file['project_folder_path'] + 'raw_data/'
 
-    levelized_costs_location = pd.read_csv(path_raw_data + 'levelized_costs_locations.csv', index_col=0)
-    levelized_costs_country = pd.read_csv(path_raw_data + 'levelized_costs_countries.csv', index_col=0)
+    levelized_costs_location = pd.read_csv(path_raw_data + 'location_data.csv', index_col=0)
+    levelized_costs_country = pd.read_csv(path_raw_data + 'country_data.csv', index_col=0, encoding='latin-1')
 
     # add country information to options
+    not_shipping_options = [i for i in locations.index if 'H' not in i]
+    not_shipping_options = locations.loc[not_shipping_options, :]
+
+    shipping_options = [i for i in locations.index if 'H' in i]  # harbours have information on country already
+
     country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
     world = gpd.read_file(country_shapefile)
-    gdf = gpd.GeoDataFrame(locations, geometry=gpd.points_from_xy(locations.longitude, locations.latitude))
+    gdf = gpd.GeoDataFrame(not_shipping_options, geometry=gpd.points_from_xy(not_shipping_options.longitude, not_shipping_options.latitude))
     result = gpd.sjoin(gdf, world, how='left')
+    not_shipping_options['country'] = result['NAME_EN']
 
-    locations['country'] = result['NAME_EN']
+    locations = pd.concat([locations.loc[shipping_options, :], not_shipping_options])
+
     no_country_options = locations[locations['country'].isna()]
     country_options = locations[~locations['country'].isna()]
 
     # get cost of location
     new_nan_values = []
-    for c in [*config_file['cost_type'].keys()]:
+    for key in [*config_file['cost_type'].keys()]:
 
-        if c == 'Hydrogen_Gas':
+        if key == 'Hydrogen_Gas':
             # hydrogen is not needed since commodity is transported to i
             continue
 
-        cost_type = config_file['cost_type'][c]
+        cost_type = config_file['cost_type'][key]
+
+        if key == 'interest_rate':
+            if cost_type == 'location':
+                raise TypeError('Interest rate cannot be location specific')
 
         if cost_type == 'uniform':
-            country_options[c] = techno_economic_data_conversion['uniform_costs'][c]
+            country_options[key] = techno_economic_data_conversion['uniform_costs'][key]
 
-        elif cost_type == 'country':
+        elif cost_type == 'all_countries':
             for country in country_options['country'].unique():
-                if country not in levelized_costs_country.index:
-                    new_nan_values.append(country_options.index)
 
-                country_options[c] = levelized_costs_country.loc[country, c]
+                sub_options = country_options[country_options['country'] == country].index
+
+                if country in levelized_costs_country.index.tolist():
+                    try:
+                        country_options.loc[sub_options, key] = levelized_costs_country.loc[country, key]
+                    except IndexError:
+                        print(country + ' is not in country file')
+                else:
+                    print(country)
+                    raise IndexError(country + ' is not in country file')
+
+        elif isinstance(cost_type, list):
+            # cost type is list of countries. Countries not in list will be treated as locations
+            for country in cost_type:
+
+                sub_options = country_options[country_options['country'] == country].index
+
+                if len(sub_options) > 0:
+                    if country in levelized_costs_country.index:
+                        try:
+                            country_options.loc[sub_options, key] = levelized_costs_country.loc[country, key]
+                        except IndexError:
+                            raise IndexError(country + ' is not in country file')
+
+            # process locations in countries which are not in list
+            not_processed_countries = set(country_options['country'].unique()) - set(cost_type)
+            affected_options = country_options[country_options['country'].isin(not_processed_countries)].index
+
+            if key == 'interest_rate':
+                country_options.loc[affected_options, key] = techno_economic_data_conversion['uniform_costs'][key]
+            else:
+                for i in affected_options.index:
+                    if 'H' in i:
+                        adjusted_latitude = round_to_quarter(country_options.loc[i, 'latitude_on_coastline'])
+                        adjusted_longitude = round_to_quarter(country_options.loc[i, 'longitude_on_coastline'])
+                    else:
+                        adjusted_latitude = round_to_quarter(country_options.loc[i, 'latitude'])
+                        adjusted_longitude = round_to_quarter(country_options.loc[i, 'longitude'])
+
+                    # apply small grid search to get the closest location
+                    sub_locations = levelized_costs_location[
+                        (levelized_costs_location['latitude'] <= adjusted_latitude + 0.5) &
+                        (levelized_costs_location['latitude'] >= adjusted_latitude - 0.5) &
+                        (levelized_costs_location['longitude'] <= adjusted_longitude + 0.5) &
+                        (levelized_costs_location['longitude'] >= adjusted_longitude - 0.5)]
+
+                    if not sub_locations.empty:
+                        distances = calc_distance_list_to_single(sub_locations['latitude'], sub_locations['longitude'],
+                                                                 adjusted_latitude, adjusted_longitude)
+                        distances = pd.DataFrame(distances, index=sub_locations.index)
+
+                        idxmin = distances.idxmin().values[0]
+                        country_options.loc[i, key] = levelized_costs_location.loc[idxmin, key]
+                    else:
+                        new_nan_values.append((i, key))
+
+        else:  # search costs for location
+            if with_tqdm:
+                options_index = tqdm.tqdm(country_options.index)
+            else:
+                options_index = country_options.index
+
+            for i in options_index:
+                if 'H' in i:
+                    adjusted_latitude = round_to_quarter(country_options.loc[i, 'latitude_on_coastline'])
+                    adjusted_longitude = round_to_quarter(country_options.loc[i, 'longitude_on_coastline'])
+                else:
+                    adjusted_latitude = round_to_quarter(country_options.loc[i, 'latitude'])
+                    adjusted_longitude = round_to_quarter(country_options.loc[i, 'longitude'])
+
+                # apply small grid search to get the closest location
+                sub_locations = levelized_costs_location[
+                    (levelized_costs_location['latitude'] <= adjusted_latitude + 0.5) &
+                    (levelized_costs_location['latitude'] >= adjusted_latitude - 0.5) &
+                    (levelized_costs_location['longitude'] <= adjusted_longitude + 0.5) &
+                    (levelized_costs_location['longitude'] >= adjusted_longitude - 0.5)]
+
+                if not sub_locations.empty:
+                    distances = calc_distance_list_to_single(sub_locations['latitude'], sub_locations['longitude'],
+                                                             adjusted_latitude, adjusted_longitude)
+                    distances = pd.DataFrame(distances, index=sub_locations.index)
+
+                    idxmin = distances.idxmin().values[0]
+                    country_options.loc[i, key] = levelized_costs_location.loc[idxmin, key]
+                else:
+                    new_nan_values.append((i, key))
 
     if with_tqdm:
-        options_index = tqdm.tqdm(country_options.index)
+        options_index = tqdm.tqdm(no_country_options.index)
     else:
-        options_index = country_options.index
+        options_index = no_country_options.index
 
     for i in options_index:
 
         if 'H' in i:
-            adjusted_latitude = round_to_quarter(country_options.loc[i, 'latitude_on_coastline'])
-            adjusted_longitude = round_to_quarter(country_options.loc[i, 'longitude_on_coastline'])
+            adjusted_latitude = round_to_quarter(no_country_options.loc[i, 'latitude_on_coastline'])
+            adjusted_longitude = round_to_quarter(no_country_options.loc[i, 'longitude_on_coastline'])
         else:
-            adjusted_latitude = round_to_quarter(country_options.loc[i, 'latitude'])
-            adjusted_longitude = round_to_quarter(country_options.loc[i, 'longitude'])
+            adjusted_latitude = round_to_quarter(no_country_options.loc[i, 'latitude'])
+            adjusted_longitude = round_to_quarter(no_country_options.loc[i, 'longitude'])
 
         # get cost of location
-        for c in [*config_file['cost_type'].keys()]:
+        for key in [*config_file['cost_type'].keys()]:
 
-            if c == 'Hydrogen_Gas':
+            if key == 'Hydrogen_Gas':
                 # hydrogen is not needed since commodity is transported to i
                 continue
 
-            if config_file['cost_type'][c] != 'location':
+            if config_file['cost_type'][key] != 'location':
                 continue
 
             # apply small grid search to get the closest location
@@ -290,17 +385,19 @@ def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, 
                 distances = pd.DataFrame(distances, index=sub_locations.index)
 
                 idxmin = distances.idxmin().values[0]
-                country_options.loc[i, c] = levelized_costs_location.loc[idxmin, c]
+                no_country_options.loc[i, key] = levelized_costs_location.loc[idxmin, key]
 
             else:
-                new_nan_values.append(i)
+                new_nan_values.append((i, key))
 
-    new_nan_solutions = country_options.loc[new_nan_values, :]
-    no_conversion_solutions = pd.concat([no_country_options, new_nan_solutions])
-    no_conversion_solutions['conversion_possible'] = False
+    conversion_solutions = pd.concat([country_options, no_country_options])
 
-    conversion_solutions = [i for i in country_options.index if i not in new_nan_values]
-    conversion_solutions = country_options.loc[conversion_solutions, :]
+    # if data for index - commodity combination does not exist, we set costs to infinity
+    for combination in new_nan_values:
+        i = combination[0]
+        key = combination[1]
+
+        conversion_solutions.at[i, key] = math.inf
 
     port_options = [i for i in conversion_solutions.index if 'H' in i]
     port_options = conversion_solutions.loc[port_options, :]
@@ -331,13 +428,10 @@ def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, 
     # if offshore, no conversion possible
     for c1 in config_file['available_commodity']:
         for c2 in techno_economic_data_conversion[c1]['potential_conversions']:
-            no_conversion_solutions[c1 + '_' + c2 + '_conversion_costs'] = np.nan
-            no_conversion_solutions[c1 + '_' + c2 + '_conversion_efficiency'] = np.nan
-
             columns_to_keep.append(c1 + '_' + c2 + '_conversion_costs')
             columns_to_keep.append(c1 + '_' + c2 + '_conversion_efficiency')
 
-    locations = pd.concat([port_options, pipeline_options, start_options, destination_options, no_conversion_solutions])
+    locations = pd.concat([port_options, pipeline_options, start_options, destination_options])
 
     locations = locations[columns_to_keep]
 

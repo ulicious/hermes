@@ -120,6 +120,8 @@ def apply_conversion():
         lifetime = techno_economic_data_conversion[start_commodity][target_commodity]['lifetime']
         operating_hours = techno_economic_data_conversion[start_commodity][target_commodity]['operating_hours']
 
+        interest_rate = locations['interest_rate']
+
         if heat_demand == 0:
             costs \
                 = calculate_conversion_costs(specific_investment, lifetime, fixed_maintenance,
@@ -179,8 +181,6 @@ def apply_conversion():
                     = techno_economic_data_conversion[start_commodity][target_commodity]['efficiency_autothermal']
 
         return costs, efficiency
-
-    interest_rate = techno_economic_data_conversion['uniform_interest_rate']
 
     hydrogen_costs = locations['Hydrogen_Gas']
 
@@ -248,11 +248,91 @@ else:
     minimal_latitude, maximal_latitude = 35, 71
     minimal_longitude, maximal_longitude = -25, 45
 
-levelized_costs_location = pd.read_csv(path_techno_economic_data + 'levelized_costs_locations.csv', index_col=0)
-levelized_costs_country = pd.read_csv(path_techno_economic_data + 'levelized_costs_countries.csv', index_col=0)
+levelized_costs_location = pd.read_csv(path_techno_economic_data + 'location_data.csv', index_col=0)
+levelized_costs_country = pd.read_csv(path_techno_economic_data + 'country_data.csv', index_col=0, encoding='latin-1')
 
 yaml_file = open(path_techno_economic_data + 'techno_economic_data_conversion.yaml')
 techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
+
+
+def get_costs():
+
+    """
+    get all cost information from settings
+
+    @return: returns boolean if all important cost information have been collected
+    """
+
+    restart_local = False
+
+    # get cost of location
+    for key in [*config_file['cost_type'].keys()]:
+
+        cost_type = config_file['cost_type'][key]
+
+        if key == 'interest_rate':
+            if cost_type == 'location':
+                raise TypeError('Interest rate cannot be location specific')
+
+        if cost_type == 'uniform':
+            locations.loc[i, key] = techno_economic_data_conversion['uniform_costs'][key]
+
+        elif cost_type == 'all_countries':
+            if country_start in levelized_costs_country.index.tolist():
+                try:
+                    locations.loc[i, key] = levelized_costs_country.loc[country_start, key]
+                except IndexError:
+                    print(country_start + ' is not in levelized costs country file')
+            else:
+                raise IndexError(country_start + ' is not in levelized costs country file')
+
+        elif isinstance(cost_type, list):
+            # cost type is list of countries. Countries not in list will be treated as locations
+            if country_start in cost_type:
+                if country_start in levelized_costs_country.index:
+                    try:
+                        locations.loc[i, key] = levelized_costs_country.loc[country_start, key]
+                    except IndexError:
+                        raise IndexError(country_start + ' is not in country file')
+
+            elif key == 'interest_rate':  # interest rate is never location specific
+                locations.loc[i, key] = techno_economic_data_conversion['uniform_costs'][key]
+
+            else:
+                # apply small grid search to get the closest location
+                sub_locations = levelized_costs_location[
+                    (levelized_costs_location['latitude'] <= adjusted_latitude + 0.5) &
+                    (levelized_costs_location['latitude'] >= adjusted_latitude - 0.5) &
+                    (levelized_costs_location['longitude'] <= adjusted_longitude + 0.5) &
+                    (levelized_costs_location['longitude'] >= adjusted_longitude - 0.5)]
+
+                if not sub_locations.empty:
+                    distances = calc_distance_list_to_single(sub_locations['latitude'], sub_locations['longitude'],
+                                                             adjusted_latitude, adjusted_longitude)
+                    distances = pd.DataFrame(distances, index=sub_locations.index)
+
+                    idxmin = distances.idxmin().values[0]
+                    locations.loc[i, key] = levelized_costs_location.loc[idxmin, key]
+
+        else:  # search costs for location
+            # apply small grid search to get the closest location
+            sub_locations = levelized_costs_location[
+                (levelized_costs_location['latitude'] <= adjusted_latitude + 0.5) &
+                (levelized_costs_location['latitude'] >= adjusted_latitude - 0.5) &
+                (levelized_costs_location['longitude'] <= adjusted_longitude + 0.5) &
+                (levelized_costs_location['longitude'] >= adjusted_longitude - 0.5)]
+
+            if not sub_locations.empty:
+                distances = calc_distance_list_to_single(sub_locations['latitude'], sub_locations['longitude'],
+                                                         adjusted_latitude, adjusted_longitude)
+                distances = pd.DataFrame(distances, index=sub_locations.index)
+
+                idxmin = distances.idxmin().values[0]
+                locations.loc[i, key] = levelized_costs_location.loc[idxmin, key]
+            else:
+                restart_local = True
+
+    return restart_local
 
 if not update_only_techno_economic_data:
 
@@ -300,39 +380,7 @@ if not update_only_techno_economic_data:
             adjusted_longitude = round_to_quarter(start_lon)
             adjusted_coords = str(int(adjusted_longitude * 100)) + 'x' + str(int(adjusted_latitude * 100))
 
-            # get cost of location
-            for c in [*config_file['cost_type'].keys()]:
-
-                cost_type = config_file['cost_type'][c]
-
-                if cost_type == 'uniform':
-                    locations.loc[i, c] = techno_economic_data_conversion['uniform_costs'][c]
-                elif cost_type == 'country':
-                    if country_start not in levelized_costs_country.index:
-                        try:
-                            locations.loc[i, c] = levelized_costs_country.loc[country_start, c]
-                        except IndexError:
-                            print(country_start + ' is not in levelized costs country file')
-                else:
-
-                    # apply small grid search to get the closest location
-                    sub_locations = levelized_costs_location[
-                        (levelized_costs_location['latitude'] <= adjusted_latitude + 0.5) &
-                        (levelized_costs_location['latitude'] >= adjusted_latitude - 0.5) &
-                        (levelized_costs_location['longitude'] <= adjusted_longitude + 0.5) &
-                        (levelized_costs_location['longitude'] >= adjusted_longitude - 0.5)]
-
-                    if not sub_locations.empty:
-                        distances = calc_distance_list_to_single(sub_locations['latitude'], sub_locations['longitude'],
-                                                                 adjusted_latitude, adjusted_longitude)
-                        distances = pd.DataFrame(distances, index=sub_locations.index)
-
-                        idxmin = distances.idxmin().values[0]
-                        locations.loc[i, c] = levelized_costs_location.loc[idxmin, c]
-
-                    else:
-                        restart = True
-                        break
+            restart = get_costs()
 
             if restart:
                 continue
@@ -356,35 +404,7 @@ else:
         adjusted_longitude = round_to_quarter(locations.at[i, 'longitude'])
         adjusted_coords = str(int(adjusted_longitude * 100)) + 'x' + str(int(adjusted_latitude * 100))
 
-        # get cost of location
-        for c in [*config_file['cost_type'].keys()]:
-
-            cost_type = config_file['cost_type'][c]
-
-            if cost_type == 'uniform':
-                locations.loc[i, c] = techno_economic_data_conversion['uniform_costs'][c]
-            elif cost_type == 'country':
-                if country_start not in levelized_costs_country.index:
-                    try:
-                        locations.loc[i, c] = levelized_costs_country.loc[country_start, c]
-                    except IndexError:
-                        print(country_start + ' is not in levelized costs country file')
-            else:
-
-                # apply small grid search to get the closest location
-                sub_locations = levelized_costs_location[
-                    (levelized_costs_location['latitude'] <= adjusted_latitude + 0.5) &
-                    (levelized_costs_location['latitude'] >= adjusted_latitude - 0.5) &
-                    (levelized_costs_location['longitude'] <= adjusted_longitude + 0.5) &
-                    (levelized_costs_location['longitude'] >= adjusted_longitude - 0.5)]
-
-                if not sub_locations.empty:
-                    distances = calc_distance_list_to_single(sub_locations['latitude'], sub_locations['longitude'],
-                                                             adjusted_latitude, adjusted_longitude)
-                    distances = pd.DataFrame(distances, index=sub_locations.index)
-
-                    idxmin = distances.idxmin().values[0]
-                    locations.loc[i, c] = levelized_costs_location.loc[idxmin, c]
+        get_costs()
 
 logging.info('Calculate conversion costs and efficiency')
 apply_conversion()

@@ -168,7 +168,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             if pipeline_applicable & build_new_infrastructure:
                 if current_commodity_object.get_transportation_options_specific_mean_of_transport('Pipeline_Gas'):
                     # gas pipeline
-                    new_transportation_costs[visited_infrastructure]\
+                    new_transportation_costs[visited_infrastructure] \
                         = current_commodity_object.get_transportation_costs_specific_mean_of_transport('New_Pipeline_Gas')
                 else:
                     # oil pipeline
@@ -180,7 +180,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         road_distances = road_distances[branches_to_keep_road]
         road_transportation_costs = pd.Series(road_transportation_costs.values(), index=road_transportation_costs.keys())
 
-        # remove road options where distance is above allowed configuration  # todo: hier müssen alle transporte von gleicher zur gleichen nfrasktrutur entfernt werden
+        # remove road options where distance is above allowed configuration
         road_options = road_distances[road_distances <= max_length_road / no_road_multiplier]
         road_options = road_options.transpose().stack().dropna().reset_index()
         road_options.columns = ['previous_branch', 'current_node', 'current_distance']
@@ -353,7 +353,6 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 road_distances.drop(columns=['max_length', 'road_applicable'], inplace=True)
 
                 # remove options based on previous used infrastructure
-                # todo: das scheint weder bei Häfen noch bei Pipelines richtig zu funktionieren --> new pipelines zwischen gleichen grafen
                 for visited_infrastructure in branches_to_remove_based_on_visited_infrastructure.keys():
                     affected_branches \
                         = list(set(road_distances.index.tolist()).intersection(branches_to_remove_based_on_visited_infrastructure[visited_infrastructure]['branches']))
