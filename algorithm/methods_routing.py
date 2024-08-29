@@ -88,10 +88,9 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
     max_length_new_segment = configuration['max_length_new_segment']
     max_length_road = configuration['max_length_road']
     no_road_multiplier = configuration['no_road_multiplier']
-    build_new_infrastructure = configuration['build_new_infrastructure']
 
     if iteration == 0:
-        # if iteration is 0, we don't make any preselection as we have only a very limited amount of branches
+        # if iteration is 0, we don't make any preselection since we have only a very limited amount of branches
         # and calculating distances for these few branches is possible without long computation times
 
         # only use options which are actually reachable from start
@@ -129,16 +128,16 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
         # for each branch, assess if new pipelines or road is applicable based on current commodity
         road_distances = pd.DataFrame(distances.transpose(), index=reduced_infrastructure_index, columns=branches.index)
-        for visited_infrastructure in branches.index:
-            current_commodity_object = branches.at[visited_infrastructure, 'current_commodity_object']
+        for branch_index in branches.index:
+            current_commodity_object = branches.at[branch_index, 'current_commodity_object']
 
             pipeline_applicable \
                 = current_commodity_object.get_transportation_options_specific_mean_of_transport('Pipeline_Gas') \
                 | current_commodity_object.get_transportation_options_specific_mean_of_transport('Pipeline_Liquid')
 
             # check which transport mean was used in previous iteration
-            was_not_road = branches.at[visited_infrastructure, 'current_transport_mean'] != 'Road'
-            was_not_new = branches.at[visited_infrastructure, 'current_transport_mean'] not in ['New_Pipeline_Gas', 'New_Pipeline_Liquid']
+            was_not_road = branches.at[branch_index, 'current_transport_mean'] != 'Road'
+            was_not_new = branches.at[branch_index, 'current_transport_mean'] not in ['New_Pipeline_Gas', 'New_Pipeline_Liquid']
 
             # we cannot use road or pipeline twice in a row
             road_applicable = current_commodity_object.get_transportation_options_specific_mean_of_transport('Road')
@@ -147,34 +146,34 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             # check which infrastructure can be transported via road
             if road_applicable:
                 # branches where last one was not road or new & commodity can be transported via road
-                road_transportation_costs[visited_infrastructure]\
+                road_transportation_costs[branch_index]\
                     = current_commodity_object.get_transportation_costs_specific_mean_of_transport('Road')
-                branches_to_keep_road.append(visited_infrastructure)
+                branches_to_keep_road.append(branch_index)
             else:
                 # branches where the above does not allow new road but as infrastructure is within tolerance, we can
                 # ignore transport mean as in this case we assume that we are already there
-                in_tolerance_options = road_distances[visited_infrastructure]
+                in_tolerance_options = road_distances[branch_index]
                 in_tolerance_options = in_tolerance_options[in_tolerance_options <= configuration['tolerance_distance']].index
-                road_distances[visited_infrastructure] = math.nan
-                road_distances.loc[in_tolerance_options, visited_infrastructure] = 0
+                road_distances[branch_index] = math.nan
+                road_distances.loc[in_tolerance_options, branch_index] = 0
 
-                road_transportation_costs[visited_infrastructure] = 0
-                branches_to_keep_road.append(visited_infrastructure)
+                road_transportation_costs[branch_index] = 0
+                branches_to_keep_road.append(branch_index)
 
             # we cannot use new pipeline or road pipeline twice in a row
             pipeline_applicable = pipeline_applicable & was_not_new & was_not_road
 
             # check if new pipelines are allowed and if so, which branches can use them
-            if pipeline_applicable & build_new_infrastructure:
-                if current_commodity_object.get_transportation_options_specific_mean_of_transport('Pipeline_Gas'):
+            if pipeline_applicable:
+                if current_commodity_object.get_transportation_options_specific_mean_of_transport('New_Pipeline_Gas'):
                     # gas pipeline
-                    new_transportation_costs[visited_infrastructure] \
+                    new_transportation_costs[branch_index] \
                         = current_commodity_object.get_transportation_costs_specific_mean_of_transport('New_Pipeline_Gas')
                 else:
                     # oil pipeline
-                    new_transportation_costs[visited_infrastructure]\
+                    new_transportation_costs[branch_index]\
                         = current_commodity_object.get_transportation_costs_specific_mean_of_transport('New_Pipeline_Liquid')
-                branches_to_keep_new.append(visited_infrastructure)
+                branches_to_keep_new.append(branch_index)
 
         # for road options, only keep branches where road is applicable
         road_distances = road_distances[branches_to_keep_road]
@@ -186,19 +185,16 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         road_options.columns = ['previous_branch', 'current_node', 'current_distance']
 
         # for new pipeline options, only keep branches where new pipelines are allowed and are applicable
-        if build_new_infrastructure:
-            new_infrastructure_distances = pd.DataFrame(distances.transpose(), index=reduced_infrastructure_index,
-                                                        columns=branches.index)
+        new_infrastructure_distances = pd.DataFrame(distances.transpose(), index=reduced_infrastructure_index,
+                                                    columns=branches.index)
 
-            new_infrastructure_distances = new_infrastructure_distances[branches_to_keep_new]
-            new_transportation_costs = pd.Series(new_transportation_costs.values(), index=new_transportation_costs.keys())
+        new_infrastructure_distances = new_infrastructure_distances[branches_to_keep_new]
+        new_transportation_costs = pd.Series(new_transportation_costs.values(), index=new_transportation_costs.keys())
 
-            new_infrastructure_options \
-                = new_infrastructure_distances[new_infrastructure_distances <= max_length_new_segment / no_road_multiplier]
-            new_infrastructure_options = new_infrastructure_options.transpose().stack().dropna().reset_index()
-            new_infrastructure_options.columns = ['previous_branch', 'current_node', 'current_distance']
-        else:
-            new_infrastructure_options = pd.DataFrame()
+        new_infrastructure_options \
+            = new_infrastructure_distances[new_infrastructure_distances <= max_length_new_segment / no_road_multiplier]
+        new_infrastructure_options = new_infrastructure_options.transpose().stack().dropna().reset_index()
+        new_infrastructure_options.columns = ['previous_branch', 'current_node', 'current_distance']
 
     else:
         # if iteration is not 0, there might be a large number of branches. Therefore, we need to preselect
@@ -280,25 +276,25 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
         # for each already visited node or port, get all branches which have been there already
         branches_to_remove_based_on_visited_infrastructure = {}
-        for visited_infrastructure in all_previous_infrastructure:
-            if visited_infrastructure is not None:
+        for branch_index in all_previous_infrastructure:
+            if branch_index is not None:
 
                 # check which branch has the visited infrastructure in all_previous_infrastructure
-                affected_branches = branches[branches['all_previous_infrastructure'].apply(lambda x: visited_infrastructure in x)].index
+                affected_branches = branches[branches['all_previous_infrastructure'].apply(lambda x: branch_index in x)].index
 
-                if 'PG' in visited_infrastructure:
-                    branches_to_remove_based_on_visited_infrastructure[visited_infrastructure] \
-                        = {'nodes': data['Pipeline_Gas'][visited_infrastructure]['NodeLocations'].index.tolist(),
+                if 'PG' in branch_index:
+                    branches_to_remove_based_on_visited_infrastructure[branch_index] \
+                        = {'nodes': data['Pipeline_Gas'][branch_index]['NodeLocations'].index.tolist(),
                            'branches': affected_branches}
 
-                elif 'PL' in visited_infrastructure:
-                    branches_to_remove_based_on_visited_infrastructure[visited_infrastructure] \
-                        = {'nodes': data['Pipeline_Liquid'][visited_infrastructure]['NodeLocations'].index.tolist(),
+                elif 'PL' in branch_index:
+                    branches_to_remove_based_on_visited_infrastructure[branch_index] \
+                        = {'nodes': data['Pipeline_Liquid'][branch_index]['NodeLocations'].index.tolist(),
                            'branches': affected_branches}
 
                 else:
-                    branches_to_remove_based_on_visited_infrastructure[visited_infrastructure] \
-                        = {'nodes': [visited_infrastructure],
+                    branches_to_remove_based_on_visited_infrastructure[branch_index] \
+                        = {'nodes': [branch_index],
                            'branches': affected_branches}
 
         # iterate over all commodities. Necessary to look at each commodity to check if applicable for road or
@@ -353,10 +349,10 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 road_distances.drop(columns=['max_length', 'road_applicable'], inplace=True)
 
                 # remove options based on previous used infrastructure
-                for visited_infrastructure in branches_to_remove_based_on_visited_infrastructure.keys():
+                for branch_index in branches_to_remove_based_on_visited_infrastructure.keys():
                     affected_branches \
-                        = list(set(road_distances.index.tolist()).intersection(branches_to_remove_based_on_visited_infrastructure[visited_infrastructure]['branches']))
-                    road_distances.loc[affected_branches, branches_to_remove_based_on_visited_infrastructure[visited_infrastructure]['nodes']] = np.nan
+                        = list(set(road_distances.index.tolist()).intersection(branches_to_remove_based_on_visited_infrastructure[branch_index]['branches']))
+                    road_distances.loc[affected_branches, branches_to_remove_based_on_visited_infrastructure[branch_index]['nodes']] = np.nan
 
                 # drop all nodes which cannot be visited
                 road_distances = road_distances.stack().dropna()
@@ -367,8 +363,8 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 all_road_distances.append(road_distances)
 
             # create and process new infrastructure distances
-            if (commodity_object.get_transportation_options()['Pipeline_Gas']
-                    | commodity_object.get_transportation_options()['Pipeline_Liquid']) & build_new_infrastructure:
+            if (commodity_object.get_transportation_options()['New_Pipeline_Gas']
+                    | commodity_object.get_transportation_options()['New_Pipeline_Liquid']):
 
                 new_distances = c_distances.copy().transpose()
                 columns = new_distances.columns
@@ -396,10 +392,10 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                     inplace=True)
 
                 # remove used infrastructure
-                for visited_infrastructure in branches_to_remove_based_on_visited_infrastructure.keys():
+                for branch_index in branches_to_remove_based_on_visited_infrastructure.keys():
                     affected_branches \
-                        = list(set(new_distances.index.tolist()).intersection(branches_to_remove_based_on_visited_infrastructure[visited_infrastructure]['branches']))
-                    new_distances.loc[affected_branches, branches_to_remove_based_on_visited_infrastructure[visited_infrastructure]['nodes']] = np.nan
+                        = list(set(new_distances.index.tolist()).intersection(branches_to_remove_based_on_visited_infrastructure[branch_index]['branches']))
+                    new_distances.loc[affected_branches, branches_to_remove_based_on_visited_infrastructure[branch_index]['nodes']] = np.nan
 
                 # restructure
                 new_distances = new_distances.stack().dropna()

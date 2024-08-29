@@ -157,18 +157,33 @@ def create_commodity_objects(location_data,
         for mean_of_transport in all_transport_means:
             if mean_of_transport in potential_transport_means:
 
-                transportation_options[mean_of_transport] = True
+                if 'New' in mean_of_transport:
+                    # check if new pipelines can be built
+                    if config_file['build_new_infrastructure']:
+                        transportation_options[mean_of_transport] = True
+                    else:
+                        transportation_options[mean_of_transport] = False
 
-                if (not config_file['H2_ready_infrastructure']) & (source_commodity == 'Hydrogen_Gas') \
-                        & (mean_of_transport in ['Pipeline_Gas']):
-                    # if set in configuration, don't allow retrofit pipelines --> costs will be infinity
-                    continue
+                elif source_commodity == 'Hydrogen_Gas':
+                    # if hydrogen, check if retrofitting is possible
+                    if mean_of_transport == 'Pipeline_Gas':
+                        if config_file['H2_ready_infrastructure']:
+                            transportation_options[mean_of_transport] = True
+                        else:
+                            transportation_options[mean_of_transport] = False
+                    else:
+                        transportation_options[mean_of_transport] = True
 
+                else:
+                    transportation_options[mean_of_transport] = True
+
+                # attach transportation costs
                 transportation_costs.loc[mean_of_transport] \
                     = techno_economic_data_transportation[source_commodity][mean_of_transport] / 1000
 
-            else:
+            else:  # mean of transport is not in potential transport means
                 transportation_options[mean_of_transport] = False
+                transportation_costs.loc[mean_of_transport] = math.inf
 
         conversion_costs = locations_with_conversion[conversion_cost_columns]
         conversion_costs.columns = order_commodities

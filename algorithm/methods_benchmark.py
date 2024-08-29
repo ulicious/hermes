@@ -182,7 +182,7 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
             = shipping_options.loc[valid_options, 'distance_to_start'] / 1000 * transportation_costs['Road'] * no_road_multiplier
 
     shipping_options['pipeline_gas_transportation_costs_from_start'] = math.inf
-    if transportation_options['Pipeline_Gas']:
+    if transportation_options['New_Pipeline_Gas']:
 
         valid_options = \
             shipping_options[shipping_options['reachable_from_start'] &
@@ -192,7 +192,7 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
             = shipping_options.loc[valid_options, 'distance_to_start'] / 1000 * transportation_costs['New_Pipeline_Gas'] * no_road_multiplier
 
     shipping_options['pipeline_liquid_transportation_costs_from_start'] = math.inf
-    if transportation_options['Pipeline_Liquid']:
+    if transportation_options['New_Pipeline_Liquid']:
 
         valid_options \
             = shipping_options[shipping_options['reachable_from_start'] &
@@ -212,7 +212,7 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
             = shipping_options.loc[valid_options, 'distance_to_destination'] / 1000 * transportation_costs['Road'] * no_road_multiplier
 
     shipping_options['pipeline_gas_transportation_costs_to_destination'] = math.inf
-    if transportation_options['Pipeline_Gas']:
+    if transportation_options['New_Pipeline_Gas']:
         valid_options = \
             shipping_options[shipping_options['reachable_from_destination'] &
                              (shipping_options['distance_to_destination'] <= max_length_new_segment / no_road_multiplier)].index
@@ -221,7 +221,7 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
             = shipping_options.loc[valid_options, 'distance_to_destination'] / 1000 * transportation_costs['New_Pipeline_Gas'] * no_road_multiplier
 
     shipping_options['pipeline_liquid_transportation_costs_to_destination'] = math.inf
-    if transportation_options['Pipeline_Liquid']:
+    if transportation_options['New_Pipeline_Liquid']:
         valid_options \
             = shipping_options[shipping_options['reachable_from_destination'] &
                                (shipping_options['distance_to_destination'] <= max_length_new_segment / no_road_multiplier)].index
@@ -274,18 +274,18 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
     if chosen_mot_1 == 'road':
         used_transport_means.append('Road')
     elif chosen_mot_1 == 'pipeline_gas':
-        used_transport_means.append('Pipeline_Gas')
+        used_transport_means.append('New_Pipeline_Gas')
     else:
-        used_transport_means.append('Pipeline_Liquid')
+        used_transport_means.append('New_Pipeline_Liquid')
 
     used_transport_means.append('Shipping')
 
     if chosen_mot_2 == 'road':
         used_transport_means.append('Road')
     elif chosen_mot_2 == 'pipeline_gas':
-        used_transport_means.append('Pipeline_Gas')
+        used_transport_means.append('New_Pipeline_Gas')
     else:
-        used_transport_means.append('Pipeline_Liquid')
+        used_transport_means.append('New_Pipeline_Liquid')
 
     costs.append(shipping_options.at[idx[0], chosen_mot_1 + '_transportation_costs_from_start'])
     costs.append(shipping_costs.at[idx[0], idx[1]])

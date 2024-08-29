@@ -156,4 +156,8 @@ def prepare_data_and_configuration_dictionary(config_file):
     if isinstance(configuration['max_length_road'], str):
         configuration['max_length_road'] = math.inf
 
+    # if no new pipeline infrastructure can be built, then we set distance to 0
+    if not configuration['build_new_infrastructure']:
+        configuration['max_length_new_segment'] = 0
+
     return data, configuration, location_data

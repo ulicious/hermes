@@ -214,14 +214,18 @@ def run_algorithm(args):
                 commodity_object_branches \
                     = branches[branches['current_commodity_object'] == commodity_object].index
 
-                for mot in ['Road', 'Shipping', 'Pipeline_Liquid', 'Pipeline_Gas']:
+                # attach boolean if available transport option
+                for mot in config_file['available_transport_means']:
                     branches.loc[commodity_object_branches, mot + '_applicable'] \
                         = commodity_object.get_transportation_options_specific_mean_of_transport(mot)
 
-                if commodity_object.get_transportation_options_specific_mean_of_transport('Pipeline_Gas'):
+                    commodity_object.get_transportation_costs_specific_mean_of_transport(mot)
+
+                # attach transportation costs
+                if commodity_object.get_transportation_options_specific_mean_of_transport('New_Pipeline_Gas'):
                     branches.loc[commodity_object_branches, 'new_transportation_costs'] \
                         = commodity_object.get_transportation_costs_specific_mean_of_transport('New_Pipeline_Gas')
-                elif commodity_object.get_transportation_options_specific_mean_of_transport('Pipeline_Liquid'):
+                elif commodity_object.get_transportation_options_specific_mean_of_transport('New_Pipeline_Liquid'):
                     branches.loc[commodity_object_branches, 'new_transportation_costs'] \
                         = commodity_object.get_transportation_costs_specific_mean_of_transport('New_Pipeline_Liquid')
 
