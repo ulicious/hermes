@@ -222,8 +222,8 @@ def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, 
 
     path_raw_data = config_file['project_folder_path'] + 'raw_data/'
 
-    levelized_costs_location = pd.read_csv(path_raw_data + 'location_data.csv', index_col=0)
-    levelized_costs_country = pd.read_csv(path_raw_data + 'country_data.csv', index_col=0, encoding='latin-1')
+    levelized_costs_location = pd.read_csv(path_raw_data + config_file['location_data_name'], index_col=0)
+    levelized_costs_country = pd.read_csv(path_raw_data + config_file['country_data_name'], index_col=0, encoding='latin-1')
 
     # add country information to options
     not_shipping_options = [i for i in locations.index if 'H' not in i]

@@ -233,7 +233,7 @@ path_config = os.getcwd() + '/algorithm_configuration.yaml'
 yaml_file = open(path_config)
 config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-path_techno_economic_data = config_file['project_folder_path'] + 'raw_data/'
+path_raw_data = config_file['project_folder_path'] + 'raw_data/'
 
 update_only_techno_economic_data = config_file['update_only_conversion_costs_and_efficiency']
 
@@ -248,10 +248,10 @@ else:
     minimal_latitude, maximal_latitude = 35, 71
     minimal_longitude, maximal_longitude = -25, 45
 
-levelized_costs_location = pd.read_csv(path_techno_economic_data + 'location_data.csv', index_col=0)
-levelized_costs_country = pd.read_csv(path_techno_economic_data + 'country_data.csv', index_col=0, encoding='latin-1')
+levelized_costs_location = pd.read_csv(path_raw_data + config_file['location_data_name'], index_col=0)
+levelized_costs_country = pd.read_csv(path_raw_data + config_file['country_data_name'], index_col=0, encoding='latin-1')
 
-yaml_file = open(path_techno_economic_data + 'techno_economic_data_conversion.yaml')
+yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
 techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
 
