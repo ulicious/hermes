@@ -249,7 +249,7 @@ else:
     minimal_longitude, maximal_longitude = -25, 45
 
 levelized_costs_location = pd.read_csv(path_raw_data + config_file['location_data_name'], index_col=0)
-levelized_costs_country = pd.read_csv(path_raw_data + config_file['country_data_name'], index_col=0, encoding='latin-1')
+levelized_costs_country = pd.read_csv(path_raw_data + config_file['country_data_name'], index_col=0)
 
 yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
 techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
