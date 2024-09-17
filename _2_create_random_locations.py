@@ -397,6 +397,10 @@ else:
     logging.info('Update existing locations')
     locations = pd.read_excel(config_file['project_folder_path'] + 'start_destination_combinations.xlsx', index_col=0)
 
+    # remove all previous costs
+    columns_to_keep = ['longitude', 'latitude', 'country_start', 'continent_start']
+    locations = locations[columns_to_keep]
+
     for i in locations.index:
         country_start = locations.at[i, 'country_start']
 
