@@ -7,7 +7,7 @@ capable to find the most cost-effective transportation route from pre-defined st
 The algorithm derives possible solutions for transportation from a starting point to the final destination.
 Based on the underlying infrastructure data, the algorithm iteratively explores infrastructure nodes and calculates
 costs for each reached node. It terminates as soon as it reaches the final destination and exploration
-to other nodes is not possible anymore.
+to other nodes is not possible anymore
 
 <p align="center">
   <img src="images/graphical_abstract.png" />
