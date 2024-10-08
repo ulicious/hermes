@@ -1,0 +1,18 @@
+Assumption / Setting;Values;Explanation;Comment
+destination_location;[longitude, latitude];Coordinates of destination;
+destination_country;string;Country of destination;
+destination_continent;string;Continent of destination;
+origin_continents;list;If not empty, random locations will only be created on indicated locations. Empty if all continents;
+cost_type;string / list;"Defines the cost type of the different feedstocks / economic assumptions at locations / in countries. Possible are:
+'location': costs will be looked up for each location (from location_data)
+'uniform': as set in techno_economic_data_conversion
+['COUNTRY_NAME_1', 'COUNTRY_NAME_2', ...]: costs will be looked up for specific countries in list, for all other based on location data
+'all_countries': always country (from country_data)";If location or country are used, values for locations and countries need to be available in location_data and country_data
+low_temp_heat_available_at_start;True / False;Indicates if low-temperature heat is available at start;"Affects conversion costs; value defined in cost_type"
+mid_temp_heat_available_at_start;True / False;Indicates if medium-temperature heat is available at start;"Affects conversion costs; value defined in cost_type"
+high_temp_heat_available_at_start;True / False;Indicates if high-temperature heat is available at start;"Affects conversion costs; value defined in cost_type"
+number_locations;integer;Number of random locations to create;
+minimal_latitude;latitude;Sets minimal latitude of random locations;will be overwritten if minimal_example is applied
+maximal_latitude;latitude;Sets maximal latitude of random locations;will be overwritten if minimal_example is applied
+minimal_longitude;longitude;Sets minimal longitude of random locations;will be overwritten if minimal_example is applied
+maximal_longitude;longitude;Sets maximal longitude of random locations;will be overwritten if minimal_example is applied

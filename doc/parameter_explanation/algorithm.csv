@@ -1,0 +1,14 @@
+Assumption / Setting;Values;Explanation;Comment
+target_commodity;list;Indicate which commodities at destination are desired;
+tolerance_distance;integer / math.inf;In meters. Indicates within which distances a branch is at location. If distance smaller than tolerance, infrastructure can be used directly;
+to_final_destination_tolerance;integer / math.inf;In meters. Indicates within which distances a branch is at destination. If distance smaller than tolerance, branch is at destination;
+max_length_new_segment;integer / math.inf;In meters. Indicates which maximal distance can be covered with new pipelines;
+max_length_road;integer / math.inf;In meters. Indicates which maximal distance can be covered by road transport;
+no_road_multiplier;float;Indicates by which factor new pipelines and road transport is multiplied to consider rerouting due to obstacles;
+build_new_infrastructure;True / False;If True, new pipelines can be built;
+H2_ready_infrastructure;True / False;If True, existing natural gas pipelines can be used for hydrogen transport;
+low_temp_heat_available_at_destination;True / False;Indicates if low-temperature heat is available at destination;
+mid_temp_heat_available_at_destination;True / False;Indicates if medium-temperature heat is available at destination;
+high_temp_heat_available_at_destination;True / False;Indicates if high-temperature heat is available at destination;
+print_runtime_information;True / False;If True, regular updates on branches is given while code is running;
+print_benchmark_info;True / False;If True, information on initial benchmark for each location is given;

@@ -1,0 +1,3 @@
+Assumption / Setting;Values;Explanation;Comment
+available_commodity;list;Indicates which commodities will be considered;
+available_transport_means;list;Indicates which transport means will be considered;
