@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: : 2024 - HERMES Author
+#
+# SPDX-License-Identifier: CC0-1.0
+
+version: 1
+
+build:
+  os: ubuntu-20.04.6 LTS
+  tools:
+    python: "3.10"
+
+python:
+  install:
+  - requirements: requirements.txt
