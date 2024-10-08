@@ -6,7 +6,7 @@ HERMES: Hydrogen Economy Routing Model for cost-efficient Supply
 
 .. image:: images/routes.png
 
-PtX transport is a multi commodity multi mean of transport algorithm,
+HERMES is a multi commodity multi mean of transport algorithm,
 capable to find the most cost-effective transportation route from pre-defined starting points to a desired location.
 The algorithm derives possible solutions for transportation from a starting point to the final destination.
 Based on the underlying infrastructure data, the algorithm iteratively explores infrastructure nodes and calculates
@@ -40,11 +40,11 @@ Important things to consider:
 - The computational expenses heavily rely on the data and setting
 
 Citation
-=
+==
 Soon
 
 Big thanks to:
-=
+==
 
 - genthalili's SeaRoute package (https://github.com/genthalili/searoute-py/tree/main)
 - NetworkX: Aric A. Hagberg, Daniel A. Schult and Pieter J. Swart, “Exploring network structure, dynamics, and function using NetworkX”, in Proceedings of the 7th Python in Science Conference (SciPy2008), Gäel Varoquaux, Travis Vaught, and Jarrod Millman (Eds), (Pasadena, CA USA), pp. 11–15, Aug 2008
@@ -52,6 +52,10 @@ Big thanks to:
 
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
+   :caption: Getting Started:
+
+   introduction
+   installation
+   usage
 
