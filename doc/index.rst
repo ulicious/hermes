@@ -1,7 +1,5 @@
 .. HERMES: Hydrogen Economy Routing Model for cost-efficient Supply documentation master file, created by
    sphinx-quickstart on Tue Oct  8 11:11:51 2024.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
 
 HERMES: Hydrogen Economy Routing Model for cost-efficient Supply
 ==============================================================================
@@ -42,8 +40,8 @@ Important things to consider:
 - The computational expenses heavily rely on the data and setting
 
 Citation
-=====
-
+=
+Soon
 
 Big thanks to:
 =

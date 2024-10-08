@@ -1,6 +1,6 @@
 # HERMES: <ins>H</ins>ydrogen <ins>E</ins>conomy <ins>R</ins>outing <ins>M</ins>odel for cost-<ins>e</ins>fficient <ins>S</ins>upply
 
-![](images/routes.png)
+![](doc/images/routes.png)
 
 PtX transport is a multi commodity multi mean of transport algorithm,
 capable to find the most cost-effective transportation route from pre-defined starting points to a desired location.
