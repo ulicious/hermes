@@ -10,7 +10,7 @@ costs for each reached node. It terminates as soon as it reaches the final desti
 to other nodes is not possible anymore
 
 <p align="center">
-  <img src="images/graphical_abstract.png" />
+  <img src="doc/images/graphical_abstract.png" />
 </p>
 
 # Following steps need to be taken to use PtX Transport:
