@@ -9,7 +9,7 @@
 project = 'Hermes: Hydrogen Economy Routing Model for cost-efficient Supply'
 copyright = '2024, Uwe Langenmayr'
 author = 'Uwe Langenmayr'
-release = '08.10.2024'
+release = '2024'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
