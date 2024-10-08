@@ -1,3 +1,5 @@
+# HERMES: <ins>H</ins>ydrogen <ins>E</ins>conomy <ins>R</ins>outing <ins>M</ins>odel for cost-<ins>e</ins>fficient <ins>S</ins>upply
+
 ![](images/routes.png)
 
 PtX transport is a multi commodity multi mean of transport algorithm,
@@ -33,5 +35,10 @@ to other nodes is not possible anymore.
   - Full approach: 55 MB (without distances) | ~5 GB (with distances)
 - The computational expenses heavily rely on the data and setting
 
-Citation
-Big thanks to
+# Citation
+
+
+# Big thanks to
+
+- genthalili's SeaRoute package (https://github.com/genthalili/searoute-py/tree/main)
+- NetworkX: Aric A. Hagberg, Daniel A. Schult and Pieter J. Swart, “Exploring network structure, dynamics, and function using NetworkX”, in Proceedings of the 7th Python in Science Conference (SciPy2008), Gäel Varoquaux, Travis Vaught, and Jarrod Millman (Eds), (Pasadena, CA USA), pp. 11–15, Aug 2008
