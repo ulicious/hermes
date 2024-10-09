@@ -26,7 +26,8 @@ html_theme = 'alabaster'
 html_static_path = ['_static']
 html_theme_options = {
     "repository_url": "https://github.com/ulicious/hermes",
-    'body_max_width': "none"
+    'body_max_width': "none",
+    'page_width': 'auto',
 }
 
 # The name for this set of Sphinx documents.  If None, it defaults to
