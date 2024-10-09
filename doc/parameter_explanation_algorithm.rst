@@ -11,6 +11,8 @@ Parameter Explanation
 
 Several parameters affect the HERMES model. Following article will describe all parameters in detail.
 
+.. _general_configuration:
+
 General configuration
 =====================
 

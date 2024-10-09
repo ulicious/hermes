@@ -7,4 +7,4 @@ high_temp_heat_available_at_ports;True / False;Indicates if high-temperature hea
 low_temp_heat_available_at_pipelines;True / False;Indicates if low-temperature heat is available at pipelines;
 mid_temp_heat_available_at_pipelines;True / False;Indicates if medium-temperature heat is available at pipelines;
 high_temp_heat_available_at_pipelines;True / False;Indicates if high-temperature heat is available at pipelines;
-minimal_distance_between_pipeline_connection_points;integer;In meter. Maximal distance between feed-in points in pipelines;Higher number will result in more options and might result in longer calculation times
+minimal_distance_between_pipeline_connection_points;integer;In meter. Maximal distance between feed-in points in pipelines;Higher number will result in more reachable locations for pipelines and might result in longer calculation times

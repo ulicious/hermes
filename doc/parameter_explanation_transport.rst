@@ -9,20 +9,14 @@
 Transport Parameter Explanation
 ###############################
 
-Several parameters affect the HERMES model. Following article will describe all parameters in detail.
+Transport assumptions and setting decide on availability of different transport means and costs for transport for each commodity. For each commodity, following structure needs to be set up:
 
-Parameters in algorithm_configuration.yaml
-##########################################
+.. code-block:: none
 
-Setting and assumptions affecting main algorithm
-================================================
+    commodity
+        available transport means: list of transport means usable by commodity
+        transport mean 1: costs
+        transport mean 2: costs
+        ...
 
-Affects main algorithm regarding tolerances, maximal distances of road and new pipelines, heat availability at destination etc.
-
-.. csv-table::
-   :header-rows: 1
-   :file: parameter_explanation/algorithm.csv
-   :delim: ;
-
-.. math::
-    a = b + c
+All costs in EURO / MWh / 1000 km

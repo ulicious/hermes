@@ -25,7 +25,7 @@ Processed data and results need to be stored. Therefore, following folder struct
             location_results/
             plots/
 
-Please indicate the path towards the PROJECT_FOLDER in algorithm_configuration -> general_configurations -> project_folder_path
+Please indicate the path towards the PROJECT_FOLDER in :ref:`general_configuration`.
 
 2. Adjust parameters if desired
 ###############################

@@ -1084,8 +1084,13 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
             # test.plot(color=create_random_colors(len(test.index)))
             # plt.show()
 
-            inputs = tqdm(lines)
-            results = Parallel(n_jobs=number_workers)(delayed(process_line_super)(i) for i in inputs)
+            minimal_distances = []
+            for i in range(len(lines)):
+                minimal_distances.append(minimal_distance_between_node)
+
+            # inputs = tqdm(inputs)
+            results = Parallel(n_jobs=number_workers)(delayed(process_line_super)(i, j)
+                                                      for i, j in zip(lines, minimal_distances))
 
             for r in results:
                 if r[0] is None:
@@ -1161,7 +1166,7 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
             if original_line.is_ring:
                 line_segments = list(map(LineString, zip(original_line.coords[:-1], original_line.coords[1:])))
                 for line in line_segments:
-                    nodes, edges = process_line_super(line)
+                    nodes, edges = process_line_super(line, minimal_distance_between_node=minimal_distance_between_node)
 
                     for e in edges:
                         e = e.copy()
@@ -1227,7 +1232,8 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
 
             else:
                 line = network
-                nodes, edges = process_line_super(line, single_line=True)
+                nodes, edges = process_line_super(line, minimal_distance_between_node=minimal_distance_between_node,
+                                                  single_line=True)
 
                 for e in edges:
                     e = e.copy()
