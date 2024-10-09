@@ -56,3 +56,6 @@ Big thanks to:
 
    calculation_conversion_costs
    benchmarking
+
+.. role:: underline
+    :class: underline
