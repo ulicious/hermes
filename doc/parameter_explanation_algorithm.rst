@@ -31,7 +31,7 @@ These two lists indicate which commodities and transport means can be used. This
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/availability.csv
-   :width: 100
+   :width: 100%
    :widths: 20, 10, 50, 20
    :delim: ;
 
