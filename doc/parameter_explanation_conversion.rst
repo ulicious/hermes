@@ -18,16 +18,16 @@ All parameter assumptions and settings are set in data/techno_economic_data_conv
    :widths: 30, 10, 60
    :delim: ;
 
-Next to feedstock and capital costs, conversion specific parameters are implemented. For each commodity, the target commodities, which the initial commodity can be converted into, must be specified. Furthermore, for each target commodity, the techno-economic parameters must be specified. The structure looks as following:
+Next to feedstock and capital costs, conversion specific parameters are implemented. For each commodity, the target commodities, which the initial commodity can be converted into, must be specified. Furthermore, for each target commodity, the techno-economic parameters must be specified. The structure for each initial commodity looks as following:
 
 .. code-block:: none
 
     initial commodity
-        target commodities list: list
+        target commodities: list
         target commodity 1:
-            techno economic parameters target commodity 1: (see :ref:`tea_parameters_conversion`)
+            techno economic parameters target commodity 1 (see below)
         target commodity 2:
-            techno economic parameters target commodity 2: (see :ref:`tea_parameters_conversion`)
+            techno economic parameters target commodity 2 (see below)
 
 And following parameters are necessary.
 
@@ -37,10 +37,5 @@ And following parameters are necessary.
    :header-rows: 1
    :file: parameter_explanation/target_commodity.csv
    :width: 100
-   :widths: 30, 10, 60
+   :widths: 20, 20, 60
    :delim: ;
-
-
-
-.. math::
-    a = b + c

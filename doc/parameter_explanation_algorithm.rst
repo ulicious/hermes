@@ -52,6 +52,8 @@ Includes assumptions regarding costs and updates of cost calculations
 Setting and assumptions affecting starting locations
 ====================================================
 
+.. _locations:
+
 Affects number of starting locations, limits locations (continents / coordinates) and indicate if heat is available at start
 
 .. csv-table::
@@ -63,6 +65,8 @@ Affects number of starting locations, limits locations (continents / coordinates
 
 Setting and assumptions affecting infrastructure processing
 ===========================================================
+
+.. _infrastructure:
 
 Affects number of access points in pipelines and indicates if heat is available at infrastructure
 
