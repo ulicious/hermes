@@ -4,8 +4,6 @@
 HERMES: Hydrogen Economy Routing Model for cost-efficient Supply
 ==============================================================================
 
-.. image:: images/routes.png
-
 HERMES is a multi commodity multi mean of transport algorithm,
 capable to find the most cost-effective transportation route from pre-defined starting points to a desired location.
 The algorithm derives possible solutions for transportation from a starting point to the final destination.
@@ -58,4 +56,12 @@ Big thanks to:
    introduction
    installation
    usage
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Parameters:
+
+   parameter_explanation_algorithm
+   parameter_explanation_conversion
+   parameter_explanation_transport
 

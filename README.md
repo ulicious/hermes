@@ -1,7 +1,5 @@
 # HERMES: <ins>H</ins>ydrogen <ins>E</ins>conomy <ins>R</ins>outing <ins>M</ins>odel for cost-<ins>e</ins>fficient <ins>S</ins>upply
 
-![](doc/images/routes.png)
-
 HERMES is a multi commodity multi mean of transport algorithm,
 capable to find the most cost-effective transportation route from pre-defined starting points to a desired location.
 The algorithm derives possible solutions for transportation from a starting point to the final destination.
