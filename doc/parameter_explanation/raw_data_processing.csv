@@ -1,0 +1,8 @@
+Assumption / Setting;Values;Explanation;Comment
+cost_type;string / list;"Defines the cost type of the different feedstocks / economic assumptions at locations / in countries. Possible are:
+'location': costs will be looked up for each location (from location_data)
+'uniform': as set in techno_economic_data_conversion
+['COUNTRY_NAME_1', 'COUNTRY_NAME_2', ...]: costs will be looked up for specific countries in list, for all other based on location data
+'all_countries': always country (from country_data)";If location or country are used, values for locations and countries need to be available in location_data and country_data
+enforce_update_of_data;True / False;If True, only techno-economic data (conversion costs at locations) will be updated. If False, infrastructure will be calculated as well;
+update_only_conversion_costs_and_efficiency;True / False;If True, only techno-economic data (conversion costs at locations) will be updated. If False, infrastructure will be calculated as well;

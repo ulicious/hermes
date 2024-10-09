@@ -11,8 +11,6 @@ Parameter Explanation
 
 Several parameters affect the HERMES model. Following article will describe all parameters in detail.
 
-Parameters in algorithm_configuration.yaml
-####
 
 General configuration
 ====
