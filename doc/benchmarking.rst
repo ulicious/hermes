@@ -5,14 +5,14 @@
 
 .. _benchmarking:
 
-###############################
+############
 Benchmarking
-###############################
+############
 
 The main instrument to reduce branches in the algorithm is the comparison of branches with the benchmark. In the algorithm, two types of benchmarks exist:
 
 Global benchmark
-====
+================
 
 This first benchmark is a global benchmark and affects all branches. This benchmark is calculated initially based on chosen routes and commodities without the ability to improve the benchmark. From all initially benchmarks calculated, the benchmark with the lowest costs is chosen.
 
