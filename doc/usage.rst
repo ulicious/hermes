@@ -5,47 +5,29 @@
 
 .. _usage:
 
-###############################
+#####
 Usage
-###############################
+#####
 
 The following article will describe the necessary steps to run the HERMES model
 
 1. Setting up folder structure
-####
+##############################
 
 Processed data and results need to be stored. Therefore, following folder structure needs to be implemented
 
-
-    PROJECT_FOLDER
-    processed_data
-    |---raw_data
-    |---results
-        |---location_results
-        |---plots
-
-.. code::
-    └── Edit me to generate/
-        ├── a/
-        │   └── nice/
-        │       └── tree/
-        │           ├── diagram!
-        │           └── :)
-        └── Use indentation/
-            ├── to indicate/
-            │   ├── file
-            │   ├── and
-            │   ├── folder
-            │   └── nesting.
-            └── You can even/
-                └── use/
-                    ├── markdown
-                    └── bullets!
+.. code-block:: none
+    PROJECT FOLDER/
+        processed_data/
+        raw_data/
+        results/
+            location_results/
+            plots/
 
 Please indicate the path towards the PROJECT_FOLDER in algorithm_configuration -> general_configurations -> project_folder_path
 
 2. Adjust parameters if desired
-####
+###############################
 
 All parameters are set based on the parameters used in the publication. Some of these parameters directly affect the creation of random locations and the raw data processing. Therefore, please adjust parameters if desired. These include:
 
@@ -58,7 +40,7 @@ All parameters are set based on the parameters used in the publication. Some of 
 For the explanation of the different parameters, please see: XYZ
 
 3. Run Python code
-####
+##################
 
 Run following python files consecutively:
 

@@ -5,16 +5,14 @@
 
 .. _parameter_explanation_algorithm:
 
-###############################
+#####################
 Parameter Explanation
-###############################
+#####################
 
 Several parameters affect the HERMES model. Following article will describe all parameters in detail.
 
-.. _first:
-
 General configuration
-====
+=====================
 
 Settings regarding general configuration include overarching settings like paths or computational resources
 
@@ -23,10 +21,8 @@ Settings regarding general configuration include overarching settings like paths
    :file: parameter_explanation/general_configuration.csv
    :delim: ;
 
-.. _second:
-
 Available commodities and transport means
-====
+=========================================
 
 These two lists indicate which commodities and transport means can be used. This will affect raw data processing an the algorithm
 
@@ -36,7 +32,7 @@ These two lists indicate which commodities and transport means can be used. This
    :delim: ;
 
 General raw data processing assumptions
-====
+=======================================
 
 Includes assumptions regarding costs and updates of cost calculations
 
@@ -46,7 +42,7 @@ Includes assumptions regarding costs and updates of cost calculations
    :delim: ;
 
 Setting and assumptions affecting starting locations
-====
+====================================================
 
 Affects number of starting locations, limits locations (continents / coordinates) and indicate if heat is available at start
 
@@ -56,7 +52,7 @@ Affects number of starting locations, limits locations (continents / coordinates
    :delim: ;
 
 Setting and assumptions affecting infrastructure processing
-====
+===========================================================
 
 Affects number of access points in pipelines and indicates if heat is available at infrastructure
 
@@ -66,7 +62,7 @@ Affects number of access points in pipelines and indicates if heat is available 
    :delim: ;
 
 Setting and assumptions affecting main algorithm
-====
+================================================
 
 Affects main algorithm regarding tolerances, maximal distances of road and new pipelines, heat availability at destination etc.
 
