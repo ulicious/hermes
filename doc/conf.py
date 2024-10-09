@@ -26,3 +26,11 @@ exclude_patterns = []
 
 html_theme = 'alabaster'
 html_static_path = ['_static']
+body_max_width = "none"
+
+html_theme_options = {
+    "repository_url": "https://github.com/ulicious/hermes",
+    "use_repository_button": True,
+    "show_navbar_depth": 1,
+    'body_max_width': "none"
+}

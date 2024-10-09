@@ -1,46 +1,9 @@
 Assumption / Setting;Values;Explanation;Comment
 project_folder_path;string;Path to project folder;
 use_minimal_example;True / False;Reduces infrastructure data and random locations to Europe;
-use_low_storage;True / False;If False, this setting will store only the absolute necessary data on the device;Might increase calculation time if False
+use_low_storage;True / False;If True, this setting will store only the absolute necessary data on the device;Might increase calculation time if False
 use_low_memory;True / False;If False, this setting will avoid large matrices in all calculations;Might increase calculation time if False
 number_cores;integer / 'max';Integer to indicate number of usable cores / threads. 'max' if maximum amount should be used;
 use_provided_data;True / False;If True, raw_data as provided will be used. If False, data needs to be placed in PROJECT_FOLDER/raw_data;
 location_data_name;string;Indicates which location data will be used from data folder;Please see XYZ
 country_data_name;string;Indicates which country data will be used from data folder;Please see XYZ
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
-;;;
