@@ -54,4 +54,5 @@ Big thanks to:
    :maxdepth: 1
    :caption: Methodology Deepdive:
 
+   calculation_conversion_costs
    benchmarking
