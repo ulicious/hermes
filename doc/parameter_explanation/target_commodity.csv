@@ -1,0 +1,12 @@
+Assumption / Setting;type;Explanation
+specific_investment;float;Specific investment into equipment
+fixed_maintenance;float;Yearly fixed maintenance of equipment
+lifetime;integer;Lifetime of facility
+electricity_demand;float;Electricity demand per MWh product in EURO / MWh
+co2_demand;float;CO2 demand per MWh product in EURO / t CO2
+nitrogen_demand;float;N2 demand per MWh product in EURO / t N2
+heat_demand;float;Heat demand per MWh product in EURO / MWh
+heat_demand_niveau;low', 'medium', 'high', None;Heat niveau of conversion process
+operating_hours;integer;Yearly operating hour of facility
+efficiency_autothermal;float;Efficiency if educt is burned to supply heat demand
+efficiency_external_heat;float;Efficiency if heat demand is covered by external source

@@ -1,0 +1,9 @@
+Assumption / Setting;type;Explanation
+Hydrogen_Gas;float;EURO / MWh
+Electricity;float;EURO / MWh
+CO2;float;EURO / t CO2
+Low_Temperature_Heat;float;EURO / MWh
+Mid_Temperature_Heat;float;EURO / MWh
+High_Temperature_Heat;float;EURO / MWh
+Nitrogen;float;EURO / t N2
+interest_rate;float;

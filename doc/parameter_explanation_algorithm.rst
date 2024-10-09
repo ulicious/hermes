@@ -31,7 +31,11 @@ These two lists indicate which commodities and transport means can be used. This
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/availability.csv
+   :width: 100
+   :widths: 20, 10, 50, 20
    :delim: ;
+
+.. _conversion_settings:
 
 General raw data processing assumptions
 =======================================
@@ -41,6 +45,8 @@ Includes assumptions regarding costs and updates of cost calculations
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/raw_data_processing.csv
+   :width: 100
+   :widths: 20, 10, 50, 20
    :delim: ;
 
 Setting and assumptions affecting starting locations
@@ -51,6 +57,8 @@ Affects number of starting locations, limits locations (continents / coordinates
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/random_locations.csv
+   :width: 100
+   :widths: 20, 10, 50, 20
    :delim: ;
 
 Setting and assumptions affecting infrastructure processing
@@ -61,6 +69,8 @@ Affects number of access points in pipelines and indicates if heat is available 
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/infrastructure_processing.csv
+   :width: 100
+   :widths: 20, 10, 50, 20
    :delim: ;
 
 Setting and assumptions affecting main algorithm
@@ -71,4 +81,6 @@ Affects main algorithm regarding tolerances, maximal distances of road and new p
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/algorithm.csv
+   :width: 100
+   :widths: 20, 10, 50, 20
    :delim: ;
