@@ -16,13 +16,30 @@ The following article will describe the necessary steps to run the HERMES model
 
 Processed data and results need to be stored. Therefore, following folder structure needs to be implemented
 
-.. code:: bash
+
     PROJECT_FOLDER
-    |---processed_data
+    processed_data
     |---raw_data
     |---results
         |---location_results
         |---plots
+
+    └── Edit me to generate/
+        ├── a/
+        │   └── nice/
+        │       └── tree/
+        │           ├── diagram!
+        │           └── :)
+        └── Use indentation/
+            ├── to indicate/
+            │   ├── file
+            │   ├── and
+            │   ├── folder
+            │   └── nesting.
+            └── You can even/
+                └── use/
+                    ├── markdown
+                    └── bullets!
 
 Please indicate the path towards the PROJECT_FOLDER in algorithm_configuration -> general_configurations -> project_folder_path
 
