@@ -10,7 +10,7 @@ Conversion Cost Calculation
 ###########################
 
 Pre-calculation of Conversion Costs
-----------------------------------
+-----------------------------------
 
 In :ref:`parameter_explanation_conversion`, parameters are defined which are used to calculate conversion costs. These conversion costs are calculated prior to the routing algorithm when processing the infrastructure and creating random locations.
 
