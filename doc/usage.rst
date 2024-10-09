@@ -38,7 +38,7 @@ All parameters are set based on the parameters used in the publication. Some of 
 4. algorithm_configuration -> parameters and assumptions for infrastructure processing
 5. data/techno_economic_data_conversion
 
-For the explanation of the different parameters, please see: XYZ
+For the explanation of the different parameters, please see: :ref:`_parameter_explanation_algorithm`, :ref:`_parameter_explanation_conversion` and :ref:`_parameter_explanation_transport`
 
 3. Run Python code
 ##################
