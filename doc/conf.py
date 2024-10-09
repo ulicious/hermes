@@ -19,8 +19,6 @@ extensions = []
 templates_path = ['_templates']
 exclude_patterns = []
 
-
-
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
@@ -28,10 +26,9 @@ html_theme = 'alabaster'
 html_static_path = ['_static']
 html_theme_options = {
     "repository_url": "https://github.com/ulicious/hermes",
-    "use_repository_button": True,
-    "show_navbar_depth": 1,
     'body_max_width': "100%"
 }
+
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
 html_title = "HERMES"

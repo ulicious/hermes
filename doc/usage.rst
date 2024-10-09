@@ -17,6 +17,7 @@ The following article will describe the necessary steps to run the HERMES model
 Processed data and results need to be stored. Therefore, following folder structure needs to be implemented
 
 .. code-block:: none
+
     PROJECT FOLDER/
         processed_data/
         raw_data/
