@@ -19,6 +19,7 @@ Settings regarding general configuration include overarching settings like paths
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/general_configuration.csv
+   :width: 100
    :widths: 20, 10, 50, 20
    :delim: ;
 
