@@ -55,6 +55,7 @@ Big thanks to:
    :caption: Methodology Deepdive:
 
    calculation_conversion_costs
+   infrastructure_processing
    benchmarking
 
 .. role:: underline
