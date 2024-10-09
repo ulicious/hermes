@@ -58,15 +58,21 @@ def extend_line_in_both_directions(coord1, coord2, extension_percentage):
     return extended_linestring
 
 
-def close_gaps(line_combinations, existing_lines, gap_distance=20000, apply_duplicate_removing=False,
+def close_gaps(line_combinations, existing_lines, gap_distance, apply_duplicate_removing=False,
                return_combinations=False, min_distance=0, extend_lines=False):
 
     """
     checks all combinations of lines if the distance between the two lines is less than 20,000. If so, a new line is
     added to close the gap
 
-    @param list line_combinations:
-    @param int gap_distance:
+    @param list line_combinations: combination of two lines / networks to compare
+    @param list existing_lines: list of existing lines for comparison with newly created lines
+    @param float gap_distance: If two lines / networks are closer to each other than gap distance, connect both
+    @param bool apply_duplicate_removing: if two lines are parallel and close to each other, remove one
+    @param bool return_combinations: if true, only return new lines
+    @param float min_distance: only connect lines / networks where distance is higher than min distance
+    @param bool extend_lines: sometimes line are not connected due to floating point errors. Increasing them slightly solves problem
+
     @return: list of old lines including gap closing lines
     """
 
@@ -75,9 +81,6 @@ def close_gaps(line_combinations, existing_lines, gap_distance=20000, apply_dupl
     for lines in line_combinations:
         l1 = lines[0]
         l2 = lines[1]
-
-        # todo: to increase the number of connection points, we could use the points of the convex hull of
-        #  multilinestrings.
 
         closest_points = ops.nearest_points(l1, l2)
         distance = calc_distance_single_to_single(closest_points[0].y, closest_points[0].x,
@@ -339,12 +342,12 @@ def divide_data(lines_local, chunk_size=100):
     return divided_data
 
 
-def process_line_strings(lines_local, num_cores, with_adding_lines=False, extend_lines=False):
+def process_line_strings(lines_local, num_cores, gap_distance, with_adding_lines=False, extend_lines=False):
 
     if with_adding_lines:
 
         combinations = list(itertools.combinations(lines_local, 2))
-        new_lines = close_gaps(combinations, lines_local, extend_lines=extend_lines)
+        new_lines = close_gaps(combinations, lines_local, gap_distance, extend_lines=extend_lines)
         lines_local = lines_local + new_lines
 
     # process for fast accumulation of common networks
@@ -377,7 +380,7 @@ def process_line_strings(lines_local, num_cores, with_adding_lines=False, extend
     return list(lines_local)
 
 
-def group_LineStrings(name, num_cores, path_to_file, path_processed_data, use_minimal_example=False):
+def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_distance, use_minimal_example=False):
 
     """
     Reads global energy monitor data, filters pipeline data based on status, removes rows with no geodata information,
@@ -388,6 +391,7 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, use_mi
     @param str name: Name of the file containing the energy monitor data (without file extension).
     @param int num_cores: Number of CPU cores to use for parallel processing (default is 4).
     @param bool use_minimal_example: Indicates if only subset of data should be used
+    @param float gap_distance: connects two linestrings automatically if their distance is below gap_distance
     """
 
     # read global energy monitor data
@@ -432,22 +436,8 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, use_mi
 
         single_lines = new_single_lines
 
-    if False:
-        combinations = list(itertools.combinations(single_lines, 2))
-        new_lines = close_gaps(combinations, single_lines)
-        data_new = gpd.GeoDataFrame(geometry=single_lines + new_lines)
-
-    # data_new = data_new.explode(ignore_index=True)
-    # data_new.drop_duplicates(subset=['geometry'], inplace=True)
-    # single_lines = data_new['geometry'].tolist()
-
-    # # close gaps --> this would increase the number of lines significantly
-    # combinations = list(itertools.combinations(single_lines, 2))
-    # new_lines = close_gaps(combinations, single_lines, apply_duplicate_removing=True)
-    # single_lines += new_lines
-
-    single_lines = process_line_strings(single_lines, num_cores, with_adding_lines=True)
-    single_lines = process_line_strings(single_lines, num_cores, with_adding_lines=True, extend_lines=True)
+    single_lines = process_line_strings(single_lines, num_cores, gap_distance, with_adding_lines=True)
+    single_lines = process_line_strings(single_lines, num_cores, gap_distance, with_adding_lines=True, extend_lines=True)
 
     import networkx as nx
 
@@ -468,54 +458,35 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, use_mi
             edge_number = 0
             edges = []
             edges_to_linestring = {}
-            # print('new')
             for line_string in s_geoms:
-                # print(line_string)
                 start_point = (round(line_string.coords[0][0], 10), round(line_string.coords[0][1], 10))
-                # print(start_point)
                 if start_point not in [*nodes.keys()]:
                     nodes[start_point] = node_number
                     node_number += 1
 
-                # print(nodes[start_point])
-
                 end_point = (round(line_string.coords[-1][0], 10), round(line_string.coords[-1][1], 10))
-                # print(end_point)
                 if end_point not in [*nodes.keys()]:
                     nodes[end_point] = node_number
                     node_number += 1
-
-                # print(nodes[end_point])
 
                 graph.add_edge(nodes[start_point], nodes[end_point], name=edge_number)
                 edges.append((nodes[start_point], nodes[end_point]))
                 edges_to_linestring[(nodes[start_point], nodes[end_point])] = line_string
                 edges_to_linestring[(nodes[end_point], nodes[start_point])] = line_string
                 edge_number += 1
-                #  print('--')
 
             # Check if all nodes are reachable from each other
             if not nx.is_connected(graph):
 
                 print('not connected')
 
-                # lines_1 = gpd.GeoDataFrame(geometry=[s])
-                # lines_1.plot(color='yellow')
-
-                # plt.show()
-
                 while True:
-                    # s_geoms = [i for i in s.geoms]
-                    s = process_line_strings(s_geoms, num_cores)  # try to connect geometries again
+                    s = process_line_strings(s_geoms, num_cores, gap_distance)  # try to connect geometries again
 
                     if not isinstance(s[0], list):  # s not nested list --> s = list with geometries each representing one network
 
                         for i in range(5):
-                            s = process_line_strings(s, num_cores, with_adding_lines=True, extend_lines=True)
-
-                        # lines_1 = gpd.GeoDataFrame(geometry=s)
-                        # lines_1.plot(color=create_random_colors(len(lines_1.index)))
-                        # plt.show()
+                            s = process_line_strings(s, num_cores, gap_distance, with_adding_lines=True, extend_lines=True)
 
                         if len(s) > 1:
                             print('still disconnected')
@@ -532,24 +503,9 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, use_mi
                             # if two geometries, just create two graphs
                             checked_single_lines.update([s[0], s[1]])
 
-                            if False:
-
-                                fig, ax = plt.subplots()
-
-                                lines_1 = gpd.GeoDataFrame(geometry=[s[0]])
-                                # lines_1.plot(color='purple', ax=ax)
-
-                                lines_1 = gpd.GeoDataFrame(geometry=[s[1]])
-                                # lines_1.plot(color='red', ax=ax)
-
-                                plt.show()
-
                             break
                         else:  # s is nested list with one list inside
                             s = s[0]
-
-                            lines_1 = gpd.GeoDataFrame(geometry=s)
-                            # lines_1.plot(color='blue')
 
                             plt.show()
 
@@ -599,18 +555,8 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, use_mi
             else:
                 checked_single_lines.update([s])
 
-                # lines_1 = gpd.GeoDataFrame(geometry=[s])
-                # lines_1.plot(color='yellow')
-                #
-                # plt.show()
-
         else:
             checked_single_lines.update([s])
-
-            # lines_1 = gpd.GeoDataFrame(geometry=[s])
-            # lines_1.plot(color='green')
-            #
-            # plt.show()
 
     # save processed data in folder (each network own folder)
     name_folder = path_processed_data + name + '_network_data/'

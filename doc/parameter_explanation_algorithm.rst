@@ -5,9 +5,9 @@
 
 .. _parameter_explanation_algorithm:
 
-#####################
-Parameter Explanation
-#####################
+###################
+Algorithm Parameter
+###################
 
 Several parameters affect the HERMES model. Following article will describe all parameters in detail.
 

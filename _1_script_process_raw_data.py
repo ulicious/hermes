@@ -78,6 +78,8 @@ files_in_folder = os.listdir(path_processed_data)
 
 enforce_update_of_data = config_file['enforce_update_of_data']
 
+gap_distance = config_file['gap_distance']
+
 if not update_only_conversion_costs_and_efficiency:
 
     # process coastlines
@@ -96,13 +98,13 @@ if not update_only_conversion_costs_and_efficiency:
     if not (('gas_network_data' in files_in_folder) & (not enforce_update_of_data)):
         # process gas pipelines
         path_gas_pipeline_data = path_raw_data + 'network_pipelines_gas.xlsx'
-        group_LineStrings('gas', num_cores, path_gas_pipeline_data, path_processed_data,
+        group_LineStrings('gas', num_cores, path_gas_pipeline_data, path_processed_data, gap_distance,
                           use_minimal_example=use_minimal_example)
 
     if not (('oil_network_data' in files_in_folder) & (not enforce_update_of_data)):
         # process oil pipelines
         path_oil_pipeline_data = path_raw_data + 'network_pipelines_oil.xlsx'
-        group_LineStrings('oil', num_cores, path_oil_pipeline_data, path_processed_data,
+        group_LineStrings('oil', num_cores, path_oil_pipeline_data, path_processed_data, gap_distance,
                           use_minimal_example=use_minimal_example)
 
     # create network objects

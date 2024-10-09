@@ -5,9 +5,9 @@
 
 .. _parameter_explanation_conversion:
 
-################################
-Conversion Parameter Explanation
-################################
+####################
+Conversion Parameter
+####################
 
 All parameter assumptions and settings are set in data/techno_economic_data_conversion.yaml. The first set of assumptions affects feedstock costs and capital costs which affect all conversions :underline:`if feedstock costs and/or capital costs are implemented as uniform` (adjustable here: :ref:`conversion_settings`)
 
@@ -22,7 +22,7 @@ Next to feedstock and capital costs, conversion specific parameters are implemen
 
 .. code-block:: none
 
-    initial commodity
+    initial commodity:
         target commodities: list
         target commodity 1:
             techno economic parameters target commodity 1 (see below)

@@ -992,9 +992,6 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     files = sorted(os.listdir(path_network_data))
     for file in tqdm(files):
 
-        # if '566' not in file:
-        #     continue
-
         graph_number = int(file.split('_')[-1].split('.')[0])
         node_number = 0
         edge_number = 0
@@ -1003,10 +1000,6 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
 
         network_data = pd.read_csv(path_network_data + file, index_col=0, sep=';')
         lines = [shapely.wkt.loads(line) for line in network_data['geometry']]
-
-        # test = gpd.GeoDataFrame(geometry=lines)
-        # test.plot()
-        # plt.show()
 
         # Split Multilinestring / Linestring into separate LineStrings if intersections exist
         # merge split lines into single linestring if no intersection exists
@@ -1079,10 +1072,6 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
             lines = MultiLineString(line_gdf['geometry'].tolist())
             lines = shapely.line_merge(lines)
             lines = [l for l in lines.geoms]
-
-            # test = gpd.GeoDataFrame(geometry=lines)
-            # test.plot(color=create_random_colors(len(test.index)))
-            # plt.show()
 
             minimal_distances = []
             for i in range(len(lines)):

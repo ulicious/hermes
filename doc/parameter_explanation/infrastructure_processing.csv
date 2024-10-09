@@ -8,3 +8,4 @@ low_temp_heat_available_at_pipelines;True / False;Indicates if low-temperature h
 mid_temp_heat_available_at_pipelines;True / False;Indicates if medium-temperature heat is available at pipelines;
 high_temp_heat_available_at_pipelines;True / False;Indicates if high-temperature heat is available at pipelines;
 minimal_distance_between_pipeline_connection_points;integer;In meter. Maximal distance between feed-in points in pipelines;Higher number will result in more reachable locations for pipelines and might result in longer calculation times
+gap_distance;20000; In meter. If distance between two networks is below gap_distance, than networks will be connected; Used since open source data is incomplete / inaccurate
