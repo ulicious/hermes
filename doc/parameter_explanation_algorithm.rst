@@ -21,7 +21,7 @@ Settings regarding general configuration include overarching settings like paths
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/general_configuration.csv
-   :delim: ";"
+   :delim: ;
 
 .. _second:
 
@@ -33,7 +33,7 @@ These two lists indicate which commodities and transport means can be used. This
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/availability.csv
-   :delim: ";"
+   :delim: ;
 
 General raw data processing assumptions
 ====
@@ -43,7 +43,7 @@ Includes assumptions regarding costs and updates of cost calculations
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/raw_data_processing.csv
-   :delim: ";"
+   :delim: ;
 
 Setting and assumptions affecting starting locations
 ====
@@ -53,7 +53,7 @@ Affects number of starting locations, limits locations (continents / coordinates
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/random_locations.csv
-   :delim: ";"
+   :delim: ;
 
 Setting and assumptions affecting infrastructure processing
 ====
@@ -63,7 +63,7 @@ Affects number of access points in pipelines and indicates if heat is available 
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/infrastructure_processing.csv
-   :delim: ";"
+   :delim: ;
 
 Setting and assumptions affecting main algorithm
 ====
@@ -73,4 +73,4 @@ Affects main algorithm regarding tolerances, maximal distances of road and new p
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/algorithm.csv
-   :delim: ";"
+   :delim: ;
