@@ -24,6 +24,7 @@ Processed data and results need to be stored. Therefore, following folder struct
         |---location_results
         |---plots
 
+.. code::
     └── Edit me to generate/
         ├── a/
         │   └── nice/
