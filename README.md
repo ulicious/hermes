@@ -7,10 +7,6 @@ Based on the underlying infrastructure data, the algorithm iteratively explores 
 costs for each reached node. It terminates as soon as it reaches the final destination and exploration
 to other nodes is not possible anymore
 
-<p align="center">
-  <img src="doc/images/graphical_abstract.png" />
-</p>
-
 # Following steps need to be taken to use PtX Transport:
 
 1. Download this repository and create python project in your coding environment
