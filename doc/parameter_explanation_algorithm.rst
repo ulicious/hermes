@@ -11,6 +11,7 @@ Parameter Explanation
 
 Several parameters affect the HERMES model. Following article will describe all parameters in detail.
 
+.. _first:
 
 General configuration
 ====
@@ -21,6 +22,8 @@ Settings regarding general configuration include overarching settings like paths
    :header-rows: 1
    :file: parameter_explanation/general_configuration.csv
    :delim: ";"
+
+.. _second:
 
 Available commodities and transport means
 ====
