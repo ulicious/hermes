@@ -558,6 +558,15 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
         else:
             checked_single_lines.update([s])
 
+    # lines = [shapely.wkt.loads(line) for line in checked_single_lines]
+    data_new = gpd.GeoDataFrame(shapely.wkt.loads(checked_single_lines), columns=['geometry'])
+    data_new.set_geometry('geometry')
+
+    number_of_colors = len(data_new.index)
+    color = ["#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)]) for i in range(number_of_colors)]
+    data_new.plot(color=color)
+    plt.show()
+
     # save processed data in folder (each network own folder)
     name_folder = path_processed_data + name + '_network_data/'
     if name + '_network_data' not in os.listdir(path_processed_data):

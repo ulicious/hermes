@@ -767,7 +767,19 @@ def remove_short_edges(graphs, nodes, number_workers, min_distance=5000):
     return graphs
 
 
-def concentrate_nodes(graphs, line_data, nodes, number_workers, min_distance=5000):
+def merge_nodes(graphs, nodes, number_workers, min_distance=5000.):
+
+    """
+    This method is currently not used.
+
+    Assesses the network and merges close network nodes to reduce the number of nodes.
+
+    @param pandas.DataFrame graphs: Containing information on connected nodes
+    @param pandas.DataFrame nodes: Containing information on nodes like coordinates
+    @param int number_workers: Used for parallel processing
+    @param float min_distance: Nodes from same graph and closer than min_distance will be merged
+    @return: Adjusted graphs
+    """
 
     # next step is to check for all distances between nodes. If the distance is very small, we should replace one node
     for g in graphs['graph'].unique():
@@ -949,10 +961,10 @@ def concentrate_nodes(graphs, line_data, nodes, number_workers, min_distance=500
 
             graphs.drop(affected_index, inplace=True)
 
-            import matplotlib.pyplot as plt
-            test = gpd.GeoDataFrame(geometry=graphs['line'])
-            test.plot()
-            plt.show()
+            # import matplotlib.pyplot as plt
+            # test = gpd.GeoDataFrame(geometry=graphs['line'])
+            # test.plot()
+            # plt.show()
 
     return graphs
 

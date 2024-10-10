@@ -84,7 +84,7 @@ if not update_only_conversion_costs_and_efficiency:
 
     # process coastlines
     logging.info('Processing coastlines and landmasses')
-    if not (('landmasses.csv' in files_in_folder) & ('coastlines.csv' in files_in_folder) & (not enforce_update_of_data)):
+    if False: # not (('landmasses.csv' in files_in_folder) & ('coastlines.csv' in files_in_folder) & (not enforce_update_of_data)):
         polygons, coastlines = get_landmass_polygons_and_coastlines(use_minimal_example=use_minimal_example)
         polygons.to_csv(path_processed_data + 'landmasses.csv')
         coastlines.to_csv(path_processed_data + 'coastlines.csv')

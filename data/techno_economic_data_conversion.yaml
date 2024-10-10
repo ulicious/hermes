@@ -1,3 +1,18 @@
+cost_type:
+   # viable options:
+   # 'location' --> costs will be looked up for each location (from location_data)
+   # ['COUNTRY_NAME_1', 'COUNTRY_NAME_2', ...] --> costs will be looked up for specific country, else for location. If 'all_countries' --> always country (from country_data)
+   # 'uniform' --> as set in techno_economic_data_conversion
+   # IMPORTANT: If 'location' or 'country' is chosen, they have to be available in respective file
+   Hydrogen_Gas: 'location'
+   Electricity: 'location'
+   CO2: 'uniform'
+   Nitrogen: 'uniform'
+   Low_Temperature_Heat: 'uniform'
+   Mid_Temperature_Heat: 'uniform'
+   High_Temperature_Heat: 'uniform'
+   interest_rate: ['Germany'] # --> Not available: 'location'
+
 # set uniform prices
 uniform_costs:
    Hydrogen_Gas: 0 # € / MWh
@@ -6,9 +21,8 @@ uniform_costs:
    Low_Temperature_Heat: 50 # € / MWh
    Mid_Temperature_Heat: 50 # € / MWh
    High_Temperature_Heat: 50 # € / MWh
-   Nitrogen: 55 # € / MWh
-
-uniform_interest_rate: 0.06
+   Nitrogen: 55 # € / t N2
+   interest_rate: 0.06
 
 Hydrogen_Gas:
    potential_conversions: ['Hydrogen_Liquid', 'Ammonia', 'Methanol', 'Methane_Gas', 'DBT', 'MCH', 'FTF']

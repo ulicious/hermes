@@ -132,17 +132,17 @@ def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, 
         """
 
         # some support materials are not necessarily needed -> 0 costs
-        if 'Electricity' in [*config_file['cost_type'].keys()]:
+        if 'Electricity' in [*techno_economic_data_conversion['cost_type'].keys()]:
             electricity_costs = locations_to_process['Electricity']
         else:
             electricity_costs = 0
 
-        if 'Nitrogen' in [*config_file['cost_type'].keys()]:
+        if 'Nitrogen' in [*techno_economic_data_conversion['cost_type'].keys()]:
             nitrogen_costs = locations_to_process['Nitrogen']
         else:
             nitrogen_costs = 0
 
-        if 'CO2' in [*config_file['cost_type'].keys()]:
+        if 'CO2' in [*techno_economic_data_conversion['cost_type'].keys()]:
             co2_costs = locations_to_process['CO2']
         else:
             co2_costs = 0
@@ -244,13 +244,13 @@ def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, 
 
     # get cost of location
     new_nan_values = []
-    for key in [*config_file['cost_type'].keys()]:
+    for key in [*techno_economic_data_conversion['cost_type'].keys()]:
 
         if key == 'Hydrogen_Gas':
             # hydrogen is not needed since commodity is transported to i
             continue
 
-        cost_type = config_file['cost_type'][key]
+        cost_type = techno_economic_data_conversion['cost_type'][key]
 
         if key == 'interest_rate':
             if cost_type == 'location':
@@ -364,13 +364,13 @@ def attach_conversion_costs_and_efficiency_to_locations(locations, config_file, 
             adjusted_longitude = round_to_quarter(no_country_options.loc[i, 'longitude'])
 
         # get cost of location
-        for key in [*config_file['cost_type'].keys()]:
+        for key in [*techno_economic_data_conversion['cost_type'].keys()]:
 
             if key == 'Hydrogen_Gas':
                 # hydrogen is not needed since commodity is transported to i
                 continue
 
-            if config_file['cost_type'][key] != 'location':
+            if techno_economic_data_conversion['cost_type'][key] != 'location':
                 continue
 
             # apply small grid search to get the closest location

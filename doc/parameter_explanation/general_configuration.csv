@@ -7,3 +7,7 @@ number_cores;integer / 'max';Integer to indicate number of usable cores / thread
 use_provided_data;True / False;If True, raw_data as provided will be used. If False, data needs to be placed in PROJECT_FOLDER/raw_data;
 location_data_name;string;Indicates which location data will be used from data folder;Please see XYZ
 country_data_name;string;Indicates which country data will be used from data folder;Please see XYZ
+available_commodity;list;Indicates which commodities will be considered;
+available_transport_means;list;Indicates which transport means will be considered;
+enforce_update_of_data;True / False;If True, only techno-economic data (conversion costs at locations) will be updated. If False, infrastructure will be calculated as well;
+update_only_conversion_costs_and_efficiency;True / False;If True, only techno-economic data (conversion costs at locations) will be updated. If False, infrastructure will be calculated as well;

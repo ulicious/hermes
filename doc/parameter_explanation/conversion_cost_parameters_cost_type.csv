@@ -1,0 +1,2 @@
+Assumption / Setting;type;Explanation
+cost_type;string / list;Defines the cost type of the different feedstocks / economic assumptions at locations / in countries;If location or country are used, values for locations and countries need to be available in location_data and/or country_data

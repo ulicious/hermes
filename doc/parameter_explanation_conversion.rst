@@ -9,7 +9,40 @@
 Conversion Parameter
 ####################
 
-All parameter assumptions and settings are set in data/techno_economic_data_conversion.yaml. The first set of assumptions affects feedstock costs and capital costs which affect all conversions :underline:`if feedstock costs and/or capital costs are implemented as uniform` (adjustable here: :ref:`conversion_settings`)
+Cost type
+=========
+
+The first thing to adjust is the cost type of each feedstock and the capital costs.
+
+.. csv-table::
+   :header-rows: 1
+   :file: parameter_explanation/conversion_cost_parameters_cost_type.csv
+   :width: 100
+   :widths: 30, 10, 60
+   :delim: ;
+
+Possible are:
+
+- 'location': costs will be looked up for each location (from location_data)
+- 'uniform': as set in techno_economic_data_conversion.yaml (see below)
+- ['COUNTRY_NAME_1', 'COUNTRY_NAME_2', ...]: costs will be looked up for specific countries in list, for all other based on location data
+- 'all_countries': always country (from country_data)
+
+These cost types must be defined for each feedstock and the capital costs:
+
+- Hydrogen_Gas
+- Electricity
+- CO2
+- Low_Temperature_Heat
+- Mid_Temperature_Heat
+- High_Temperature_Heat
+- Nitrogen
+- interest_rate
+
+Uniform Costs
+=============
+
+Uniform costs can be adjusted as well.
 
 .. csv-table::
    :header-rows: 1
@@ -18,12 +51,15 @@ All parameter assumptions and settings are set in data/techno_economic_data_conv
    :widths: 30, 10, 60
    :delim: ;
 
+Conversion Specific Assumptions
+===============================
+
 Next to feedstock and capital costs, conversion specific parameters are implemented. For each commodity, the target commodities, which the initial commodity can be converted into, must be specified. Furthermore, for each target commodity, the techno-economic parameters must be specified. The structure for each initial commodity looks as following:
 
 .. code-block:: none
 
     initial commodity:
-        target commodities: list
+        target commodities: list with names of target commodities
         target commodity 1:
             techno economic parameters target commodity 1 (see below)
         target commodity 2:

@@ -185,17 +185,17 @@ def apply_conversion():
     hydrogen_costs = locations['Hydrogen_Gas']
 
     # some support materials are not necessarily needed -> 0 costs
-    if 'Electricity' in [*config_file['cost_type'].keys()]:
+    if 'Electricity' in [*techno_economic_data_conversion['cost_type'].keys()]:
         electricity_costs = locations['Electricity']
     else:
         electricity_costs = 0
 
-    if 'Nitrogen' in [*config_file['cost_type'].keys()]:
+    if 'Nitrogen' in [*techno_economic_data_conversion['cost_type'].keys()]:
         nitrogen_costs = locations['Nitrogen']
     else:
         nitrogen_costs = 0
 
-    if 'CO2' in [*config_file['cost_type'].keys()]:
+    if 'CO2' in [*techno_economic_data_conversion['cost_type'].keys()]:
         co2_costs = locations['CO2']
     else:
         co2_costs = 0
@@ -266,9 +266,9 @@ def get_costs():
     restart_local = False
 
     # get cost of location
-    for key in [*config_file['cost_type'].keys()]:
+    for key in [*techno_economic_data_conversion['cost_type'].keys()]:
 
-        cost_type = config_file['cost_type'][key]
+        cost_type = techno_economic_data_conversion['cost_type'][key]
 
         if key == 'interest_rate':
             if cost_type == 'location':

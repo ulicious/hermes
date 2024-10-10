@@ -2,7 +2,7 @@ Assumption / Setting;Values;Explanation;Comment
 destination_location;[longitude, latitude];Coordinates of destination;
 destination_country;string;Country of destination;
 destination_continent;string;Continent of destination;
-origin_continents;list;If not empty, random locations will only be created on indicated locations. Empty if all continents;
+origin_continents;list;If not empty, random locations will only be created on indicated continents. Empty if all continents;
 low_temp_heat_available_at_start;True / False;Indicates if low-temperature heat is available at start;"Affects conversion costs; value defined in cost_type"
 mid_temp_heat_available_at_start;True / False;Indicates if medium-temperature heat is available at start;"Affects conversion costs; value defined in cost_type"
 high_temp_heat_available_at_start;True / False;Indicates if high-temperature heat is available at start;"Affects conversion costs; value defined in cost_type"

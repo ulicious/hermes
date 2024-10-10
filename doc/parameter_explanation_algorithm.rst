@@ -16,37 +16,11 @@ Several parameters affect the HERMES model. Following article will describe all 
 General configuration
 =====================
 
-Settings regarding general configuration include overarching settings like paths or computational resources
+Settings regarding general configuration include overarching settings like paths or computational resources, available commodities and transport means, and how recalculations of infrastructure and location conversion costs are processed.
 
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/general_configuration.csv
-   :width: 100
-   :widths: 20, 10, 50, 20
-   :delim: ;
-
-Available commodities and transport means
-=========================================
-
-These two lists indicate which commodities and transport means can be used. This will affect raw data processing an the algorithm
-
-.. csv-table::
-   :header-rows: 1
-   :file: parameter_explanation/availability.csv
-   :width: 100%
-   :widths: 20, 10, 50, 20
-   :delim: ;
-
-.. _conversion_settings:
-
-General raw data processing assumptions
-=======================================
-
-Includes assumptions regarding costs and updates of cost calculations
-
-.. csv-table::
-   :header-rows: 1
-   :file: parameter_explanation/raw_data_processing.csv
    :width: 100
    :widths: 20, 10, 50, 20
    :delim: ;
