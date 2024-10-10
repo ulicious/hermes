@@ -35,6 +35,7 @@ Big thanks to:
 
 
 .. toctree::
+   :hidden:
    :maxdepth: 1
    :caption: Getting Started:
 
@@ -43,6 +44,7 @@ Big thanks to:
    usage
 
 .. toctree::
+   :hidden:
    :maxdepth: 1
    :caption: Parameters:
 
@@ -51,12 +53,15 @@ Big thanks to:
    parameter_explanation_transport
 
 .. toctree::
+   :hidden:
    :maxdepth: 1
    :caption: Methodology Deepdive:
 
    calculation_conversion_costs
    infrastructure_processing
+   location_creation
    benchmarking
+   cost_approximation
 
 .. role:: underline
     :class: underline

@@ -24,4 +24,4 @@ Within the algorithm, the specific conversion costs are used to calculate the to
 .. math::
     \text{New Total Costs} = \frac{\text{Old Total Costs} + \text{Specific Conversion Costs}}{\text{Efficiency}}
 
-It is necessary to mention that the efficiency depends on the assumption if the heat demand can be covered by external sources (than costs are included in specific conversion costs) or will be covered by burning the initial commodity (the efficiency will be lower) (see :ref:`conversion_settings`, :ref:`locations` and :ref:`infrastructure`).
+It is necessary to mention that the efficiency depends on the assumption if the heat demand can be covered by external sources (than costs are included in specific conversion costs) or will be covered by burning the initial commodity (the efficiency will be lower) (see :ref:`locations`, :ref:`infrastructure` and :ref:`algorithm`).

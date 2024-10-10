@@ -558,8 +558,7 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
         else:
             checked_single_lines.update([s])
 
-    # lines = [shapely.wkt.loads(line) for line in checked_single_lines]
-    data_new = gpd.GeoDataFrame(shapely.wkt.loads(checked_single_lines), columns=['geometry'])
+    data_new = gpd.GeoDataFrame(checked_single_lines, columns=['geometry'])
     data_new.set_geometry('geometry')
 
     number_of_colors = len(data_new.index)
