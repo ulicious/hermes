@@ -48,6 +48,7 @@ Big thanks to:
    location_creation
    benchmarking
    cost_approximation
+   data
 
 .. role:: underline
     :class: underline
