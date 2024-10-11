@@ -23,6 +23,7 @@ Big thanks to:
 
 .. toctree::
    :hidden:
+   :collapse: False
    :maxdepth: 3
 
    getting_started
