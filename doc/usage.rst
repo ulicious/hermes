@@ -16,11 +16,9 @@ Adjust parameters if desired
 
 All parameters are set based on the parameters used in the publication. Some of these parameters directly affect the creation of random locations and the raw data processing. Therefore, please adjust parameters if desired. These include:
 
-1. algorithm_configuration -> general configurations
-2. algorithm_configuration -> general information
-3. algorithm_configuration -> parameters and assumptions for start - destination - combination file
-4. algorithm_configuration -> parameters and assumptions for infrastructure processing
-5. data/techno_economic_data_conversion
+- algorithm_configuration: General configurations affecting the infrastructure processing, the algorithm, and scenario assumptions
+- data/techno_economic_data_conversion: Techno-economic data of conversions (investments, feedstock demand and costs etc.)
+- data/techno_economic_data_transportation: Techno-economic data of transport (which commodity can be transported by which transport mean and at which costs)
 
 For the explanation of the different parameters, please see: :ref:`parameter_explanation_algorithm`, :ref:`parameter_explanation_conversion` and :ref:`parameter_explanation_transport`
 
