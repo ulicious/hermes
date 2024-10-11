@@ -23,32 +23,11 @@ Big thanks to:
 
 .. toctree::
    :hidden:
-   :maxdepth: 1
-   :caption: Getting Started:
+   :maxdepth: 3
 
-   installation
-   usage
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Parameters:
-
-   parameter_explanation_algorithm
-   parameter_explanation_conversion
-   parameter_explanation_transport
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Methodology Deepdive:
-
-   calculation_conversion_costs
-   infrastructure_processing
-   location_creation
-   benchmarking
-   cost_approximation
-   data
+   getting_started
+   parameters
+   methodology_deepdive
 
 .. role:: underline
     :class: underline
