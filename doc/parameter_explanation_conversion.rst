@@ -18,7 +18,7 @@ The first thing to adjust is the cost type of each feedstock and the capital cos
    :header-rows: 1
    :file: parameter_explanation/conversion_cost_parameters_cost_type.csv
    :width: 100
-   :widths: 30, 10, 60
+   :widths: 20, 10, 50, 20
    :delim: ;
 
 Possible are:

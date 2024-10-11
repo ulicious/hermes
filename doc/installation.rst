@@ -9,8 +9,16 @@
 Installation
 ###############################
 
-1. Setting up folder structure
-##############################
+1. Clone git project into your integrated development environment
+=================================================================
+
+You can achieve this either by connecting your IDE to your
+
+2. Install requirements
+=======================
+
+3. Setting up folder structure
+==============================
 
 Processed data and results need to be stored. Therefore, following folder structure needs to be implemented
 

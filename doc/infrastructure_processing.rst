@@ -44,7 +44,7 @@ The last step of the pipeline processing is the addition of access points. The g
 Access points are added to each pipeline segment uniformly. Their number is based on the parameter minimal_distance_between_pipeline_connection_points (see :ref:`infrastructure`) and calculated as following:
 
 .. math::
-    \text{Number Access Points} = 2 - 1 + \lceil[\big] \frac{\text{Length Segment}}{\text{Minimal Distance Between Access Points}} \rceil[\big]
+    \text{Number Access Points} = 2 - 1 + \Bigl \lceil \frac{\text{Length Segment}}{\text{Minimal Distance Between Access Points}} \Bigr \rceil
 
 This number of access points ensures that the distance between access points is <= minimal_distance_between_pipeline_connection_points. All access points are distributed uniformly along the pipeline segment.
 

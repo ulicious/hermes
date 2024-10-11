@@ -1,6 +1,4 @@
 Assumption / Setting;Values;Explanation;Comment
-enforce_update_of_data;True / False;If True, only techno-economic data (conversion costs at locations) will be updated. If False, infrastructure will be calculated as well;
-update_only_conversion_costs_and_efficiency;True / False;If True, only techno-economic data (conversion costs at locations) will be updated. If False, infrastructure will be calculated as well;
 low_temp_heat_available_at_ports;True / False;Indicates if low-temperature heat is available at ports;
 mid_temp_heat_available_at_ports;True / False;Indicates if medium-temperature heat is available at ports;
 high_temp_heat_available_at_ports;True / False;Indicates if high-temperature heat is available at ports;

@@ -53,6 +53,8 @@ Affects number of access points in pipelines and indicates if heat is available 
    :widths: 20, 10, 50, 20
    :delim: ;
 
+.. _algorithm:
+
 Setting and assumptions affecting main algorithm
 ================================================
 

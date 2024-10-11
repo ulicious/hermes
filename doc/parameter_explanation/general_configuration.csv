@@ -9,5 +9,5 @@ location_data_name;string;Indicates which location data will be used from data f
 country_data_name;string;Indicates which country data will be used from data folder;Please see XYZ
 available_commodity;list;Indicates which commodities will be considered;
 available_transport_means;list;Indicates which transport means will be considered;
-enforce_update_of_data;True / False;If True, only techno-economic data (conversion costs at locations) will be updated. If False, infrastructure will be calculated as well;
+enforce_update_of_data;True / False;If True, infrastructure will be processed again even though files have been created. Otherwise, only such infrastructure will be processed which has not been processed yet;Especially useful if infrastructure processing has been stopped/interrupted
 update_only_conversion_costs_and_efficiency;True / False;If True, only techno-economic data (conversion costs at locations) will be updated. If False, infrastructure will be calculated as well;

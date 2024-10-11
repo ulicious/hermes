@@ -20,97 +20,141 @@ The minimal costs to the destination is calculated based on conversion costs of 
 
 .. code-block:: none
 
-    minimal_costs_to_destination = Inf
-    for all target_commodity in commodities convertable from branch_commodity:
-        conversion_costs = conversion costs from branch_commodity to target_commodity
+    for branch in branches:
 
-        for all transport_mean in possible transport means of target_commodity:
-            specific_transport_costs = specific transport costs of target_commodity using transport_mean
-            transport_costs = direct distance current branch location to destination * specific_transport_costs
+        minimal_costs_to_destination = Inf
+        for all target_commodity in commodities convertable from branch_commodity:
+            conversion_costs = conversion costs from branch_commodity to target_commodity
+            conversion_efficiency = efficiency from branch_commodity to target_commodity
 
-            minimal_costs = total_costs of branch + conversion_costs + transport_costs
+            for all transport_mean in possible transport means of target_commodity:
+                specific_transport_costs = specific transport costs of target_commodity using transport_mean
+                transport_costs = direct distance current branch location to destination * specific_transport_costs
 
-            if minimal_costs < minimal_costs_to_destination:
-                minimal_costs_to_destination = minimal_costs
+                minimal_costs = (total_costs of branch + conversion_costs) / conversion_efficiency + transport_costs
 
-    if minimal_costs_to_destination > global_benchmark:
-        terminate branch
+                if minimal_costs < minimal_costs_to_destination:
+                    minimal_costs_to_destination = minimal_costs
+
+        if minimal_costs_to_destination > global_benchmark:
+            terminate branch
 
 Using Closest Infrastructure
 ----------------------------
 
-The major downside of the minimal costs to destination approximation is the assumptions that the cheapest conversion and transport will be used, reducing the amount of terminated branches. To overcome this challenge, the closest infrastructure of the current branch is considered.
+The major downside of the minimal costs to destination approximation is the assumptions that the cheapest conversion and transport will be used, reducing the amount of terminated branches. To overcome this challenge, the closest infrastructure of the current branch is considered if the following transportation is based on road or new pipeline transportation.
 
 Outside of networks, the routing algorithm will move from one infrastructure to another (e.g. discharging shipping cargo and feeding-in into pipeline system). However, if these two infrastructures are distant (> tolerance_distance :ref:`algorithm`), then road or new pipeline transportation is necessary. These two transport means are generally more expensive than shipping or existing pipeline transport.
 
-Using the closest node of the current branch location, additional costs can be approximated based on the road / new pipeline transport to the closest infrastructure. In this case, the type of infrastructure at the closest infrastructure is not considered to avoid complex coding exemptions. Following pseudocode is applied:
+Using the closest infrastructure to the current branch location, additional costs can be approximated based on the road / new pipeline transport to the closest infrastructure. In this case, the type of infrastructure at the closest infrastructure is not considered to avoid complex coding exemptions. Following pseudocode is applied:
 
 .. code-block:: none
 
-    minimal_costs_to_destination = Inf
+    for branch in branches:
 
-    # first, calculate costs from current location to closest node
-    if distance_to_closest_infrastructure > tolerance_distance:  # road / new pipeline transport necessary
-        costs_to_closest_infrastructure = Inf
+        minimal_costs_to_destination = Inf
 
+        # first, calculate costs from current location to closest node
+        if distance_to_closest_infrastructure > tolerance_distance:  # road / new pipeline transport necessary
+            costs_to_closest_infrastructure = Inf
+
+            for all target_commodity in commodities convertable from branch_commodity:
+                conversion_costs = conversion costs from branch_commodity to target_commodity
+                conversion_efficiency = efficiency from branch_commodity to target_commodity
+
+                for all transport_mean in [Road, New Pipeline]:  # only road and new pipeline possible
+                    specific_transport_costs = specific transport costs of target_commodity using transport_mean
+                    transport_costs = direct distance current branch location to destination * specific_transport_costs
+
+                    minimal_costs = (total_costs of branch + conversion_costs) / conversion_efficiency + transport_costs
+
+                    if minimal_costs < costs_to_closest_infrastructure:
+                        costs_to_closest_infrastructure = minimal_costs
+
+            distance_to_destination = distance to destination from closest infrastructure
+
+            branch_commodity = target_commodity  # since conversion took place, replace branch_commodity
+
+        else: # infrastructure can be used directly
+            costs_to_closest_infrastructure = 0
+            distance_to_destination = distance to destination from current location
+
+        # calculate costs to final destination --> distance was adjusted if transported to closest infrastructure
         for all target_commodity in commodities convertable from branch_commodity:
             conversion_costs = conversion costs from branch_commodity to target_commodity
+            conversion_efficiency = efficiency from branch_commodity to target_commodity
 
-            for all transport_mean in [Road, New Pipeline]:  # only road and new pipeline possible
+            for all transport_mean in possible transport means of target_commodity:
                 specific_transport_costs = specific transport costs of target_commodity using transport_mean
-                transport_costs = direct distance current branch location to destination * specific_transport_costs
+                transport_costs = distance_to_destination * specific_transport_costs
 
-                minimal_costs = total_costs of branch + conversion_costs + transport_costs
+                minimal_costs = (total_costs of branch + conversion_costs) / conversion_efficiency + transport_costs
 
-                if minimal_costs < costs_to_closest_infrastructure:
-                    costs_to_closest_infrastructure = minimal_costs
+                if minimal_costs < minimal_costs_to_destination:
+                    minimal_costs_to_destination = minimal_costs
 
-        distance_to_destination = distance to destination from closest infrastructure
-
-        branch_commodity = target_commodity  # since conversion took place, replace branch_commodity
-
-    else: # infrastructure can be used directly
-        costs_to_closest_infrastructure = 0
-        distance_to_destination = distance to destination from current location
-
-    # calculate costs to final destination --> distance was adjusted if transported to closest infrastructure
-    for all target_commodity in commodities convertable from branch_commodity:
-        conversion_costs = conversion costs from branch_commodity to target_commodity
-
-        for all transport_mean in possible transport means of target_commodity:
-            specific_transport_costs = specific transport costs of target_commodity using transport_mean
-            transport_costs = distance_to_destination * specific_transport_costs
-
-            minimal_costs = total_costs of branch + conversion_costs + transport_costs
-
-            if minimal_costs < minimal_costs_to_destination:
-                minimal_costs_to_destination = minimal_costs
-
-    if minimal_costs_to_destination + costs_to_closest_infrastructure > global_benchmark:
-        terminate branch
+        if minimal_costs_to_destination + costs_to_closest_infrastructure > global_benchmark:
+            terminate branch
 
 In general, the transport costs between infrastructure will have a major share on the total transport costs. Considering these will allow increased termination of branches.
 
-Cost of Using Infrastructure
-============================
+Excluding Infrastructure
+========================
 
-Using shipping, gas and oil pipeline infrastructure are the most cost-efficient way to transport commodities. However, since not all commodities are transportable via these transport means, conversion might need to take place.
+Based on Conversion Costs
+-------------------------
+
+Using shipping, gas and oil pipeline infrastructure are the most cost-efficient ways to transport commodities. However, since not all commodities are transportable via these transport means, conversion might need to take place.
 
 Each branch can be assessed regarding their ability to use certain transport means. Based on the current total costs and the cost to convert to a commodity that is transportable via certain transport means, it can be assessed if the branch is able to use the transport means.
 
 .. code-block:: none
 
-    for all transport_mean in transport_means:
-        cost_transport_mean_using[transport_mean] = Inf
+    for branch in branches
 
-    for all target_commodity in commodities convertable from branch_commodity:
-        conversion_costs = conversion costs from branch_commodity to target_commodity
+        for all transport_mean in transport_means:
+            cost_transport_mean_using[transport_mean] = Inf
+            efficiency[transport_mean] = Inf
 
-        for all transport_mean in possible transport means of target_commodity:
+        for all target_commodity in commodities convertable from branch_commodity:
+            conversion_costs = conversion costs from branch_commodity to target_commodity
+            conversion_efficiency = efficiency from branch_commodity to target_commodity
 
-            if conversion_costs < cost_transport_mean_using[transport_mean]:
-                cost_transport_mean_using[transport_mean] = conversion_costs
+            for all transport_mean in possible transport means of target_commodity:
 
-    for all transport_mean in transport_means:
-        if total_costs of branch + cost_transport_mean_using[transport_mean] > global_benchmark:
-            branch cannot use transport mean
+                if conversion_costs < cost_transport_mean_using[transport_mean]:
+                    cost_transport_mean_using[transport_mean] = conversion_costs
+                    efficiency[transport_mean] = conversion_efficiency
+
+        for all transport_mean in transport_means:
+            if (total_costs of branch + cost_transport_mean_using[transport_mean]) / efficiency[transport_mean] > global_benchmark:
+                branch cannot use transport mean
+
+Based on Distance
+-----------------
+
+Furthermore, infrastructures can be excluded if they are too far based on residual costs of global benchmark and the current total costs of the branch.
+
+.. code-block:: none
+
+    for branch in branches:
+        for infrastructure in infrastructures:
+
+            residual_costs = global_benchmark - total_costs of branch
+            maximal_distance = 0
+
+            for all target_commodity in commodities convertable from branch_commodity:
+                conversion_costs = conversion costs from branch_commodity to target_commodity
+                conversion_efficiency = efficiency from branch_commodity to target_commodity
+
+                for all transport_mean in possible transport means of target_commodity:
+
+                    specific_transport_costs = specific transport costs of target_commodity using transport_mean
+
+                    reachable_distance = residual_costs / specific_transport_costs
+
+                    if reachable_distance > maximal_distance:
+                        maximal_distance = reachable_distance
+
+            if maximal_distance < distance_to_infrastructure:
+                exclude infrastructure for branch

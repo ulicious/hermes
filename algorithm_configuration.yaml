@@ -7,10 +7,10 @@ number_cores: 1  # set certain number or 'max'; will be set to 1 if use_low_memo
 use_provided_data: True  # if True, then will use data from GitHub
 location_data_name: 'location_data.csv'
 country_data_name: 'country_data.csv'
-enforce_update_of_data: True  # if certain data has been calculated, we skip calculating again  # todo: check if still used
-update_only_conversion_costs_and_efficiency: False  # set True if you only want to update location specific conversion costs and efficiencies
 available_commodity: ['Hydrogen_Gas', 'Hydrogen_Liquid', 'Ammonia', 'Methane_Gas','Methane_Liquid', 'FTF', 'Methanol', 'DBT', 'MCH']
 available_transport_means: ['Pipeline_Gas', 'New_Pipeline_Gas', 'Pipeline_Liquid', 'New_Pipeline_Liquid', 'Shipping', 'Road']
+enforce_update_of_data: True  # if certain data has been calculated, we skip calculating again
+update_only_conversion_costs_and_efficiency: False  # set True if you only want to update location specific conversion costs and efficiencies
 
 # parameters and assumptions for start - destination - combination file
 destination_location: [9.993682, 53.551086]  # [Longitude, Latitude]
