@@ -4,6 +4,9 @@ import yaml
 
 import pandas as pd
 
+from shapely.geometry import Point
+from shapely.ops import nearest_points
+
 from algorithm.methods_geographic import calc_distance_single_to_single, calc_distance_list_to_single
 from algorithm.object_commodity import create_commodity_objects
 
@@ -61,8 +64,19 @@ def create_branches_based_on_commodities_at_start(data):
     destination_location = data['destination']['location']
     commodities = data['commodities']['commodity_objects']
 
-    distance_to_final_destination = calc_distance_single_to_single(starting_location.y, starting_location.x,
-                                                                   destination_location.y, destination_location.x)
+    if isinstance(destination_location, Point):
+        distance_to_final_destination = calc_distance_single_to_single(starting_location.y, starting_location.x,
+                                                                       destination_location.y, destination_location.x)
+    else:
+        # destination is polygon -> each infrastructure has different closest point to destination
+        infrastructure_in_destination = data['destination']['infrastructure']
+
+        distance_to_final_destination \
+            = calc_distance_list_to_single(infrastructure_in_destination['latitude'],
+                                           infrastructure_in_destination['longitude'],
+                                           starting_location.y, starting_location.x)
+
+        distance_to_final_destination = distance_to_final_destination.min()
 
     comparison_index = []
     branch_number = 0
@@ -136,13 +150,6 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
     final_commodities = data['commodities']['final_commodities']
 
     # first, check if based on configuration infrastructure is reachable from start and destination
-    complete_infrastructure['distance_to_start'] \
-        = calc_distance_list_to_single(complete_infrastructure['latitude'], complete_infrastructure['longitude'],
-                                       starting_location.y, starting_location.x)
-    complete_infrastructure['distance_to_destination'] \
-        = calc_distance_list_to_single(complete_infrastructure['latitude'], complete_infrastructure['longitude'],
-                                       destination_location.y, destination_location.x)
-
     max_length = max(configuration['max_length_road'],
                      configuration['max_length_new_segment']) / configuration['no_road_multiplier']
 
@@ -152,7 +159,8 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
     distance_to_destination = complete_infrastructure[complete_infrastructure['distance_to_destination']
                                                       <= max_length].index
 
-    distance_to_destination.drop(['Destination'])
+    if 'Destination' in distance_to_destination:
+        distance_to_destination.drop(['Destination'])
 
     if (len(distance_to_start) == 0) & (len(distance_to_destination) == 0):
         print(str(location_integer) + ': Parameters limit the access to infrastructure')
@@ -174,17 +182,27 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
         continue_processing = False
 
     # if location is already at destination --> return cheapest branch if right commodity
-    # todo: check if it works
-    distance_to_destination \
-        = calc_distance_single_to_single(starting_location.y,
-                                         starting_location.x,
-                                         complete_infrastructure.at['Destination', 'latitude'],
-                                         complete_infrastructure.at['Destination', 'longitude'])
+    if isinstance(destination_location, Point):
+        min_distance_to_destination \
+            = calc_distance_single_to_single(starting_location.y, starting_location.x,
+                                             destination_location.y, destination_location.x)
+    else:
+        # destination is polygon -> each infrastructure has different closest point to destination
+        infrastructure_in_destination = data['destination']['infrastructure']
 
-    if distance_to_destination < configuration['to_final_destination_tolerance']:
+        complete_infrastructure.loc[infrastructure_in_destination.index, 'distance_to_destination'] = 0
+
+        distances_to_destination \
+            = calc_distance_list_to_single(infrastructure_in_destination['latitude'],
+                                           infrastructure_in_destination['longitude'],
+                                           starting_location.y, starting_location.x)
+
+        min_distance_to_destination = distances_to_destination.min()
+
+    if min_distance_to_destination < configuration['to_final_destination_tolerance']:
         cheapest_option = math.inf
         chosen_branch = None
-        for s in branches:
+        for s in branches.index:
             if branches.at[s, 'current_commodity'] in final_commodities:
                 if branches.at[s, 'current_total_costs'] < cheapest_option:
                     cheapest_option = branches.at[s, 'current_total_costs']

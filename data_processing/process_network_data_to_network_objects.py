@@ -18,7 +18,6 @@ from tqdm import tqdm
 from collections import Counter, defaultdict
 
 from algorithm.methods_geographic import calc_distance_list_to_list
-from data_processing.helpers_raw_data_processing import create_random_colors
 
 
 def extend_line_in_one_direction(direction_coordinate, support_coordinate, extension_percentage):

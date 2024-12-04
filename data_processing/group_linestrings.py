@@ -15,7 +15,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 from algorithm.methods_geographic import calc_distance_single_to_single, calc_distance_list_to_list
-from data_processing.helpers_raw_data_processing import create_random_colors
+from data_processing.helpers_misc import create_random_colors
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -89,7 +89,7 @@ def close_gaps(line_combinations, existing_lines, gap_distance, apply_duplicate_
             new_line_points = ops.nearest_points(l1, l2)
             if extend_lines:
 
-                if distance < 0.001:
+                if distance < 0.01:
                     # sometimes distances are very short. Here it is possible to get issues with floating
                     # point errors. Therefore, very short distances are addressed by building a rectangle
                     # around the connection point and add all 4 edges to the graph

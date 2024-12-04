@@ -9,22 +9,28 @@ location_data_name: 'location_data.csv'
 country_data_name: 'country_data.csv'
 available_commodity: ['Hydrogen_Gas', 'Hydrogen_Liquid', 'Ammonia', 'Methane_Gas','Methane_Liquid', 'FTF', 'Methanol', 'DBT', 'MCH']
 available_transport_means: ['Pipeline_Gas', 'New_Pipeline_Gas', 'Pipeline_Liquid', 'New_Pipeline_Liquid', 'Shipping', 'Road']
-enforce_update_of_data: True  # if certain data has been calculated, we skip calculating again
+enforce_update_of_data: False  # if certain data has been calculated, we skip calculating again
 update_only_conversion_costs_and_efficiency: False  # set True if you only want to update location specific conversion costs and efficiencies
 
 # parameters and assumptions for start - destination - combination file
+destination_type: 'country'  # defines the destination type: 'location' (single point) or 'country' (polygon / multipolygon)
 destination_location: [9.993682, 53.551086]  # [Longitude, Latitude]
+destination_polygon: {'Germany': []}  # dictionary with country: list of states. If complete country, leave list empty --> check Bayern
 destination_country: 'Germany'
 destination_continent: 'Europe'
 origin_continents: []  # [] if all continents are possible, else define continents like ['Europe']
 low_temp_heat_available_at_start: False
 mid_temp_heat_available_at_start: False
 high_temp_heat_available_at_start: False
-number_locations: 500
+number_locations: 50
 minimal_latitude: -90  # will be overwritten if minimal_example is applied
 maximal_latitude: 90  # will be overwritten if minimal_example is applied
 minimal_longitude: -180  # will be overwritten if minimal_example is applied
 maximal_longitude: 180  # will be overwritten if minimal_example is applied
+location_creation_type: 'uniform'  # uniform or random
+create_voronoi_cells: True  # based on locations, onshore area is divided into voronoi cells
+weight_hydrogen_costs_by_quantity: True  # if True then the value of the voronoi cell is based on the by quantity weighted costs per era 5 cell
+each_country_at_least_one_location: False  # makes sure that each country is represented at least by one start location
 
 # parameters and assumptions for infrastructure processing
 low_temp_heat_available_at_ports: False
@@ -44,9 +50,9 @@ max_length_new_segment: 100000  # [m] max distance for new pipelines
 max_length_road: math.inf  # [m] max distance for road transportation
 no_road_multiplier: 1.5  # distance * no_road_multiplier
 build_new_infrastructure: True
-H2_ready_infrastructure: False
+H2_ready_infrastructure: True
 low_temp_heat_available_at_destination: False
 mid_temp_heat_available_at_destination: False
 high_temp_heat_available_at_destination: False
 print_runtime_information: True
-print_benchmark_info: False
+print_benchmark_info: True

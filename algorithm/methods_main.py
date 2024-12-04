@@ -10,7 +10,7 @@ import cartopy.io.shapereader as shpreader
 
 from shapely.wkt import loads
 from shapely.geometry import Point, MultiLineString
-from data_processing.attach_conversion_costs_and_efficiency_to_locations import attach_conversion_costs_and_efficiency_to_locations
+from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure
 
 
 def process_network_data(data, name, node_locations, graph_data):
@@ -96,19 +96,78 @@ def prepare_data_and_configuration_dictionary(config_file):
     coastlines.set_geometry('geometry', inplace=True)
 
     final_commodities = config_file['target_commodity']
-    destination_location = Point(config_file['destination_location'])
-    destination_continent = config_file['destination_continent']
+
+    # create shapely object of destination
+    if config_file['destination_type'] == 'location':
+        destination_location = Point(config_file['destination_location'])
+        destination_continent = config_file['destination_continent']
+
+        # attach conversion costs and efficiencies to destination
+        destination = pd.DataFrame(config_file['destination_location'], index=['longitude', 'latitude'],
+                                   columns=['Destination']).transpose()
+        destination = attach_conversion_costs_and_efficiency_to_infrastructure(destination, config_file,
+                                                                               techno_economic_data_conversion)
+
+        conversion_costs_and_efficiencies = pd.concat([conversion_costs_and_efficiencies, destination])
+
+        infrastructure_in_destination = None
+    else:
+        destination_continent = config_file['destination_continent']
+
+        country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
+        world = gpd.read_file(country_shapefile)
+
+        state_shapefile = shpreader.natural_earth(resolution='10m', category='cultural',
+                                                  name='admin_1_states_provinces')
+        states = gpd.read_file(state_shapefile)
+
+        country_states = config_file['destination_polygon']
+
+        first = True
+        for c in [*country_states.keys()]:
+            if country_states[c]:
+                for s in country_states[c]:
+                    if first:
+                        destination_location = states[states['name'] == s]['geometry'].values[0]
+                        first = False
+                    else:
+                        destination_location.union(states[states['name'] == s]['geometry'].values[0])
+            else:
+                if first:
+                    destination_location = world[world['NAME_EN'] == c]['geometry'].values[0]
+                    first = False
+                else:
+                    destination_location.union(world[world['NAME_EN'] == c]['geometry'].values[0])
+
+        infrastructure_in_destination = []
+        for i in conversion_costs_and_efficiencies.index:
+            if 'PG' in i:
+                data_set_to_look_up = pipeline_gas_node_locations
+            elif 'PL' in i:
+                data_set_to_look_up = pipeline_liquid_node_locations
+            elif 'H' in i:
+                data_set_to_look_up = ports
+            else:
+                continue
+
+            i_location = Point([data_set_to_look_up.loc[i, 'longitude'], data_set_to_look_up.loc[i, 'latitude']])
+            if i_location.within(destination_location):
+                infrastructure_in_destination.append(i)
+
+        # one destination does not exist. However, destination efficiencies and costs are used later on in the code
+        # when looking for the cheapest option --> take minimal values for costs and efficiencies
+        # will not be applied to calculate actual costs
+        costs_efficiencies_destinations = conversion_costs_and_efficiencies.loc[infrastructure_in_destination, :]
+        min_costs_efficiencies_destinations = pd.DataFrame(costs_efficiencies_destinations.min(axis='index')).transpose()
+        min_costs_efficiencies_destinations.index = ['Destination']
+
+        conversion_costs_and_efficiencies = pd.concat([conversion_costs_and_efficiencies,
+                                                       min_costs_efficiencies_destinations])
 
     transport_means = config_file['available_transport_means']
 
     country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
     world = gpd.read_file(country_shapefile)
-
-    # attach conversion costs and efficiencies to destination
-    destination = pd.DataFrame(config_file['destination_location'], index=['longitude', 'latitude'], columns=['Destination']).transpose()
-    destination = attach_conversion_costs_and_efficiency_to_locations(destination, config_file, techno_economic_data_conversion)
-
-    conversion_costs_and_efficiencies = pd.concat([conversion_costs_and_efficiencies, destination])
 
     # The data dictionary holds common information/data/parameter which apply for all following branches.
     data = {'Shipping': {'ports': ports},
@@ -117,7 +176,8 @@ def prepare_data_and_configuration_dictionary(config_file):
             'commodities': {'final_commodities': final_commodities,
                             'commodity_objects': {}},
             'destination': {'location': destination_location,
-                            'continent': destination_continent},
+                            'continent': destination_continent,
+                            'infrastructure': infrastructure_in_destination},
             'coastlines': coastlines,
             'conversion_costs_and_efficiencies': conversion_costs_and_efficiencies,
             'world': world}
@@ -127,7 +187,8 @@ def prepare_data_and_configuration_dictionary(config_file):
     data = process_network_data(data, 'Pipeline_Liquid', pipeline_liquid_node_locations, pipeline_liquid_graphs)
 
     # get assumptions
-    configuration = {'tolerance_distance': config_file['tolerance_distance'],
+    configuration = {'destination_type': config_file['destination_type'],
+                     'tolerance_distance': config_file['tolerance_distance'],
                      'to_final_destination_tolerance': config_file['to_final_destination_tolerance'],
                      'no_road_multiplier': config_file['no_road_multiplier'],
                      'max_length_new_segment': config_file['max_length_new_segment'],

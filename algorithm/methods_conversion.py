@@ -3,7 +3,7 @@ import time
 import pandas as pd
 
 from algorithm.methods_algorithm import create_new_branches_based_on_conversion, postprocessing_branches
-from algorithm.methods_geographic import calc_distance_list_to_single
+from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list
 from algorithm.methods_cost_approximations import calculate_cheapest_option_to_final_destination
 
 
@@ -48,13 +48,27 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, lo
 
     final_destination = data['destination']['location']
 
-    conversion_branches['distance_to_final_destination'] \
-        = calc_distance_list_to_single(conversion_branches['latitude'], conversion_branches['longitude'],
-                                       final_destination.y, final_destination.x)
+    # conversion_branches['distance_to_final_destination'] \
+    #     = calc_distance_list_to_single(conversion_branches['latitude'], conversion_branches['longitude'],
+    #                                    final_destination.y, final_destination.x)
+
+    if configuration['destination_type'] == 'location':
+        conversion_branches['distance_to_final_destination'] \
+            = calc_distance_list_to_single(conversion_branches['latitude'], conversion_branches['longitude'],
+                                           final_destination.y, final_destination.x)
+    else:
+        # destination is polygon -> each infrastructure has different closest point to destination
+        infrastructure_in_destination = data['destination']['infrastructure']
+        distances = calc_distance_list_to_list(conversion_branches['latitude'], conversion_branches['longitude'],
+                                               infrastructure_in_destination['latitude'], infrastructure_in_destination['longitude'])
+
+        distances = pd.DataFrame(distances, index=infrastructure_in_destination.index, columns=conversion_branches.index).transpose()
+
+        conversion_branches.loc[conversion_branches.index, 'distance_to_final_destination'] = distances.min('columns')
 
     in_destination_tolerance \
         = conversion_branches[conversion_branches['distance_to_final_destination']
-                               <= configuration['to_final_destination_tolerance']].index
+                              <= configuration['to_final_destination_tolerance']].index
     conversion_branches.loc[in_destination_tolerance, 'distance_to_final_destination'] = 0
 
     # get costs for all options outside tolerance
@@ -113,13 +127,19 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, lo
     at_destination = branches[
         branches['distance_to_final_destination'] <= configuration['to_final_destination_tolerance']]
     if not at_destination.empty:
+
+        # check if final commodity
         at_destination_and_correct_commodity = at_destination[
             at_destination['current_commodity'].isin(final_commodities)]
         if not at_destination_and_correct_commodity.empty:
+
+            # check if lower than benchmark
             at_destination_and_lower_benchmark_and_correct_commodity = \
                 at_destination_and_correct_commodity[
                     at_destination_and_correct_commodity['current_total_costs'] <= benchmark]
             if not at_destination_and_lower_benchmark_and_correct_commodity.empty:
+
+                # update final solution
                 min_benchmark_costs \
                     = at_destination_and_lower_benchmark_and_correct_commodity['current_total_costs'].min()
                 benchmark = min_benchmark_costs
@@ -128,12 +148,11 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, lo
                 final_solution = branches.loc[final_solution_index, :].copy()
                 final_solution.loc['solving_time'] = time.time() - start_time
 
+                # set current node to destination
+                final_solution['current_node'] = 'Destination'
+
             # remove all branches which are at final destination with correct commodity
             branches.drop(at_destination_and_correct_commodity.index, inplace=True)
-
-        # drop all branches at destination as further transportation is not necessary
-        at_destination = set(at_destination.index) - set(at_destination_and_correct_commodity.index)
-        branches.drop(at_destination, inplace=True)
 
     # check again all branches because benchmark might have changed
     branches = branches[branches['current_total_costs'] <= benchmark]

@@ -1,9 +1,12 @@
+import math
+
 import numpy as np
 import geopandas as gpd
 import cartopy.io.shapereader as shpreader
 
 from geopandas.tools import sjoin
 from math import cos, sin, asin, sqrt, radians
+from shapely.geometry import Point
 
 
 def calc_distance_single_to_single(latitude_1, longitude_1, latitude_2, longitude_2):
@@ -134,14 +137,14 @@ def get_continent_from_location(location, world=None):
     return continent
 
 
-def check_if_reachable_on_land(start_location, list_longitude, list_latitude, coastline, get_only_availability=False,
+def check_if_reachable_on_land(target_location, list_longitude, list_latitude, coastline, get_only_availability=False,
                                get_only_poly=False):
 
     """
     This method checks if a location can reach different locations by checking if they are in the same polygon.
     The polygon are based on the coastlines so if not on same polygon, water is in between --> no road
 
-    @param shapely.geometry.Point start_location: shapely.geometry.Point of start location
+    @param shapely.geometry.Point target_location: shapely.geometry.Point of start location
     @param pandas.DataFrame list_longitude: longitude of target locations
     @param pandas.DataFrame list_latitude: latitude of target locations
     @param geopandas.GeoDataFrame coastline: polygons based on coastline
@@ -150,19 +153,13 @@ def check_if_reachable_on_land(start_location, list_longitude, list_latitude, co
     @return: returns tuple with the boolean if reachable by road (within the same polygon) and the index of the polygon
     """
 
-    import math
-    import shapely
-
-    df_start = gpd.GeoSeries.from_wkt(['Point(' + str(start_location.x) + ' ' + str(start_location.y) + ')'])
-    gdf_start = gpd.GeoDataFrame(df_start, geometry=0)
-    start_point = shapely.geometry.Point([start_location.x, start_location.y])
+    gdf_start = gpd.GeoDataFrame(geometry=[target_location])
 
     points = []
     for i in list_latitude.index:
-        points.append('Point(' + str(list_longitude.loc[i]) + ' ' + str(list_latitude.loc[i]) + ')')
+        points.append(Point([list_longitude.loc[i], list_latitude.loc[i]]))
 
-    df_target = gpd.GeoSeries.from_wkt(points)
-    gdf_target = gpd.GeoDataFrame(df_target, geometry=0)
+    gdf_target = gpd.GeoDataFrame(geometry=points)
 
     polygons = sjoin(gdf_start, coastline, predicate='within', how='right').dropna(subset=['index_left'])
 
@@ -170,8 +167,8 @@ def check_if_reachable_on_land(start_location, list_longitude, list_latitude, co
     smallest_distance_to_start = math.inf
     start_polygon = None
     for p in coastline['geometry']:
-        if p.distance(start_point) < smallest_distance_to_start:
-            smallest_distance_to_start = p.distance(start_point)
+        if p.distance(target_location) < smallest_distance_to_start:
+            smallest_distance_to_start = p.distance(target_location)
             start_polygon = p
 
     if len(polygons.index) > 0:
@@ -199,13 +196,7 @@ def check_if_reachable_on_land(start_location, list_longitude, list_latitude, co
     not_reachable = gdf_target[~gdf_target['reachable']]
     result = []
     for i in not_reachable.index:
-        target_point = not_reachable.at[i, 0]
-        # smallest_distance_to_target = math.inf
-        # target_polygon = None
-        # for p in coastline['geometry']:
-        #     if p.distance(target_point) < smallest_distance_to_target:
-        #         smallest_distance_to_target = p.distance(target_point)
-        #         target_polygon = p
+        target_point = not_reachable.at[i, 'geometry']
 
         if start_polygon.distance(target_point) < 0.00001:
             result.append(True)

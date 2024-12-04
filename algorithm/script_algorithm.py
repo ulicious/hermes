@@ -16,7 +16,7 @@ from algorithm.script_benchmark import calculate_benchmark
 from algorithm.methods_geographic import get_continent_from_location
 from algorithm.methods_conversion import apply_conversion
 from algorithm.methods_cost_approximations import calculate_minimal_costs_conversion_for_oil_and_gas_infrastructure
-from data_processing.attach_conversion_costs_and_efficiency_to_locations import attach_conversion_costs_and_efficiency_to_locations
+from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure
 
 import logging
 logging.getLogger().setLevel(logging.INFO)
@@ -46,8 +46,8 @@ def run_algorithm(args):
     starting_location = Point([location_data.at['Start', 'longitude'], location_data.at['Start', 'latitude']])
     starting_continent = location_data.at['Start', 'continent_start']
 
-    destination_location = Point(config_file['destination_location'])
-    destination_continent = config_file['destination_continent']
+    destination_location = data['destination']['location']
+    destination_continent = data['destination']['continent']
 
     data['k'] = location_index
 
@@ -56,7 +56,36 @@ def run_algorithm(args):
                      'continent': starting_continent}
 
     # get all infrastructure options and check access to infrastructure
-    complete_infrastructure = get_complete_infrastructure(data)
+    complete_infrastructure = get_complete_infrastructure(data, configuration)
+
+    if configuration['destination_type'] == 'country':
+        data['destination']['infrastructure'] = complete_infrastructure.loc[data['destination']['infrastructure'], :].copy()
+
+    # all_points = []
+    # for i in complete_infrastructure.index:
+    #     all_points.append(Point([complete_infrastructure.loc[i, 'longitude'], complete_infrastructure.loc[i, 'latitude']]))
+    #
+    # infrastructure_points = []
+    # infra = data['destination']['infrastructure']
+    # for i in infra.index:
+    #     infrastructure_points.append(
+    #         Point([infra.loc[i, 'longitude'], infra.loc[i, 'latitude']]))
+
+    # import geopandas as gpd
+    # import matplotlib.pyplot as plt
+    #
+    # area = gpd.GeoDataFrame(geometry=[data['destination']['location']])
+    # all_points = gpd.GeoDataFrame(geometry=all_points)
+    # infra = gpd.GeoDataFrame(geometry=infrastructure_points)
+    #
+    # fig, ax = plt.subplots()
+    #
+    # area.plot(ax=ax)
+    # all_points.plot(ax=ax, color='red')
+    # infra.plot(ax=ax, color='yellow')
+    #
+    # plt.show()
+
     complete_infrastructure = check_if_benchmark_possible(data, configuration, complete_infrastructure)
 
     # adjust minimal distances by checking if distance to destination is minimal distance
@@ -64,7 +93,10 @@ def run_algorithm(args):
     minimal_distances['distance_to_destination'] = complete_infrastructure.loc[minimal_distances.index, 'distance_to_destination']
     to_destination_lower = minimal_distances[minimal_distances['minimal_distance'] >= minimal_distances['distance_to_destination']].index
     minimal_distances.loc[to_destination_lower, 'minimal_distance'] = minimal_distances.loc[to_destination_lower, 'distance_to_destination']
-    minimal_distances.loc[to_destination_lower, 'closest_node'] = 'Destination'
+
+    if configuration['destination_type'] == 'location':
+        minimal_distances.loc[to_destination_lower, 'closest_node'] = 'Destination'
+
     minimal_distances = minimal_distances.drop(['distance_to_destination'], axis=1)
 
     data['minimal_distances'] = minimal_distances
@@ -75,8 +107,8 @@ def run_algorithm(args):
     techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
     conversions_location_data \
-        = attach_conversion_costs_and_efficiency_to_locations(location_data, config_file,
-                                                              techno_economic_data_conversion, with_tqdm=False)
+        = attach_conversion_costs_and_efficiency_to_infrastructure(location_data, config_file,
+                                                                   techno_economic_data_conversion, with_tqdm=False)
     conversion_costs_and_efficiencies = pd.concat([data['conversion_costs_and_efficiencies'], conversions_location_data])
     data['conversion_costs_and_efficiencies'] = conversion_costs_and_efficiencies
 
@@ -128,7 +160,11 @@ def run_algorithm(args):
 
             all_locations = data['conversion_costs_and_efficiencies']
 
-            no_conversion_possible_locations = all_locations[~all_locations['conversion_possible']].index.tolist()
+            if False in all_locations['conversion_possible'].tolist():
+                no_conversion_possible_locations = all_locations[~all_locations['conversion_possible']].index.tolist()
+            else:
+                no_conversion_possible_locations = []
+
             no_conversion_possible_branches = branches[branches['current_node'].isin(no_conversion_possible_locations)]
 
             conversion_possible_locations = [i for i in all_locations.index if i not in no_conversion_possible_locations]
@@ -153,6 +189,13 @@ def run_algorithm(args):
             if potential_final_solution is not None:
                 final_solution = potential_final_solution
 
+            # drop all branches which are at destination but not final solution
+            if not branches.empty:
+                at_destination \
+                    = branches[branches['distance_to_final_destination'] <= configuration['to_final_destination_tolerance']].index.tolist()
+                branches.drop(at_destination, inplace=True)
+
+            # merge all processed and not processed branches
             branches = pd.concat([branches, no_conversion_possible_branches])
 
         time_conversion = time.time() - time_conversion

@@ -13,12 +13,13 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-def get_complete_infrastructure(data):
+def get_complete_infrastructure(data, config_file):
 
     """
     Method to collect all ports, nodes and destination in one single dataframe
 
     @param dict data: dictionary with common data
+    @param dict config_file: contains all configurations
 
     @return: pandas.DataFrame with all nodes, ports and destination
     """
@@ -29,12 +30,14 @@ def get_complete_infrastructure(data):
     for m in ['Road', 'Shipping', 'Pipeline_Gas', 'Pipeline_Liquid']:
 
         if m == 'Road':
-            # Check final destination and add to option outside tolerance if applicable
-            complete_infrastructure.loc['Destination', 'latitude'] = final_destination.y
-            complete_infrastructure.loc['Destination', 'longitude'] = final_destination.x
-            complete_infrastructure.loc['Destination', 'current_transport_mean'] = m
-            complete_infrastructure.loc['Destination', 'graph'] = None
-            complete_infrastructure.loc['Destination', 'continent'] = data['destination']['continent']
+
+            if config_file['destination_type'] == 'location':
+                # Check final destination and add to option outside tolerance if applicable
+                complete_infrastructure.loc['Destination', 'latitude'] = final_destination.y
+                complete_infrastructure.loc['Destination', 'longitude'] = final_destination.x
+                complete_infrastructure.loc['Destination', 'current_transport_mean'] = m
+                complete_infrastructure.loc['Destination', 'graph'] = None
+                complete_infrastructure.loc['Destination', 'continent'] = data['destination']['continent']
 
             continue
 
@@ -218,6 +221,10 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
             if limitation == 'no_pipeline_gas':
                 reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'PG' not in i]
+
+                if configuration['destination_type'] == 'country':  # destination not necessary with polygons
+                    reduced_infrastructure_index = [i for i in reduced_infrastructure_index if i != 'Destination']
+
                 distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                        complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                        branches_no_duplicates['latitude'],
@@ -225,13 +232,21 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
             elif limitation == 'no_pipeline_liquid':
                 reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'PL' not in i]
+
+                if configuration['destination_type'] == 'country':  # destination not necessary with polygons
+                    reduced_infrastructure_index = [i for i in reduced_infrastructure_index if i != 'Destination']
+
                 distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                        complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                        branches_no_duplicates['latitude'],
                                                        branches_no_duplicates['longitude'])
 
             elif limitation == 'no_pipelines':
-                reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'H' in i] + ['Destination']
+                if configuration['destination_type'] == 'location':
+                    reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'H' in i] + ['Destination']
+                else:
+                    reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'H' in i]
+
                 distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                        complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                        branches_no_duplicates['latitude'],
@@ -239,7 +254,11 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
             else:
                 reduced_infrastructure_index = complete_infrastructure.index
-                distances = calc_distance_list_to_list(complete_infrastructure['latitude'], complete_infrastructure['longitude'],
+                if configuration['destination_type'] == 'country':  # destination not necessary with polygons
+                    reduced_infrastructure_index = [i for i in complete_infrastructure.index if i != 'Destination']
+
+                distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
+                                                       complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                        branches_no_duplicates['latitude'],
                                                        branches_no_duplicates['longitude'])
 
@@ -530,10 +549,24 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
         final_destination = data['destination']['location']
 
-        outside_options['distance_to_final_destination'] = calc_distance_list_to_single(outside_options['latitude'],
-                                                                                        outside_options['longitude'],
-                                                                                        final_destination.y,
-                                                                                        final_destination.x)
+        if configuration['destination_type'] == 'location':
+            outside_options['distance_to_final_destination'] = calc_distance_list_to_single(outside_options['latitude'],
+                                                                                            outside_options['longitude'],
+                                                                                            final_destination.y,
+                                                                                            final_destination.x)
+        else:
+            # destination is polygon -> each infrastructure has different closest point to destination
+            infrastructure_in_destination = data['destination']['infrastructure']
+            distances = calc_distance_list_to_list(outside_options['latitude'], outside_options['longitude'],
+                                                   infrastructure_in_destination['latitude'],
+                                                   infrastructure_in_destination['longitude'])
+            distances = pd.DataFrame(distances, index=infrastructure_in_destination.index, columns=outside_options['current_node']).transpose()
+
+            for current_node in outside_options['current_node']:
+                print(current_node)
+                print(distances.loc[current_node, 'PG_Graph_22_Node_2665'])
+
+            outside_options['distance_to_final_destination'] = distances.min('columns')
 
         in_destination_tolerance \
             = outside_options[outside_options['distance_to_final_destination']
@@ -790,10 +823,22 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
 
             # calculate minimal potential costs to final destination
             final_destination = data['destination']['location']
-            all_infrastructures['distance_to_final_destination'] \
-                = calc_distance_list_to_single(all_infrastructures['latitude'],
-                                               all_infrastructures['longitude'],
-                                               final_destination.y, final_destination.x)
+
+            if configuration['destination_type'] == 'location':
+                all_infrastructures['distance_to_final_destination'] \
+                    = calc_distance_list_to_single(all_infrastructures['latitude'], all_infrastructures['longitude'],
+                                                   final_destination.y, final_destination.x)
+            else:
+                # destination is polygon -> each infrastructure has different closest point to destination
+                infrastructure_in_destination = data['destination']['infrastructure']
+                distances = calc_distance_list_to_list(all_infrastructures['latitude'], all_infrastructures['longitude'],
+                                                       infrastructure_in_destination['latitude'],
+                                                       infrastructure_in_destination['longitude'])
+
+                distances = pd.DataFrame(distances, index=infrastructure_in_destination.index,
+                                         columns=all_infrastructures.index).transpose()
+
+                all_infrastructures['distance_to_final_destination'] = distances.min('columns')
 
             # asses costs to final destination based on distance to final destination
             # get options in tolerance to final destination and set distance to 0
@@ -991,6 +1036,18 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
                 = calc_distance_list_to_single(infrastructure['latitude'],
                                                infrastructure['longitude'],
                                                final_destination.y, final_destination.x)
+
+            if configuration['destination_type'] == 'location':
+                infrastructure['distance_to_final_destination']\
+                    = calc_distance_list_to_single(infrastructure['latitude'], infrastructure['longitude'],
+                                                   final_destination.y, final_destination.x)
+            else:
+                # destination is polygon -> each infrastructure has different closest point to destination
+                infrastructure_in_destination = data['destination']['infrastructure']
+                distances = calc_distance_list_to_list(infrastructure['latitude'], infrastructure['longitude'],
+                                                       infrastructure_in_destination['latitude'],
+                                                       infrastructure_in_destination['longitude'])
+                infrastructure['distance_to_final_destination'] = distances.min('columns')
 
             # asses costs to final destination based on distance to final destination
             # get options in tolerance to final destination and set distance to 0

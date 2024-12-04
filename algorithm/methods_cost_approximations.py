@@ -24,7 +24,12 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmark, co
     all_locations = data['conversion_costs_and_efficiencies']
 
     branches['current_node_conversion'] = True
-    no_conversion_possible_locations = all_locations[~all_locations['conversion_possible']].index.tolist()
+
+    if False in all_locations['conversion_possible'].tolist():
+        no_conversion_possible_locations = all_locations[~all_locations['conversion_possible']].index.tolist()
+    else:
+        no_conversion_possible_locations = []
+
     no_conversion_possible_branches = branches[branches['current_node'].isin(no_conversion_possible_locations)].index
     branches.loc[no_conversion_possible_branches, 'current_node_conversion'] = False
 
@@ -180,12 +185,22 @@ def calculate_cheapest_option_to_closest_infrastructure(data, branches, configur
     all_locations = data['conversion_costs_and_efficiencies']
 
     branches['current_node_conversion'] = True
-    no_conversion_possible_locations = all_locations[~all_locations['conversion_possible']].index.tolist()
+
+    if False in all_locations['conversion_possible']:
+        no_conversion_possible_locations = all_locations[~all_locations['conversion_possible']].index.tolist()
+    else:
+        no_conversion_possible_locations = []
+
     no_conversion_possible_branches = branches[branches['current_node'].isin(no_conversion_possible_locations)].index
     branches.loc[no_conversion_possible_branches, 'current_node_conversion'] = False
 
     branches['closest_node_conversion'] = True
-    no_conversion_possible_locations = all_locations[~all_locations['conversion_possible']].index.tolist()
+
+    if False in all_locations['conversion_possible']:
+        no_conversion_possible_locations = all_locations[~all_locations['conversion_possible']].index.tolist()
+    else:
+        no_conversion_possible_locations = []
+
     no_conversion_possible_branches = branches[branches['closest_node'].isin(no_conversion_possible_locations)].index
     branches.loc[no_conversion_possible_branches, 'closest_node_conversion'] = False
 
@@ -377,7 +392,12 @@ def calculate_minimal_costs_conversion_for_oil_and_gas_infrastructure(data, bran
     all_locations = data['conversion_costs_and_efficiencies']
 
     branches['current_node_conversion'] = True
-    no_conversion_possible_locations = all_locations[~all_locations['conversion_possible']].index.tolist()
+
+    if False in all_locations['conversion_possible'].tolist():
+        no_conversion_possible_locations = all_locations[~all_locations['conversion_possible']].index.tolist()
+    else:
+        no_conversion_possible_locations = []
+
     no_conversion_possible_branches = branches[branches['current_node'].isin(no_conversion_possible_locations)].index
     branches.loc[no_conversion_possible_branches, 'current_node_conversion'] = False
 

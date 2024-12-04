@@ -2,7 +2,11 @@ import math
 
 import pandas as pd
 
-from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list, check_if_reachable_on_land
+from shapely.geometry import Point
+from shapely.ops import nearest_points
+
+from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list, calc_distance_list_to_list, \
+    check_if_reachable_on_land
 
 
 def check_if_benchmark_possible(data, configuration, complete_infrastructure):
@@ -39,17 +43,41 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
     complete_infrastructure['distance_to_start'] \
         = calc_distance_list_to_single(complete_infrastructure['latitude'], complete_infrastructure['longitude'],
                                        starting_location.y, starting_location.x)
-    complete_infrastructure['distance_to_destination'] \
-        = calc_distance_list_to_single(complete_infrastructure['latitude'], complete_infrastructure['longitude'],
-                                       destination_location.y, destination_location.x)
+
+    if isinstance(destination_location, Point):
+        complete_infrastructure['distance_to_destination'] \
+            = calc_distance_list_to_single(complete_infrastructure['latitude'], complete_infrastructure['longitude'],
+                                           destination_location.y, destination_location.x)
+    else:
+        # destination is polygon -> each infrastructure has different closest point to destination
+        infrastructure_in_destination = data['destination']['infrastructure']
+        infrastructure_not_in_destination = [i for i in complete_infrastructure.index if i not in infrastructure_in_destination.index]
+
+        complete_infrastructure.loc[infrastructure_in_destination.index, 'distance_to_destination'] = 0
+
+        other_distances \
+            = calc_distance_list_to_list(complete_infrastructure.loc[infrastructure_not_in_destination, 'latitude'],
+                                         complete_infrastructure.loc[infrastructure_not_in_destination, 'longitude'],
+                                         infrastructure_in_destination['latitude'],
+                                         infrastructure_in_destination['longitude'])
+
+        other_distances = pd.DataFrame(other_distances, index=infrastructure_in_destination.index, columns=infrastructure_not_in_destination).transpose()
+
+        complete_infrastructure.loc[infrastructure_not_in_destination, 'distance_to_destination'] = other_distances.min(axis='columns')
+
+    # consider tolerance when looking at infrastructure_in_destination
     index_in_tolerance = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= to_destination_tolerance].index
     complete_infrastructure.loc[index_in_tolerance, 'distance_to_destination'] = 0
+    data['destination']['infrastructure'] = complete_infrastructure.loc[index_in_tolerance, :]
 
+    # now check which infrastructure can reach start / destination based on distances
     max_length = max(max_length_road, max_length_new_segment) / no_road_multiplier
 
     complete_infrastructure.sort_values(['distance_to_destination'], inplace=True)
     distance_to_destination = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= max_length].index.tolist()
-    distance_to_destination.remove('Destination')
+
+    if 'Destination' in distance_to_destination:
+        distance_to_destination.remove('Destination')
 
     # we want at least 10 harbours within these options where we calculate the reachability
     complete_infrastructure.sort_values(['distance_to_start'], inplace=True)
@@ -62,7 +90,12 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
             if len(first_ten_harbours) == 10:
                 break
 
-    first_index = ['Destination'] + first_ten_harbours
+    if configuration['destination_type'] == 'location':
+        first_index = ['Destination'] + first_ten_harbours
+    else:
+        infrastructure_in_destination = data['destination']['infrastructure']
+        first_index = list(set(infrastructure_in_destination.index.tolist() + first_ten_harbours))
+
     new_index = first_index + [i for i in complete_infrastructure.index if i not in first_index]
     complete_infrastructure = complete_infrastructure.loc[new_index, :]
 
@@ -377,7 +410,10 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
     conversion_losses_gas = pipeline_commodity.get_conversion_efficiencies()
 
     conversion_costs = data['conversion_costs_and_efficiencies']
-    no_conversion_nodes = conversion_costs[~conversion_costs['conversion_possible']].index
+    if False in conversion_costs['conversion_possible'].unique():
+        no_conversion_nodes = conversion_costs[~conversion_costs['conversion_possible']].index
+    else:
+        no_conversion_nodes = []
 
     if pipeline_type == 'Pipeline_Gas':
         pipeline_options = complete_infrastructure[complete_infrastructure['reachable_from_start']].copy()
@@ -690,7 +726,11 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
     final_commodities = data['commodities']['final_commodities']
 
     conversion_costs = data['conversion_costs_and_efficiencies']
-    no_conversion_nodes = conversion_costs[~conversion_costs['conversion_possible']].index
+
+    if False in conversion_costs['conversion_possible'].unique():
+        no_conversion_nodes = conversion_costs[~conversion_costs['conversion_possible']].index
+    else:
+        no_conversion_nodes = []
 
     transportation_costs_liquid = road_commodity.get_transportation_costs()
 
@@ -702,8 +742,8 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
     conversion_costs_gas = pipeline_commodity.get_conversion_costs()
     conversion_losses_gas = pipeline_commodity.get_conversion_efficiencies()
 
+    # get all pipelines which are reachable from start and destination
     if pipeline_type == 'Pipeline_Gas':
-
         pipeline_options_from_start = complete_infrastructure[complete_infrastructure['reachable_from_start']].copy()
         pg_index = [i for i in pipeline_options_from_start.index if ('PG' in i) & (i not in no_conversion_nodes)]
         pipeline_options_from_start = pipeline_options_from_start.loc[pg_index, :]
@@ -726,9 +766,10 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
     g_destination_decided = None
     node_start_g_start = None
     node_end_g_start = None
+    nodes_end_g_start = None
 
     node_start_g_destination = None
-    node_end_g_destination = None
+    nodes_end_g_destination = None
 
     distance_start_to_pipeline = math.inf
     distance_between_pipelines = math.inf
@@ -740,6 +781,7 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
         if g_start is None:
             continue
 
+        # pipeline g_start is reachable from destination as well --> just transport within this pipeline
         if g_start in pipeline_options_to_destination['graph'].unique():
             g_start_decided = g_start
             g_destination_decided = g_start
@@ -752,18 +794,21 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
             g_options_destination = pipeline_options_to_destination[pipeline_options_to_destination['graph'] == g_start]
 
             distance_closest_node_g_to_destination = g_options_destination['distance_to_destination'].min()
-            closest_node_to_destination_g = g_options_destination['distance_to_destination'].idxmin()
+            if g_options_destination['distance_to_destination'].tolist().count(distance_closest_node_g_to_destination) == 1:
+                nodes_end_g_start = [g_options_destination['distance_to_destination'].idxmin()]
+            else:
+                nodes_end_g_start = \
+                    g_options_destination[g_options_destination['distance_to_destination'] == distance_closest_node_g_to_destination].index
 
             node_start_g_start = closest_node_to_start_g
-            node_start_g_destination = closest_node_to_destination_g
 
             distance_start_to_pipeline = distance_closest_node_g_to_start
-            distance_between_pipelines = 0
+            distance_between_pipelines = 0  # no shipping transport necessary
             distance_pipeline_to_destination = distance_closest_node_g_to_destination
 
             break
 
-        else:
+        else:  # g start cannot reach destination --> use road in between and find other pipeline
             g_options_start = pipeline_options_from_start[pipeline_options_from_start['graph'] == g_start]
 
             distance_closest_node_g_to_start = g_options_start['distance_to_start'].min()
@@ -771,14 +816,12 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
 
             for g_destination in pipeline_options_to_destination['graph'].unique():
 
-                if g_destination is None:
+                if g_destination is None:  # no pipeline can reach destination
                     continue
 
                 g_options_destination = pipeline_options_to_destination[pipeline_options_to_destination['graph'] == g_destination]
 
-                distance_closest_node_g_to_destination = g_options_destination['distance_to_destination'].min()
-                closest_node_to_destination_g = g_options_destination['distance_to_destination'].idxmin()
-
+                # find minimal road distance between the two pipelines
                 distance_between_pipelines = calc_distance_list_to_list(g_options_start['latitude'],
                                                                         g_options_start['longitude'],
                                                                         g_options_destination['latitude'],
@@ -791,6 +834,15 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
                 nodes_between_pipelines = distance_between_pipelines.idxmin()
                 distance_between_pipelines = distance_between_pipelines.min()
 
+                # get the node of second pipeline which is the closest to destination
+                distance_closest_node_g_to_destination = g_options_destination['distance_to_destination'].min()
+                if g_options_destination['distance_to_destination'].tolist().count(
+                        distance_closest_node_g_to_destination) == 1:
+                    closest_node_to_destination_g = [g_options_destination['distance_to_destination'].idxmin()]
+                else:
+                    closest_node_to_destination_g = \
+                        g_options_destination[g_options_destination['distance_to_destination'] == distance_closest_node_g_to_destination].index
+
                 if distance_closest_node_g_to_start + distance_between_pipelines + distance_closest_node_g_to_destination < min_road_length:
                     min_road_length = distance_closest_node_g_to_start + distance_between_pipelines + distance_closest_node_g_to_destination
 
@@ -801,7 +853,7 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
                     node_end_g_start = nodes_between_pipelines[0]
 
                     node_start_g_destination = nodes_between_pipelines[1]
-                    node_end_g_destination = closest_node_to_destination_g
+                    nodes_end_g_destination = closest_node_to_destination_g
 
                     distance_start_to_pipeline = distance_closest_node_g_to_start
                     distance_between_pipelines = distance_between_pipelines
@@ -851,21 +903,33 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
     used_nodes.append(node_start_g_start)
     travelled_distances.append(distance_start_to_pipeline * no_road_multiplier)
 
-    # second step: inner pipeline transportation
+    # second step: inner pipeline transportation of first pipeline
     if g_start_decided == g_destination_decided:
         infrastructure_distances \
             = pd.read_hdf(path_data + '/inner_infrastructure_distances/' + node_start_g_start + '.h5', mode='r',
                           title=node_start_g_start)
         infrastructure_distances = infrastructure_distances.transpose()
-        distance = infrastructure_distances.at[node_start_g_start, node_start_g_destination]
 
-        min_value += distance / 1000 * transportation_costs_gas[pipeline_type]
-        costs.append(distance / 1000 * transportation_costs_gas[pipeline_type])
-        travelled_distances.append(distance)
+        # several nodes with same distance to destination exist --> find the one with the shortest transport distance
+        # all options have same distance to destination
+        min_distance = math.inf
+        decided_node = None
+        for node_end_g_start in nodes_end_g_start:
+            distance = infrastructure_distances.at[node_start_g_start, node_end_g_start]
+            if distance < min_distance:
+                decided_node = node_end_g_start
+                min_distance = distance
+
+        min_value += min_distance / 1000 * transportation_costs_gas[pipeline_type]
+        costs.append(min_distance / 1000 * transportation_costs_gas[pipeline_type])
+        travelled_distances.append(min_distance)
         used_transport_means.append(pipeline_type)
-        used_nodes.append(node_start_g_destination)
+        used_nodes.append(decided_node)
 
-    else:
+        node_end_g_start = decided_node
+
+    else:  # we need two pipelines to cover distance
+        # transport first pipeline
         infrastructure_distances \
             = pd.read_hdf(path_data + '/inner_infrastructure_distances/' + node_start_g_start + '.h5', mode='r',
                           title=node_start_g_start)
@@ -924,20 +988,32 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
         travelled_distances.append(distance_between_pipelines * no_road_multiplier)
         used_nodes.append(node_end_g_start)
 
-        # second pipeline
+        # transport second pipeline
         infrastructure_distances \
             = pd.read_hdf(path_data + '/inner_infrastructure_distances/' + node_start_g_destination + '.h5', mode='r',
                           title=node_start_g_destination)
         infrastructure_distances = infrastructure_distances.transpose()
-        distance = infrastructure_distances.at[node_start_g_destination, node_end_g_destination]
 
-        min_value += distance / 1000 * transportation_costs_gas[pipeline_type]
-        costs.append(distance / 1000 * transportation_costs_gas[pipeline_type])
-        travelled_distances.append(distance)
+        # several nodes with same distance to destination exist --> find the one with the shortest transport distance
+        min_distance = math.inf
+        decided_node = None
+        for node_end_g_destination in nodes_end_g_destination:
+            distance = infrastructure_distances.at[node_start_g_destination, node_end_g_destination]
+            if distance < min_distance:
+                decided_node = node_start_g_destination
+                min_distance = distance
+
+        node_start_g_destination = decided_node
+
+        min_value += min_distance / 1000 * transportation_costs_gas[pipeline_type]
+        costs.append(min_distance / 1000 * transportation_costs_gas[pipeline_type])
+        travelled_distances.append(min_distance)
         used_transport_means.append(pipeline_type)
-        used_nodes.append(node_start_g_start)
 
-    # calculate distance between ship and destination
+        used_nodes.append(node_start_g_destination)
+        used_nodes.append(decided_node)
+
+    # consider distance between pipeline end and destination
     if distance_pipeline_to_destination <= in_tolerance_distance:
         distance_pipeline_to_destination = 0
 

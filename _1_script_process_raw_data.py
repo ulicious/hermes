@@ -15,7 +15,7 @@ from data_processing.process_network_data_to_network_objects import \
     process_network_data_to_network_objects_with_additional_connection_points
 from data_processing.process_ports import process_ports
 from data_processing.calculate_inner_distances import get_distances_within_networks, get_distances_of_closest_infrastructure, calculate_searoute_distances
-from data_processing.attach_conversion_costs_and_efficiency_to_locations import attach_conversion_costs_and_efficiency_to_locations
+from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -185,7 +185,7 @@ else:
 # calculate conversion costs at each location
 logging.info('Calculate conversion costs and efficiency')
 conversion_costs_and_efficiency \
-    = attach_conversion_costs_and_efficiency_to_locations(options, config_file, techno_economic_data_conversion)
+    = attach_conversion_costs_and_efficiency_to_infrastructure(options, config_file, techno_economic_data_conversion)
 conversion_costs_and_efficiency.to_csv(path_processed_data + 'conversion_costs_and_efficiency.csv')
 
 if time.time() - time_start < 60:
