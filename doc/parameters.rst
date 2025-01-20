@@ -183,13 +183,13 @@ Several parameters exist to process and plot results. Following structure is nec
                 ...
             plots/  # folder containing finished plots
 
-First of all, results need to be processed.
+First of all, results need to be processed. Example for list with results: ['result_1', 'result_2', ...]
 
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/plotting_processing_parameters.csv
    :width: 100
-   :widths: 20, 10, 50, 20
+   :widths: 20, 20, 40, 20
    :delim: ;
 
 First type of plot: Plots with single aspect of result. Example for list with results: ['result_1', 'result_2', ...]
@@ -198,16 +198,16 @@ First type of plot: Plots with single aspect of result. Example for list with re
    :header-rows: 1
    :file: parameter_explanation/plotting_single_parameters.csv
    :width: 100
-   :widths: 20, 10, 50, 20
+   :widths: 20, 20, 60
    :delim: ;
 
-Second type of plot: comparison plots. For given list of results, single aspect of parameters are plotted in 2x1 or 2x2 plot.
+Second type of plot: comparison plots. For given list of results, single aspect of parameters are plotted in 2x1 or 2x2 plot. Example: [['result_1', 'result_2'], ['result_3', 'results_4'], ['result_1', 'result_2', 'result_3', 'results_4']]
 
 .. csv-table::
    :header-rows: 1
    :file: parameter_explanation/plotting_comparison_parameters.csv
    :width: 100
-   :widths: 20, 10, 50, 20
+   :widths: 20, 20, 40, 20
    :delim: ;
 
 Finally, further parameters can be defined which majorly affected appearance of plots

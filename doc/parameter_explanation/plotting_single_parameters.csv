@@ -1,13 +1,13 @@
-Assumption / Setting;Values;Explanation;Comment
-infrastructure_plot;True / False;plots infrastructure in a single plot;
-production_costs_plot;list with result names;creates h2 production costs plot for results in csv;
-conversion_costs_plot;list with result names;creates conversion costs plot for results in csv;
-transport_costs_plot;list with result names;creates transport costs plot for results in csv;
-total_supply_costs_plot;list with result names;creates total_supply costs plot for results in csv;
-all_costs_plot;list with result names;creates 2x2 plot for results in csv containing h2 production, conversion, transport and total supply costs;
-commodity_plot;list with result names;creates starting commodity plot for results in csv;
-full_plot;list with result names;creates 2x2 plot for results in csv (h2 production costs, total supply costs, commodity, and infrastructure plot);
-commodity_transport_mean_plot;list with result names;creates histogramm showing covered distances per commodity and transport mean;
-routes_plot;list with result names;creates routes plot for results in csv;
-weighted_routes_plot;list with result names;creates most used routes plot for results in csv;
-supply_curve_plots;results is list with result names & countries is list with country names;creates supply curve of country based on results;
+Assumption / Setting;Values;Explanation
+infrastructure_plot;True / False;plots infrastructure in a single plot
+production_costs_plot;list with result names;creates h2 production costs plot for results in csv
+conversion_costs_plot;list with result names;creates conversion costs plot for results in csv
+transport_costs_plot;list with result names;creates transport costs plot for results in csv
+total_supply_costs_plot;list with result names;creates total_supply costs plot for results in csv
+all_costs_plot;list with result names;creates 2x2 plot for results in csv containing h2 production, conversion, transport and total supply costs
+commodity_plot;list with result names;creates starting commodity plot for results in csv
+full_plot;list with result names;creates 2x2 plot for results in csv (h2 production costs, total supply costs, commodity, and infrastructure plot)
+commodity_transport_mean_plot;list with result names;creates histogramm showing covered distances per commodity and transport mean
+routes_plot;list with result names;creates routes plot for results in csv
+weighted_routes_plot;list with result names;creates most used routes plot for results in csv
+supply_curve_plots;results is list with result names & countries is list with country names;creates supply curve of country based on results
