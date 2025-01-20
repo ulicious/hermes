@@ -1,3 +1,4 @@
+Assumption / Setting;Values;Explanation;Comment
 conversion_costs_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
 transport_costs_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
 total_supply_costs_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
