@@ -187,7 +187,7 @@ First of all, results need to be processed.
 
 .. csv-table::
    :header-rows: 1
-   :file: parameter_explanation/plotting_processing_parameter.csv
+   :file: parameter_explanation/plotting_processing_parameters.csv
    :width: 100
    :widths: 20, 10, 50, 20
    :delim: ;
@@ -196,7 +196,7 @@ First type of plot: Plots with single aspect of result. Example for list with re
 
 .. csv-table::
    :header-rows: 1
-   :file: parameter_explanation/plotting_single_parameter.csv
+   :file: parameter_explanation/plotting_single_parameters.csv
    :width: 100
    :widths: 20, 10, 50, 20
    :delim: ;
@@ -205,7 +205,7 @@ Second type of plot: comparison plots. For given list of results, single aspect 
 
 .. csv-table::
    :header-rows: 1
-   :file: parameter_explanation/plotting_comparison_parameter.csv
+   :file: parameter_explanation/plotting_comparison_parameters.csv
    :width: 100
    :widths: 20, 10, 50, 20
    :delim: ;
