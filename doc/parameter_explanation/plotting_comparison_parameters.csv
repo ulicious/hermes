@@ -1,0 +1,9 @@
+conversion_costs_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
+transport_costs_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
+total_supply_costs_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
+commodity_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
+routes_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
+weighted_routes_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
+compare_costs_and_quantities_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
+supply_curve_comparison_plots; results is nested list & countries is list with country names; create supply curve plot for each list in nested list and fills it with supply curve for each country for each result in list; only two or four results are supported per list in nested list
+solving_time_plot; list with result names; creates plot with boxplot for each result to show solving time in minutes

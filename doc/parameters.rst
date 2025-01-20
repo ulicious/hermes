@@ -161,3 +161,80 @@ Transport assumptions and setting decide on availability of different transport 
 
 All costs in EURO / MWh / 1000 km
 
+.. _parameter_explanation_plotting:
+
+Plotting Parameter
+###################
+
+Several parameters exist to process and plot results. Following structure is necessary to process and plot results:
+
+.. code-block:: none
+
+    PROJECT FOLDER/
+        results/
+            location_results/  # folder where calculated results of algorithm are stored
+            unprocessed_results/  # folder with finished results (e.g., rename location_results/ and move here)
+                result_1/  # folder with all location results of run result_1
+                result_2/  # folder with all location results of run result_2
+                ...
+            processed_results/  # folder containing processed results
+                result_1.csv  # will be created
+                result_2.csv  # will be created
+                ...
+            plots/  # folder containing finished plots
+
+First of all, results need to be processed.
+
+.. csv-table::
+   :header-rows: 1
+   :file: parameter_explanation/plotting_processing_parameter.csv
+   :width: 100
+   :widths: 20, 10, 50, 20
+   :delim: ;
+
+First type of plot: Plots with single aspect of result. Example for list with results: ['result_1', 'result_2', ...]
+
+.. csv-table::
+   :header-rows: 1
+   :file: parameter_explanation/plotting_single_parameter.csv
+   :width: 100
+   :widths: 20, 10, 50, 20
+   :delim: ;
+
+Second type of plot: comparison plots. For given list of results, single aspect of parameters are plotted in 2x1 or 2x2 plot.
+
+.. csv-table::
+   :header-rows: 1
+   :file: parameter_explanation/plotting_comparison_parameter.csv
+   :width: 100
+   :widths: 20, 10, 50, 20
+   :delim: ;
+
+Finally, further parameters can be defined which majorly affected appearance of plots
+
+.. code-block:: none
+
+    colormap: ... # defines used colormaps in cost plots
+
+    limit_scale: True / False  # colors outliers differently in cost plots
+
+    commodity_colors:  # adjust commodity colors
+        commodity_1: color_1
+        commodity_2: color_2
+        ...
+
+    nice_name_dictionary:  # to define nice names of results. If result not in dictionary, then nice name is result name
+        result_1: nice_name_result_1
+        result_2: nice_name_result_2
+        ...
+
+    transport_mean_styles:  # set line styles of transport routes based on transport means
+        ...
+
+    line_widths: # sets line widths of transport routes based on transport means
+        ...
+
+    infrastructure_colors:  # defines colors in infrastructure plot
+        ...
+
+

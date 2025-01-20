@@ -7,8 +7,8 @@ max_length_road;integer / math.inf;In meters. Indicates which maximal distance c
 no_road_multiplier;float;Indicates by which factor new pipelines and road transport is multiplied to consider rerouting due to obstacles;
 build_new_infrastructure;True / False;If True, new pipelines can be built;
 H2_ready_infrastructure;True / False;If True, existing natural gas pipelines can be used for hydrogen transport;
-low_temp_heat_available_at_destination;True / False;Indicates if low-temperature heat is available at destination;
-mid_temp_heat_available_at_destination;True / False;Indicates if medium-temperature heat is available at destination;
-high_temp_heat_available_at_destination;True / False;Indicates if high-temperature heat is available at destination;
+low_temp_heat_available_at_destination;True / False;Indicates if low-temperature heat is available at destination;"Affects conversion costs; value defined in cost_type"
+mid_temp_heat_available_at_destination;True / False;Indicates if medium-temperature heat is available at destination;"Affects conversion costs; value defined in cost_type"
+high_temp_heat_available_at_destination;True / False;Indicates if high-temperature heat is available at destination;"Affects conversion costs; value defined in cost_type"
 print_runtime_information;True / False;If True, regular updates on branches is given while code is running;
 print_benchmark_info;True / False;If True, information on initial benchmark for each location is given;

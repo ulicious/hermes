@@ -1,5 +1,7 @@
 Assumption / Setting;Values;Explanation;Comment
+destination_type; 'location' or 'country'; defines destination type (single point location or country)
 destination_location;[longitude, latitude];Coordinates of destination;
+destination_polygon; {country_name: [state_name_1, state_name_2, ...]}; dictionary with country names as keys and list with country states as values; keep state name list empty if complete country
 destination_country;string;Country of destination;
 destination_continent;string;Continent of destination;
 origin_continents;list;If not empty, random locations will only be created on indicated continents. Empty if all continents;
@@ -11,3 +13,7 @@ minimal_latitude;latitude;Sets minimal latitude of random locations;will be over
 maximal_latitude;latitude;Sets maximal latitude of random locations;will be overwritten if minimal_example is applied
 minimal_longitude;longitude;Sets minimal longitude of random locations;will be overwritten if minimal_example is applied
 maximal_longitude;longitude;Sets maximal longitude of random locations;will be overwritten if minimal_example is applied
+location_creation_type; 'uniform' or 'random'; distributed start locations randomly or in uniformly
+use_voronoi_cells; True / False; based on locations, onshore area is divided into voronoi cells instead of taking value from era 5 cell
+weight_hydrogen_costs_by_quantity; True / False; if True then the value of the voronoi cell is based on the by quantity weighted costs per era 5 cell
+each_country_at_least_one_location; True / False; if True: makes sure that each country is represented at least by one start location
