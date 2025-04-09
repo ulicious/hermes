@@ -28,7 +28,7 @@ html_theme_options = {
     'body_max_width': "none",
     'page_width': '80%',
     'sidebar_width': '20%',
-    'logo": "images/logo_final.png',
+    'logo": "images/logo_final.png"',
     "logo_name": True
 }
 
