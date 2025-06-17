@@ -9,7 +9,7 @@ to other nodes is not possible anymore
 
 # Documentation
 
-A full documentary is provided here: https://hermes-h2.readthedocs.io/en/main/index.html. There you can find more information on the installation process and the operation of the code.
+A full documentary is provided here: https://hermes-h2.readthedocs.io/en/main/index.html. There you can find more information on the installation process, which should only take a few minutes, and the operation of the code.
 
 # Data availability
 
