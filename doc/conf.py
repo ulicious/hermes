@@ -24,10 +24,12 @@ exclude_patterns = []
 
 html_theme = 'alabaster'
 html_static_path = ['_static']
+html_logo = "images/logo_final.png"
 html_theme_options = {
     'body_max_width': "none",
     'page_width': '80%',
-    'sidebar_width': '20%'
+    'sidebar_width': '20%',
+    "repository_url": "https://github.com/ulicious/hermes",
 }
 
 html_css_files = [
