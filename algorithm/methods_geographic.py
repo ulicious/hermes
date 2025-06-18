@@ -1,5 +1,6 @@
 import math
 
+import matplotlib.pyplot as plt
 import numpy as np
 import geopandas as gpd
 import cartopy.io.shapereader as shpreader
@@ -153,15 +154,43 @@ def check_if_reachable_on_land(target_location, list_longitude, list_latitude, c
     @return: returns tuple with the boolean if reachable by road (within the same polygon) and the index of the polygon
     """
 
-    gdf_start = gpd.GeoDataFrame(geometry=[target_location])
-
+    # Get polygon(s) of target or destination location
     points = []
     for i in list_latitude.index:
         points.append(Point([list_longitude.loc[i], list_latitude.loc[i]]))
-
     gdf_target = gpd.GeoDataFrame(geometry=points)
 
-    polygons = sjoin(gdf_start, coastline, predicate='within', how='right').dropna(subset=['index_left'])
+    gdf_start = gpd.GeoDataFrame(geometry=[target_location])
+    if isinstance(target_location, Point):
+
+        points = []
+        for i in list_latitude.index:
+            points.append(Point([list_longitude.loc[i], list_latitude.loc[i]]))
+
+        gdf_target = gpd.GeoDataFrame(geometry=points)
+
+        polygons = sjoin(gdf_start, coastline, predicate='within', how='right').dropna(subset=['index_left'])
+        polygons_index = polygons.index.tolist()
+    else:
+        polygons_index = []
+        for i in coastline.index:
+            if coastline.loc[i, 'geometry'].intersects(target_location):
+                polygons_index.append(i)
+
+        polygons = coastline.loc[polygons_index, :]
+
+    if False:
+
+        fig, ax = plt.subplots()
+
+        coastline.plot(ax=ax, ec='black', fc='none')
+
+        gdf_start.plot(ax=ax, color='blue')
+
+        points_gdf = gpd.GeoDataFrame(geometry=points)
+        points_gdf.plot(ax=ax, color='red')
+
+        plt.show()
 
     # alternative: check which polygon is closest to start and which one is closest to end. If both the same, then true
     smallest_distance_to_start = math.inf
@@ -171,26 +200,41 @@ def check_if_reachable_on_land(target_location, list_longitude, list_latitude, c
             smallest_distance_to_start = p.distance(target_location)
             start_polygon = p
 
-    if len(polygons.index) > 0:
+    # check which infrastructure (gdf_target) is on same landmass polygon
+    gdf_target['reachable'] = False
+    # if len(polygons.index) > 0:
+    #
+    #     for j in polygons.index:
+    #
+    #         sub_gdf_target = gdf_target[~gdf_target['reachable']]
+    #
+    #         index_poly_start = j
+    index_poly_target = sjoin(gdf_target, coastline, predicate='within', how='right')
+    index_poly_target.dropna(axis='index', subset='index_left', inplace=True)
+    index_poly_target['index_left'] = index_poly_target['index_left'].astype(int)
+    index_poly_target = index_poly_target.reset_index().set_index('index_left')
 
-        index_poly_start = polygons.index[0]
-        index_poly_target = sjoin(gdf_target, coastline, predicate='within', how='right')
+    for poly in index_poly_target['index'].unique():
 
-        result = []
-        for i in gdf_target.index:
-            if i in index_poly_target['index_left'].values.tolist():
-                poly = index_poly_target[index_poly_target['index_left'] == i].index[0]
+        if poly in polygons_index:
+            affected_locations = index_poly_target[index_poly_target['index'] == poly].index
+            gdf_target.loc[affected_locations, 'reachable'] = True
 
-                if index_poly_start == poly:
-                    result.append(True)
-                else:
-                    result.append(False)
-            else:
-                result.append(False)
-
-        gdf_target['reachable'] = result
-    else:
-        gdf_target['reachable'] = False
+            # result = []
+            # for i in sub_gdf_target.index:
+            #     if i in index_poly_target['index_left'].values.tolist():
+            #         poly = index_poly_target[index_poly_target['index_left'] == i].index[0]
+            #
+            #         if index_poly_start == poly:
+            #             result.append(True)
+            #         else:
+            #             result.append(False)
+            #     else:
+            #         result.append(False)
+            #
+            # gdf_target.loc[sub_gdf_target.index, 'reachable'] = result
+    # else:
+    #     gdf_target['reachable'] = False
 
     # check all not reachable locations again to make sure
     not_reachable = gdf_target[~gdf_target['reachable']]
@@ -198,7 +242,7 @@ def check_if_reachable_on_land(target_location, list_longitude, list_latitude, c
     for i in not_reachable.index:
         target_point = not_reachable.at[i, 'geometry']
 
-        if start_polygon.distance(target_point) < 0.00001:
+        if target_location.distance(target_point) < 0.00001:
             result.append(True)
         else:
             result.append(False)

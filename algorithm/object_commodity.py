@@ -74,8 +74,14 @@ class Commodity:
     def get_transportation_options_specific_mean_of_transport(self, mean_of_transport):
         return self.transportation_options[mean_of_transport]
 
+    def set_starting_efficiency(self, starting_efficiency):
+        self.starting_efficiency = starting_efficiency
+
+    def get_starting_efficiency(self):
+        return self.starting_efficiency
+
     def __init__(self, name, production_costs, conversion_options, conversion_costs, conversion_efficiencies,
-                 transportation_options, transportation_costs):
+                 transportation_options, transportation_costs, starting_efficiency=1):
 
         """
         Creates instance of commodity object
@@ -98,6 +104,8 @@ class Commodity:
 
         self.transportation_options = transportation_options
         self.transportation_costs = transportation_costs
+
+        self.starting_efficiency = starting_efficiency
 
 
 def create_commodity_objects(location_data,
@@ -191,9 +199,26 @@ def create_commodity_objects(location_data,
         conversion_efficiencies = locations_with_conversion[conversion_cost_efficiency_columns]
         conversion_efficiencies.columns = order_commodities
 
+        if source_commodity == 'Hydrogen_Gas':
+            starting_efficiency = 1
+        else:
+            if 'Hydrogen_Gas_' + source_commodity + '_conversion_efficiency' not in locations_with_conversion.columns:
+                # direct conversion from hydrogen gas to target commodity to possible
+                efficiency_columns = [c for c in locations_with_conversion.columns
+                                      if source_commodity + '_conversion_efficiency' in c]
+                input_commodity = efficiency_columns[0].split('_' + source_commodity)[0]
+
+                h2_to_input = locations_with_conversion.loc['Start', 'Hydrogen_Gas_' + input_commodity + '_conversion_efficiency']
+                input_to_target = locations_with_conversion.loc['Start', input_commodity + '_' + source_commodity + '_conversion_efficiency']
+
+                starting_efficiency = h2_to_input * input_to_target
+
+            else:
+                starting_efficiency = locations_with_conversion.loc['Start', 'Hydrogen_Gas_' + source_commodity + '_conversion_efficiency']
+
         commodity = Commodity(source_commodity, location_data.loc['Start', source_commodity], conversion_options,
                               conversion_costs, conversion_efficiencies,
-                              transportation_options, transportation_costs)
+                              transportation_options, transportation_costs, starting_efficiency)
 
         commodities.append(commodity)
 

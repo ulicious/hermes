@@ -1,3 +1,28 @@
+# plotting settings
+process_results: ['DE_all_ready', 'DE_h2_ready', 'DE_all_not_ready', 'DE_h2_not_ready']  # folder(s) in results/; creates csv file containing all results of respective folders
+
+# plot infrastructure
+infrastructure_plot: True  # plots infrastructure
+
+# single result plots; ['results_1', 'results_2']
+production_costs_plot: []  # name of csv file(s); creates h2 production costs plot for results in csv
+conversion_costs_plot: []  # name of csv file(s); creates conversion costs plot for results in csv
+transport_costs_plot: []  # name of csv file(s); creates transport costs plot for results in csv
+total_supply_costs_plot: []  # name of csv file(s); creates total_supply costs plot for results in csv
+all_costs_plot: []  # name of csv file(s); creates plot for results in csv containing h2 production, conversion, transport and total supply costs
+commodity_plot: []  # name of csv file(s); creates starting commodity plot for results in csv
+routes_plot: []  # name of csv file(s); creates routes plot for results in csv
+full_plot: []  # name of csv file(s); creates 2x2 plot for results in csv (h2 production costs, total supply costs, commodity, and infrastructure plot)
+
+# comparison plots --> 1x2 or 2x2 plots. Nested lists with each list containing up to 4 results (names of csv files); e.g. [['results_1', 'results_2'], ['results_1', 'results_2', 'results_3', 'results_4']]
+production_costs_comparison_plot: [[]]  # creates h2 production costs plot for results in csv
+conversion_costs_comparison_plot: [[]]  # creates conversion costs plot for results in csv
+transport_costs_comparison_plot: [[]]  # creates transport costs plot for results in csv
+total_supply_costs_comparison_plot: [[]]  # creates total_supply costs plot for results in csv
+commodity_comparison_plot: [[]]  # creates starting commodity plot for results in csv
+routes_comparison_plot: [[]]  # creates routes plot for results in csv
+
+# colors, widths, nice names etc.
 commodity_colors:
    Hydrogen_Gas: 'lawngreen'
    Hydrogen_Liquid: 'forestgreen'

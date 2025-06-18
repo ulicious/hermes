@@ -73,13 +73,37 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
     # now check which infrastructure can reach start / destination based on distances
     max_length = max(max_length_road, max_length_new_segment) / no_road_multiplier
 
+    # get locations to check for destination
     complete_infrastructure.sort_values(['distance_to_destination'], inplace=True)
-    distance_to_destination = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= max_length].index.tolist()
+
+    # always add first 10 harbors independent of distance
+    first_ten_harbours = []
+    for n, i in enumerate(complete_infrastructure.index):
+        if 'H' in i:
+            first_ten_harbours.append(i)
+
+            if len(first_ten_harbours) == 10:
+                break
+
+    # get all locations in destination (if polygon)
+    distance_to_destination = complete_infrastructure[complete_infrastructure['distance_to_destination'] == 0].index.tolist()
+    if len(distance_to_destination) < 1000:
+        # if less than 1000 locations within 0 distance to destination, add more locations
+        additional_locations = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= max_length].index.tolist()
+        distance_to_destination = list(set(distance_to_destination + additional_locations))
+        distance_to_destination = distance_to_destination[:1000]
 
     if 'Destination' in distance_to_destination:
         distance_to_destination.remove('Destination')
 
-    # we want at least 10 harbours within these options where we calculate the reachability
+    if configuration['destination_type'] == 'location':
+        distance_to_destination = ['Destination'] + distance_to_destination + first_ten_harbours
+    else:
+        distance_to_destination += first_ten_harbours
+
+    distance_to_destination = list(set(distance_to_destination))
+
+    # get locations for start
     complete_infrastructure.sort_values(['distance_to_start'], inplace=True)
 
     first_ten_harbours = []
@@ -90,16 +114,9 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
             if len(first_ten_harbours) == 10:
                 break
 
-    if configuration['destination_type'] == 'location':
-        first_index = ['Destination'] + first_ten_harbours
-    else:
-        infrastructure_in_destination = data['destination']['infrastructure']
-        first_index = list(set(infrastructure_in_destination.index.tolist() + first_ten_harbours))
-
-    new_index = first_index + [i for i in complete_infrastructure.index if i not in first_index]
-    complete_infrastructure = complete_infrastructure.loc[new_index, :]
-
-    distance_to_start = complete_infrastructure[complete_infrastructure['distance_to_start'] <= max_length].index
+    distance_to_start = complete_infrastructure[complete_infrastructure['distance_to_start'] <= max_length].index[0:1000].tolist()
+    distance_to_start += first_ten_harbours
+    distance_to_start = list(set(distance_to_start))
 
     complete_infrastructure['reachable_from_start'] = False
     complete_infrastructure['reachable_from_destination'] = False
@@ -117,19 +134,19 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
         complete_infrastructure['latitude_on_coastline'] = complete_infrastructure['latitude_on_coastline'].fillna(complete_infrastructure['latitude'])
 
         reachable_from_start = check_if_reachable_on_land(starting_location,
-                                                          complete_infrastructure.loc[distance_to_start[:1000], 'longitude_on_coastline'],
-                                                          complete_infrastructure.loc[distance_to_start[:1000], 'latitude_on_coastline'],
+                                                          complete_infrastructure.loc[distance_to_start, 'longitude_on_coastline'],
+                                                          complete_infrastructure.loc[distance_to_start, 'latitude_on_coastline'],
                                                           coastlines,
                                                           get_only_availability=True)
 
         reachable_from_destination = check_if_reachable_on_land(destination_location,
-                                                                complete_infrastructure.loc[distance_to_destination[:1000], 'longitude_on_coastline'],
-                                                                complete_infrastructure.loc[distance_to_destination[:1000], 'latitude_on_coastline'],
+                                                                complete_infrastructure.loc[distance_to_destination, 'longitude_on_coastline'],
+                                                                complete_infrastructure.loc[distance_to_destination, 'latitude_on_coastline'],
                                                                 coastlines,
                                                                 get_only_availability=True)
 
-        complete_infrastructure.loc[distance_to_start[:1000], 'reachable_from_start'] = reachable_from_start
-        complete_infrastructure.loc[distance_to_destination[:1000], 'reachable_from_destination'] = reachable_from_destination
+        complete_infrastructure.loc[distance_to_start, 'reachable_from_start'] = reachable_from_start
+        complete_infrastructure.loc[distance_to_destination, 'reachable_from_destination'] = reachable_from_destination
 
     return complete_infrastructure
 
@@ -428,6 +445,9 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
     options_shipping = complete_infrastructure[complete_infrastructure['reachable_from_destination']].copy()
     port_index = [i for i in options_shipping.index if ('H' in i) & (i not in no_conversion_nodes)]
     options_shipping = options_shipping.loc[port_index, :]
+
+    if options_shipping.empty:
+        return math.inf, None, None, None, None, None
 
     viable_start_nodes = pipeline_options[pipeline_options['reachable_from_start']].index
 
@@ -776,7 +796,7 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
     distance_pipeline_to_destination = math.inf
 
     min_road_length = math.inf
-    for g_start in pipeline_options_from_start['graph'].unique():
+    for g_start in pipeline_options_from_start['graph'].unique():  # todo: was wenn mehrere existieren?
 
         if g_start is None:
             continue
@@ -806,7 +826,7 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
             distance_between_pipelines = 0  # no shipping transport necessary
             distance_pipeline_to_destination = distance_closest_node_g_to_destination
 
-            break
+            break  # todo: why break? Seems like no comparison made
 
         else:  # g start cannot reach destination --> use road in between and find other pipeline
             g_options_start = pipeline_options_from_start[pipeline_options_from_start['graph'] == g_start]
@@ -905,6 +925,28 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
 
     # second step: inner pipeline transportation of first pipeline
     if g_start_decided == g_destination_decided:
+
+        # from shapely.geometry import Point
+        # import geopandas as gpd
+        # import matplotlib.pyplot as plt
+        #
+        # current_nodes = [Point([complete_infrastructure.at[node_start_g_start, 'longitude'], complete_infrastructure.at[node_start_g_start, 'latitude']])]
+        # current_nodes = gpd.GeoDataFrame(geometry=current_nodes)
+        #
+        # closest_node = [
+        #     Point([complete_infrastructure.loc[i, 'longitude'], complete_infrastructure.loc[i, 'latitude']]) for i in nodes_end_g_start]
+        # closest_node = gpd.GeoDataFrame(geometry=closest_node)
+        #
+        # polygon = data['destination']['location']
+        # polygon = gpd.GeoDataFrame(geometry=[polygon])
+        #
+        # fig, ax = plt.subplots()
+        # polygon.plot(ax=ax, fc='none', ec='black')
+        # current_nodes.plot(ax=ax)
+        # closest_node.plot(ax=ax, color='red')
+        #
+        # plt.show()
+
         infrastructure_distances \
             = pd.read_hdf(path_data + '/inner_infrastructure_distances/' + node_start_g_start + '.h5', mode='r',
                           title=node_start_g_start)

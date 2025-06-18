@@ -410,9 +410,6 @@ def attach_voronoi_cells_to_locations(locations, config_file):
     for poly in failed_polygons:
         locations = attach_unprocessable_polygons_to_connected_voronoi_cell(poly, locations)
 
-    nan_values = locations[locations['geometry'].isnull()]
-    print(nan_values)
-
     colors = create_random_colors(len(locations.index))
 
     world_gdf = gpd.GeoDataFrame(geometry=locations['geometry'])
@@ -421,5 +418,8 @@ def attach_voronoi_cells_to_locations(locations, config_file):
     world_gdf.plot(ax=ax, color=colors)
     locations_gdf.plot(ax=ax, color=colors, edgecolor='white')
     plt.show()
+
+    nan_values = locations[locations['geometry'].isnull()].index
+    locations.drop(nan_values, inplace=True)
 
     return locations

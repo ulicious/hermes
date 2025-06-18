@@ -4,13 +4,18 @@ import os
 import yaml
 import math
 import ast
+import shapely
 import numpy as np
 import matplotlib as mpl
 import matplotlib.lines as mlines
+import geopandas as gpd
+import cartopy.io.shapereader as shpreader
+
+from shapely.geometry import Point
 
 from plotting.helpers_plotting import load_data, get_complete_infrastructure
 from plotting.get_figures import get_routes_figure, get_cost_figure, get_production_costs_figure, get_infrastructure_figure, \
-    get_energy_carrier_figure
+    get_energy_carrier_figure, get_cost_and_quantity_figure, get_supply_curves
 
 # load configuration file
 path_config = os.getcwd() + '/algorithm_configuration.yaml'
@@ -21,10 +26,47 @@ path_config = os.getcwd() + '/plotting_configuration.yaml'
 yaml_file = open(path_config)
 config_file_plotting = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-path_production_costs = config_file['project_folder_path'] + 'start_destination_combinations.xlsx'
-production_costs = pd.read_excel(path_production_costs, index_col=0)
+path_production_costs = config_file['project_folder_path'] + 'start_destination_combinations.csv'
+production_costs = pd.read_csv(path_production_costs, index_col=0)
+
+# # convert polygon strings to shapely objects
+if config_file['use_voronoi_cells']:
+    production_costs['geometry'] \
+        = production_costs['geometry'].apply(shapely.wkt.loads)
 
 path_processed_data = config_file['project_folder_path'] + 'processed_data/'
+
+use_voronoi = config_file['use_voronoi_cells']
+# create shapely object of destination
+if config_file['destination_type'] == 'location':
+    destination_location = Point(config_file['destination_location'])
+else:
+    destination_continent = config_file['destination_continent']
+
+    country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
+    world = gpd.read_file(country_shapefile)
+
+    state_shapefile = shpreader.natural_earth(resolution='10m', category='cultural',
+                                              name='admin_1_states_provinces')
+    states = gpd.read_file(state_shapefile)
+
+    country_states = config_file['destination_polygon']
+
+    first = True
+    for c in [*country_states.keys()]:
+        if country_states[c]:
+            for s in country_states[c]:
+                if first:
+                    destination_location = states[states['name'] == s]['geometry'].values[0]
+                    first = False
+                else:
+                    destination_location.union(states[states['name'] == s]['geometry'].values[0])
+        else:
+            if first:
+                destination_location = world[world['NAME_EN'] == c]['geometry'].values[0]
+                first = False
+            else:
+                destination_location.union(world[world['NAME_EN'] == c]['geometry'].values[0])
 
 infrastructure_data, destination = load_data(path_processed_data, config_file)
 complete_infrastructure = get_complete_infrastructure(infrastructure_data, destination)
@@ -124,6 +166,7 @@ for f in filenames:
         data[number]['longitude'] = float(solution.at['starting_longitude'])
         data[number]['start_commodity'] = solution.at['all_previous_commodities'][0]
         data[number]['costs'] = float(solution.at['current_total_costs'])
+        data[number]['efficiency'] = float(solution.at['total_efficiency'])
 
         if float(solution.at['current_total_costs']) < float(min_costs['total_costs']):
             min_costs['total_costs'] = float(solution.at['current_total_costs'])
@@ -153,6 +196,10 @@ for f in filenames:
 
         production_costs_f = production_costs.at[int(number), 'Hydrogen_Gas']
 
+        if (float(production_costs_f) + float(conversion_costs_f) + float(transportation_costs_f)) != float(solution.at['current_total_costs']):
+            # conversion costs at start are not considered
+            conversion_costs_f = float(solution.at['current_total_costs']) - float(production_costs_f) - float(transportation_costs_f)
+
         data[number]['transportation_costs'] = transportation_costs_f
         data[number]['conversion_costs'] = conversion_costs_f
         data[number]['production_costs'] = production_costs_f
@@ -170,7 +217,7 @@ plt.rcParams.update({'font.size': 9,
 
 data = pd.DataFrame.from_dict(data,
                               columns=['costs', 'start_commodity', 'second_commodity', 'latitude',
-                                       'longitude', 'transportation_costs', 'conversion_costs', 'production_costs'],
+                                       'longitude', 'efficiency', 'transportation_costs', 'conversion_costs', 'production_costs'],
                               orient='index')
 
 min_costs = min(data['costs'].min(), data['production_costs'].min())
@@ -185,15 +232,19 @@ fig, ax = plt.subplots(2, 2, figsize=(15.69 * centimeter_to_inch, height * centi
 
 plot_routes = False
 
+# get_supply_curves(data, production_costs)
+
 print('production costs')
 production_costs_axis = ax[(0, 0)]
 production_costs_axis = get_production_costs_figure(production_costs_axis, data, norm, cmap_chosen, boundaries,
-                                                    s=10)
+                                                    destination_location, use_voronoi=use_voronoi,
+                                                    production_costs=production_costs, s=10)
 
 print('total costs')
 total_costs_axis = ax[(0, 1)]
-total_costs_axis = get_cost_figure(total_costs_axis, data, norm, cmap_chosen, boundaries,
-                                   cost_type='total_costs', s=10)
+total_costs_axis = get_cost_figure(total_costs_axis, data, norm, cmap_chosen, boundaries, destination_location,
+                                   cost_type='total_costs', use_voronoi=use_voronoi,
+                                   production_costs=production_costs,  s=10)
 
 color_dictionary = config_file_plotting['commodity_colors']
 nice_name_dictionary = config_file_plotting['nice_name_dictionary']
@@ -206,33 +257,38 @@ for commodity in line_widths.keys():
         line_widths_new[(commodity, transport_mean)] = line_widths[commodity][transport_mean]
 line_widths = line_widths_new
 
+# test_ax = get_cost_and_quantity_figure(None, data, norm, cmap_chosen, boundaries, destination_location,
+#                                        production_costs, cost_type='total_costs', s=10)
+
 if plot_routes:
     print('route')
     routes_axis = ax[(1, 0)]
-    routes_axis, handels_list_transport_means, handels_list_commodities\
+    routes_axis, handles_list_transport_means, handles_list_commodities\
         = get_routes_figure(routes_axis, routes, starting_locations, transport_mean_line_styles, line_widths,
                             color_dictionary, nice_name_dictionary, infrastructure_data, complete_infrastructure,
-                            boundaries)
+                            boundaries, destination_location, use_voronoi=use_voronoi)
 
-else:
+else:  # todo: man könnte jedem polygon einen z wert zuordnen und dann daraus ein 3d graph machen
     print('commodities')
     commodity_axis = ax[(1, 0)]
     commodity_axis, commodity_handles \
-        = get_energy_carrier_figure(commodity_axis, data, boundaries, color_dictionary, nice_name_dictionary, s=10)
+        = get_energy_carrier_figure(commodity_axis, data, boundaries, color_dictionary, nice_name_dictionary,
+                                    destination_location, s=10, use_voronoi=use_voronoi,
+                                    production_costs=production_costs)
 
     if True:
         # if we choose commodities, we still want the routes graph but don't plot in common graph
         fig_routes, routes_axis = plt.subplots()
-        routes_axis, handels_list_transport_means, handels_list_commodities \
+        routes_axis, handles_list_transport_means, handles_list_commodities \
             = get_routes_figure(routes_axis, routes, starting_locations, transport_mean_line_styles, line_widths,
                                 color_dictionary, nice_name_dictionary, infrastructure_data, complete_infrastructure,
-                                boundaries)
+                                boundaries, destination_location, use_voronoi=use_voronoi)
 
-        fig_routes.legend(handles=handels_list_transport_means, loc='upper center', ncols=3,
+        fig_routes.legend(handles=handles_list_transport_means, loc='upper center', ncols=3,
                           bbox_to_anchor=(0.5, 0.22), title='Transport Mean',
                           labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1)
 
-        fig_routes.legend(handles=handels_list_commodities, loc='upper center', ncol=2,
+        fig_routes.legend(handles=handles_list_commodities, loc='upper center', ncol=2,
                           bbox_to_anchor=(0.5, 0.12), title='Commodity',
                           labelspacing=0.1, handletextpad=0.1, columnspacing=0.25)
 
@@ -251,11 +307,11 @@ cbar.set_label('€ / MWh', rotation=0, labelpad=5)
 
 if plot_routes:
     # route legend
-    fig.legend(handles=handels_list_transport_means, loc='upper center', ncols=3,
+    fig.legend(handles=handles_list_transport_means, loc='upper center', ncols=3,
                bbox_to_anchor=(0.5, 0.19), title='Transport Mean',
                labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1)
 
-    fig.legend(handles=handels_list_commodities, loc='upper center', ncol=2,
+    fig.legend(handles=handles_list_commodities, loc='upper center', ncol=2,
                bbox_to_anchor=(0.5, 0.12), title='Commodity',
                labelspacing=0.1, handletextpad=0.1, columnspacing=0.25)
 

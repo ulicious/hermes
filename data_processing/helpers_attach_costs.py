@@ -1,21 +1,13 @@
-import random
-import math
-
 import matplotlib.pyplot as plt
 import shapely
 
 import geopandas as gpd
 import pandas as pd
 
-from shapely.geometry import Polygon, Point
-
 import tqdm
 import math
 
-import numpy as np
 import cartopy.io.shapereader as shpreader
-
-from shapely.geometry import LineString, Point
 
 from algorithm.methods_geographic import calc_distance_list_to_single
 from data_processing.helpers_geometry import round_to_quarter
@@ -133,7 +125,7 @@ def attach_feedstock_costs_and_interest_rate(i, locations, techno_economic_data_
 
             else:
 
-                if (key != 'Hydrogen_Gas') | (not config_file['create_voronoi_cells']):
+                if (key != 'Hydrogen_Gas') | (not config_file['use_voronoi_cells']):
                     # apply small grid search to get the closest location
                     sub_locations = levelized_costs_location[
                         (levelized_costs_location['latitude'] <= adjusted_latitude + 0.5) &
@@ -158,7 +150,7 @@ def attach_feedstock_costs_and_interest_rate(i, locations, techno_economic_data_
 
         else:  # search costs for location
 
-            if (key != 'Hydrogen_Gas') | (not config_file['create_voronoi_cells']):
+            if (key != 'Hydrogen_Gas') | (not config_file['use_voronoi_cells']):
                 # apply small grid search to get the closest location
                 sub_locations = levelized_costs_location[
                     (levelized_costs_location['latitude'] <= adjusted_latitude + 0.5) &
@@ -257,21 +249,40 @@ def attach_weighted_costs(i, locations, levelized_costs_location, spatial_index,
 
     total_potential = 0
     total_costs = 0
+    sum_costs = 0
+    sum_area = 0
     for n, r in enumerate(result):
+        index = possible_matches[n]
         # Calculate the intersection
         intersection = poly.intersection(r)
+
+        if intersection.area == 0:  # todo: print why 0?
+            continue
 
         # Calculate the overlap percentage
         overlap_percentage = (intersection.area / r.area)
 
         # weighted by the potential
-        quantity = random.random() * 100 * overlap_percentage  # hydrogen_costs_and_quantities.at[n, 'Hydrogen_Gas_Quantity']
-        total_potential += quantity
-        total_costs += quantity * levelized_costs_location.at[n, 'Hydrogen_Gas']
+        quantity = levelized_costs_location.at[index, 'Hydrogen_Gas_Quantity'] * overlap_percentage
+        costs = levelized_costs_location.at[index, 'Hydrogen_Gas']
 
-    if total_potential == 0:
-        locations.at[i, 'Hydrogen_Gas'] = math.inf
-        locations.at[i, 'Hydrogen_Gas_Quantity'] = 0
+        sum_costs += costs * intersection.area
+        sum_area += intersection.area
+
+        if quantity == 0:
+            continue
+
+        total_potential += quantity
+        total_costs += quantity * costs
+
+    if total_potential == 0:  # if no potential exists, use area to weight costs
+
+        if sum_area != 0:
+            locations.at[i, 'Hydrogen_Gas'] = sum_costs / sum_area
+            locations.at[i, 'Hydrogen_Gas_Quantity'] = 0
+        else:
+            locations.at[i, 'Hydrogen_Gas'] = math.inf
+            locations.at[i, 'Hydrogen_Gas_Quantity'] = 0
 
     else:
         average_costs = total_costs / total_potential
@@ -450,7 +461,9 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
                 # other routes might be possible as well so use the cheapest route
                 if commodity_2 in locations.columns:
                     new_costs = pd.concat([new_costs, locations[commodity_2]], axis=1)
+                    new_costs.columns = ['new', 'old']
                     locations[commodity_2] = new_costs.min(axis=1)
+
                 else:
                     locations[commodity_2] = (locations[commodity] + conversion_costs_2) / conversion_efficiency_2
 

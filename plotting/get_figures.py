@@ -1,9 +1,11 @@
+import random
+
 import geopandas as gpd
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import shapely
-from shapely.geometry import LineString, Point
+from shapely.geometry import LineString, Point, Polygon
 
 import matplotlib.lines as mlines
 import networkx as nx
@@ -13,7 +15,8 @@ import math
 
 
 def get_routes_figure(sub_axes, routes, starting_locations, line_styles, line_widths, commodity_colors, nice_name_dictionary,
-                      infrastructure_data, complete_infrastructure, boundaries, fig_title=''):
+                      infrastructure_data, complete_infrastructure, boundaries, destination_location, fig_title='',
+                      use_voronoi=False):
 
     plt.rcParams.update({'font.size': 11,
                          'font.family': 'Times New Roman'})
@@ -239,6 +242,14 @@ def get_routes_figure(sub_axes, routes, starting_locations, line_styles, line_wi
         line_gdf.plot(color=commodity_colors[commodity], linestyle=line_styles[transport_mean],
                       linewidth=line_widths[k], ax=sub_axes, alpha=alpha)
 
+    # plot destination location / polygon
+    if not use_voronoi:
+        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
+        destination_location.plot(ax=sub_axes, color='red', s=10)
+    else:
+        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
+        destination_location.plot(ax=sub_axes, fc='none', ec='red', linewidth=0.5)
+
     sub_axes.grid(visible=True, alpha=0.5)
     sub_axes.text(0.6, 0.05, fig_title, transform=sub_axes.transAxes, va='bottom', ha='left')
 
@@ -257,8 +268,9 @@ def get_routes_figure(sub_axes, routes, starting_locations, line_styles, line_wi
     return sub_axes, handels_list_transport_means, handels_list_commodities
 
 
-def get_cost_figure(sub_axes, data, norm, cmap_chosen, boundaries, fig_title='', cost_type='total_costs',
-                    plot_era=False, s=0.5):
+def get_cost_figure(sub_axes, data, norm, cmap_chosen, boundaries, destination_location,
+                    fig_title='', cost_type='total_costs',
+                    plot_era=False, use_voronoi=False, s=0.5, production_costs=None):
 
     plt.rcParams.update({'font.size': 11,
                          'font.family': 'Times New Roman'})
@@ -276,7 +288,14 @@ def get_cost_figure(sub_axes, data, norm, cmap_chosen, boundaries, fig_title='',
     else:
         col = data.conversion_costs.map(norm).map(cmap_chosen)
 
-    if not plot_era:
+    data['color'] = col
+    if use_voronoi:
+        for color in data['color'].unique():
+            affected_locations = data[data['color'] == color].index
+            voronois = production_costs.loc[affected_locations, 'geometry'].tolist()
+            voronois = gpd.GeoDataFrame(geometry=voronois)
+            voronois.plot(ax=sub_axes, color=color, ec='black', linewidth=0.1)
+    elif not plot_era:
         data.plot(x="longitude", y="latitude", kind="scatter", c=col, ax=sub_axes, s=s, linewidths=0)
     else:
         data['color'] = col
@@ -291,6 +310,14 @@ def get_cost_figure(sub_axes, data, norm, cmap_chosen, boundaries, fig_title='',
 
             color = data.at[ind, 'color']
             sub_axes.add_patch(plt.Polygon(points, facecolor=color))
+
+    # plot destination location / polygon
+    if not use_voronoi:
+        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
+        destination_location.plot(ax=sub_axes, color='red', s=s)
+    else:
+        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
+        destination_location.plot(ax=sub_axes, fc='none', ec='red', linewidth=0.5)
 
     sub_axes.grid(visible=True, alpha=0.5)
     sub_axes.text(0.6, 0.05, fig_title, transform=sub_axes.transAxes, va='bottom', ha='left')
@@ -310,15 +337,248 @@ def get_cost_figure(sub_axes, data, norm, cmap_chosen, boundaries, fig_title='',
     return sub_axes
 
 
-def get_production_costs_figure(sub_axes, data, norm, cmap_chosen, boundaries, fig_title='',
-                                plot_era=False, s=0.5):
+def get_cost_and_quantity_figure(sub_axes, data, norm, cmap_chosen, boundaries, destination_location, production_costs,
+                                 fig_title='', cost_type='total_costs', s=0.5):
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+    production_costs['quantity'] = [random.randint(0, 5) for u in production_costs.index]
+
+    total_demand = 200
+
+    data.sort_values(by=['costs'], inplace=True)
+
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(111, projection='3d')
+
+    plt.rcParams.update({'font.size': 11,
+                         'font.family': 'Times New Roman'})
+
+    countries = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
+    antarctica = countries[countries['continent'] == 'Antarctica'].index[0]
+    countries.drop([antarctica], inplace=True)
+
+    for c in countries.index:
+        poly = countries.loc[c, 'geometry']
+
+        if isinstance(poly, Polygon):
+            coords_3d = [(x, y, 0) for x, y in poly.exterior.coords]
+            # Extract coordinates for plotting
+            x, y, z = zip(*coords_3d)
+
+            # Create the polygon for visualization
+            verts = [list(zip(x, y, z))]
+            poly_3d = Poly3DCollection(verts, color='silver')
+            ax.add_collection3d(poly_3d)
+        else:
+            for sub_poly in poly.geoms:
+                coords_3d = [(x, y, 0) for x, y in sub_poly.exterior.coords]
+                x, y, z = zip(*coords_3d)
+
+                # Create the polygon for visualization
+                verts = [list(zip(x, y, z))]
+                poly_3d = Poly3DCollection(verts, color='silver')
+                ax.add_collection3d(poly_3d)
+
+    # countries = gpd.GeoDataFrame(geometry=adjusted_countries)
+    # countries.plot(ax=ax, color='silver')
+
+    data = data[data['costs'] != math.inf]
+    if cost_type == 'total_costs':
+        col = data.costs.map(norm).map(cmap_chosen)
+    elif cost_type == 'transportation_costs':
+        col = data.transportation_costs.map(norm).map(cmap_chosen)
+    else:
+        col = data.conversion_costs.map(norm).map(cmap_chosen)
+
+    data['color'] = col
+    max_height = 0
+    for i in data.index:
+        voronoi = production_costs.loc[i, 'geometry']
+        color = data.loc[i, 'color']
+
+        # todo: adjust --> read from file and add efficiencies
+        height = random.randint(0, 5) * data.loc[i, 'efficiency']
+        if total_demand > 0:
+            if total_demand < height:
+                height = total_demand
+                total_demand = 0
+            else:
+                total_demand -= height
+        else:
+            height = 0
+
+        if height > max_height:
+            max_height = height
+
+        height = max(1, height)
+
+        if isinstance(voronoi, Polygon):
+
+            base_coords = [(x, y, 0) for x, y in voronoi.exterior.coords]
+            top_coords = [(x, y, height) for x, y in voronoi.exterior.coords]
+
+            sides = []
+            for b in range(len(base_coords) - 1):  # Iterate over edges
+                side = [base_coords[b], base_coords[b + 1], top_coords[b + 1], top_coords[b]]
+                sides.append(side)
+
+            # Add the base, top, and sides to the plot
+            ax.add_collection3d(Poly3DCollection([base_coords], color=color))  # Base
+            ax.add_collection3d(Poly3DCollection([top_coords], color=color))  # Top
+            for side in sides:  # Sides
+                ax.add_collection3d(Poly3DCollection([side], color=color))
+
+        else:
+            for geom in voronoi.geoms:
+                base_coords = [(x, y, 0) for x, y in geom.exterior.coords]
+                top_coords = [(x, y, height) for x, y in geom.exterior.coords]
+
+                sides = []
+                for b in range(len(base_coords) - 1):  # Iterate over edges
+                    side = [
+                        base_coords[b],
+                        base_coords[b + 1],
+                        top_coords[b + 1],
+                        top_coords[b],
+                    ]
+                    sides.append(side)
+
+                # Add the base, top, and sides to the plot
+                ax.add_collection3d(Poly3DCollection([base_coords], color=color))  # Base
+                ax.add_collection3d(Poly3DCollection([top_coords], color=color))  # Top
+                for side in sides:  # Sides
+                    ax.add_collection3d(Poly3DCollection([side], color=color))
+
+    # voronois = gpd.GeoDataFrame(geometry=voronois)
+    # voronois.plot(ax=ax, color=colors, ec='black', linewidth=0.1)
+
+    # # plot destination location / polygon
+    # if isinstance(destination_location, Point):
+    #     destination_location = gpd.GeoDataFrame(geometry=[destination_location])
+    #     destination_location.plot(ax=ax, color='red', s=s)
+    # else:
+    #     destination_location = gpd.GeoDataFrame(geometry=[destination_location])
+    #     destination_location.plot(ax=ax, fc='none', ec='red', linewidth=0.5)
+
+    # ax.grid(visible=True, alpha=0.5)
+    # ax.text(0.6, 0.05, fig_title, transform=ax.transAxes, va='bottom', ha='left')
+
+    ax.set_ylabel('')
+    ax.set_xlabel('')
+    ax.set_yticklabels([])
+    ax.set_xticklabels([])
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    ax.set_ylim(boundaries['min_latitude'],
+                boundaries['max_latitude'])
+    ax.set_xlim(boundaries['min_longitude'],
+                boundaries['max_longitude'])
+    ax.set_zlim(0, 50)
+
+    # sub_axes.grid(visible=True, alpha=0.5)
+    # sub_axes.text(0.6, 0.05, fig_title, transform=sub_axes.transAxes, va='bottom', ha='left')
+    #
+    # sub_axes.set_ylabel('')
+    # sub_axes.set_xlabel('')
+    # sub_axes.set_yticklabels([])
+    # sub_axes.set_xticklabels([])
+    # sub_axes.set_xticks([])
+    # sub_axes.set_yticks([])
+    #
+    # sub_axes.set_ylim(boundaries['min_latitude'],
+    #                   boundaries['max_latitude'])
+    # sub_axes.set_xlim(boundaries['min_longitude'],
+    #                   boundaries['max_longitude'])
+
+    plt.show()
+
+    return None
+
+
+def get_supply_curves(data, production_costs):
+
+    data['quantity'] = [random.randint(0, 100) for u in data.index]
+
+    data.sort_values(by=['costs'], inplace=True)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    plt.rcParams.update({'font.size': 11,
+                         'font.family': 'Times New Roman'})
+
+    # countries = gpd.GeoDataFrame(geometry=adjusted_countries)
+    # countries.plot(ax=ax, color='silver')
+
+    # data = data[data['costs'] != math.inf]
+    # if cost_type == 'total_costs':
+    #     col = data.costs.map(norm).map(cmap_chosen)
+    # elif cost_type == 'transportation_costs':
+    #     col = data.transportation_costs.map(norm).map(cmap_chosen)
+    # else:
+    #     col = data.conversion_costs.map(norm).map(cmap_chosen)
+
+    # data['color'] = col
+
+    data.reset_index(drop=True, inplace=True)
+
+    max_height = 0
+    bottom = np.zeros(len(data.index))
+    for column in ['production_costs', 'conversion_costs', 'transportation_costs']:
+        ax.bar(data.index, data[column], bottom=bottom, label=column, width=data['quantity'], alpha=0.5)
+        bottom += data[column]
+
+    ax.plot(data['costs'], color='red', linewidth=2)
+
+    # ax.set_ylabel('')
+    # ax.set_xlabel('')
+    # ax.set_yticklabels([])
+    # ax.set_xticklabels([])
+    # ax.set_xticks([])
+    # ax.set_yticks([])
+    #
+    # ax.set_ylim(boundaries['min_latitude'],
+    #             boundaries['max_latitude'])
+    # ax.set_xlim(boundaries['min_longitude'],
+    #             boundaries['max_longitude'])
+    # ax.set_zlim(0, 50)
+
+    # sub_axes.grid(visible=True, alpha=0.5)
+    # sub_axes.text(0.6, 0.05, fig_title, transform=sub_axes.transAxes, va='bottom', ha='left')
+    #
+    # sub_axes.set_ylabel('')
+    # sub_axes.set_xlabel('')
+    # sub_axes.set_yticklabels([])
+    # sub_axes.set_xticklabels([])
+    # sub_axes.set_xticks([])
+    # sub_axes.set_yticks([])
+    #
+    # sub_axes.set_ylim(boundaries['min_latitude'],
+    #                   boundaries['max_latitude'])
+    # sub_axes.set_xlim(boundaries['min_longitude'],
+    #                   boundaries['max_longitude'])
+
+    plt.show()
+
+    return None
+
+
+def get_production_costs_figure(sub_axes, data, norm, cmap_chosen, boundaries, destination_location,
+                                fig_title='', plot_era=False, use_voronoi=False, s=0.5, production_costs=None):
     countries = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
     antarctica = countries[countries['continent'] == 'Antarctica'].index[0]
     countries.drop([antarctica], inplace=True)
     countries.plot(color="silver", ax=sub_axes)
 
     col = data.production_costs.map(norm).map(cmap_chosen)
-    if not plot_era:
+    data['color'] = col
+    if use_voronoi:
+        for color in data['color'].unique():
+            affected_locations = data[data['color'] == color].index
+            voronois = production_costs.loc[affected_locations, 'geometry'].tolist()
+            voronois = gpd.GeoDataFrame(geometry=voronois)
+            voronois.plot(ax=sub_axes, color=color, ec='black', linewidth=0.1)
+    elif not plot_era:
         data.plot(x="longitude", y="latitude", kind="scatter", c=col, ax=sub_axes, s=s, linewidths=0)
     else:
         data['color'] = col
@@ -333,6 +593,14 @@ def get_production_costs_figure(sub_axes, data, norm, cmap_chosen, boundaries, f
 
             color = data.at[ind, 'color']
             sub_axes.add_patch(plt.Polygon(points, facecolor=color))
+
+    # plot destination location / polygon
+    if not use_voronoi:
+        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
+        destination_location.plot(ax=sub_axes, color='red', s=s)
+    else:
+        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
+        destination_location.plot(ax=sub_axes, fc='none', ec='red', linewidth=0.5)
 
     sub_axes.grid(visible=True, alpha=0.5)
     sub_axes.text(0.6, 0.05, fig_title, transform=sub_axes.transAxes, va='bottom', ha='left')
@@ -352,8 +620,8 @@ def get_production_costs_figure(sub_axes, data, norm, cmap_chosen, boundaries, f
     return sub_axes
 
 
-def get_energy_carrier_figure(sub_axes, data, boundaries, color_dictionary, nice_name_dictionary, fig_title='',
-                              plot_era=False, s=0.5):
+def get_energy_carrier_figure(sub_axes, data, boundaries, color_dictionary, nice_name_dictionary, destination_location,
+                              fig_title='', plot_era=False, use_voronoi=False, s=0.5, production_costs=None):
 
     plt.rcParams.update({'font.size': 11,
                          'font.family': 'Times New Roman'})
@@ -366,7 +634,13 @@ def get_energy_carrier_figure(sub_axes, data, boundaries, color_dictionary, nice
     col = data.start_commodity.map(color_dictionary)
     data['color'] = col
 
-    if not plot_era:
+    if use_voronoi:
+        for color in data['color'].unique():
+            affected_locations = data[data['color'] == color].index
+            voronois = production_costs.loc[affected_locations, 'geometry'].tolist()
+            voronois = gpd.GeoDataFrame(geometry=voronois)
+            voronois.plot(ax=sub_axes, color=color, ec='black', linewidth=0.1)
+    elif not plot_era:
         data.plot(x="longitude", y="latitude", kind="scatter", c=col, ax=sub_axes, s=s, linewidths=0)
     else:
         data['color'] = col
@@ -381,6 +655,14 @@ def get_energy_carrier_figure(sub_axes, data, boundaries, color_dictionary, nice
 
             color = data.at[ind, 'color']
             sub_axes.add_patch(plt.Polygon(points, facecolor=color))
+
+    # plot destination location / polygon
+    if not use_voronoi:
+        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
+        destination_location.plot(ax=sub_axes, color='red', s=s)
+    else:
+        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
+        destination_location.plot(ax=sub_axes, fc='none', ec='red', linewidth=0.5)
 
     sub_axes.grid(visible=True, alpha=0.5)
     sub_axes.text(0.6, 0.05, fig_title, transform=sub_axes.transAxes, va='bottom', ha='left')

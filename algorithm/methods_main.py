@@ -9,7 +9,7 @@ import networkx as nx
 import cartopy.io.shapereader as shpreader
 
 from shapely.wkt import loads
-from shapely.geometry import Point, MultiLineString
+from shapely.geometry import Point, MultiLineString, MultiPolygon
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure
 
 
@@ -76,7 +76,7 @@ def prepare_data_and_configuration_dictionary(config_file):
     path_processed_data = path_project_folder + 'processed_data/'
 
     # load input data
-    location_data = pd.read_excel(path_project_folder + 'start_destination_combinations.xlsx', index_col=0)
+    location_data = pd.read_csv(path_project_folder + 'start_destination_combinations.csv', index_col=0)
 
     pipeline_gas_node_locations = pd.read_csv(path_processed_data + 'gas_pipeline_node_locations.csv', index_col=0,
                                        dtype={'latitude': np.float16, 'longitude': np.float16})
@@ -124,6 +124,7 @@ def prepare_data_and_configuration_dictionary(config_file):
         country_states = config_file['destination_polygon']
 
         first = True
+        destination_location = None
         for c in [*country_states.keys()]:
             if country_states[c]:
                 for s in country_states[c]:
@@ -138,6 +139,18 @@ def prepare_data_and_configuration_dictionary(config_file):
                     first = False
                 else:
                     destination_location.union(world[world['NAME_EN'] == c]['geometry'].values[0])
+
+        if config_file['use_biggest_landmass']:  # use only biggest land area
+            if len([*country_states.keys()]) == 1:
+                if isinstance(destination_location, MultiPolygon):
+                    largest_area = 0
+                    chosen_geom = None
+                    for geom in destination_location.geoms:
+                        if geom.area > largest_area:
+                            largest_area = geom.area
+                            chosen_geom = geom
+
+                    destination_location = chosen_geom
 
         infrastructure_in_destination = []
         for i in conversion_costs_and_efficiencies.index:

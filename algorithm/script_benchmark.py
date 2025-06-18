@@ -151,7 +151,10 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
 
                 min_value_info = [used_commodities, used_transport_means, used_nodes, distances, costs]
 
-    benchmark = math.ceil(min_value_overall)
+    if not math.isinf(min_value_overall):
+        benchmark = math.ceil(min_value_overall)
+    else:
+        benchmark = math.inf
 
     if print_benchmark_info:
         print(benchmark)

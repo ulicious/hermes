@@ -97,12 +97,14 @@ if not update_only_conversion_costs_and_efficiency:
     logging.info('Processing raw pipeline data')
     if not (('gas_network_data' in files_in_folder) & (not enforce_update_of_data)):
         # process gas pipelines
+        logging.info('Gas pipelines')
         path_gas_pipeline_data = path_raw_data + 'network_pipelines_gas.xlsx'
         group_LineStrings('gas', num_cores, path_gas_pipeline_data, path_processed_data, gap_distance,
                           use_minimal_example=use_minimal_example)
 
     if not (('oil_network_data' in files_in_folder) & (not enforce_update_of_data)):
         # process oil pipelines
+        logging.info('Oil pipelines')
         path_oil_pipeline_data = path_raw_data + 'network_pipelines_oil.xlsx'
         group_LineStrings('oil', num_cores, path_oil_pipeline_data, path_processed_data, gap_distance,
                           use_minimal_example=use_minimal_example)
@@ -165,8 +167,8 @@ if not update_only_conversion_costs_and_efficiency:
         logging.info('Calculate inner infrastructure distances')
 
         if not (('inner_infrastructure_distances' in files_in_folder) & (not enforce_update_of_data)):
-            get_distances_within_networks(gas_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
-            get_distances_within_networks(oil_graph, path_processed_data, num_cores, use_low_memory=use_low_memory)
+            get_distances_within_networks(gas_graph, gas_nodes, path_processed_data, num_cores, use_low_memory=use_low_memory)
+            get_distances_within_networks(oil_graph, oil_nodes, path_processed_data, num_cores, use_low_memory=use_low_memory)
             calculate_searoute_distances(ports, num_cores, path_processed_data)
 
     # calculate closest infrastructure for each node

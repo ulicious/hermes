@@ -42,6 +42,8 @@ else:
     minimal_latitude, maximal_latitude = 35, 71
     minimal_longitude, maximal_longitude = -25, 45
 
+world_surface = Polygon([Point([-180, -90]), Point([-180, 90]), Point([180, 90]), Point([180, -90])])
+
 valid_polygon = Polygon([Point([minimal_longitude, minimal_latitude]),
                          Point([minimal_longitude, maximal_latitude]),
                          Point([maximal_longitude, maximal_latitude]),
@@ -49,11 +51,6 @@ valid_polygon = Polygon([Point([minimal_longitude, minimal_latitude]),
 
 levelized_costs_location = pd.read_csv(path_raw_data + config_file['location_data_name'], index_col=0)
 levelized_costs_country = pd.read_csv(path_raw_data + config_file['country_data_name'], index_col=0)
-
-# create polygons if necessary # todo: würde schon vorher hinzugefügt haben damit nicht jedes mal neu
-# if config_file['create_voronoi_cells']:
-#     levelized_costs_location = create_polygons(levelized_costs_location)
-#     levelized_costs_location.to_csv(path_raw_data + config_file['location_data_name'])
 
 yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
 techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
@@ -75,11 +72,13 @@ if not update_only_techno_economic_data:
         origin_continents = ['Europe']
         countries = world[world['CONTINENT'] == 'Europe']['NAME_EN'].tolist()
 
-    i = 0
+    country_shape = shapely.ops.unary_union(world['geometry'].tolist())
+    country_shape = valid_polygon.intersection(country_shape)
+
     locations = pd.DataFrame()
 
+    i = 0
     if config_file['location_creation_type'] == 'random':
-
         while i < config_file['number_locations']:
             # run algorithm as long as number locations too low or not each country has a location
 
@@ -142,11 +141,14 @@ if not update_only_techno_economic_data:
 
         # because major parts of the globe are water, we need to increase number of points to get approx. correct number
         # since locations need to be distributed first and then only onshore locations are considered
-        number_points = math.ceil(config_file['number_locations'] / 0.259)
+        world_surface = gpd.GeoDataFrame(geometry=[world_surface])
+        world_surface.crs = 'epsg:4326'
+        world_surface.to_crs({'proj': 'cea'}, inplace=True)
+        country_shape = gpd.GeoDataFrame(geometry=[country_shape])
+        country_shape.crs = 'epsg:4326'
+        country_shape.to_crs({'proj': 'cea'}, inplace=True)
 
-        # if minimal example, we need to increase number points further since n locations should be in Europe
-        if config_file['use_minimal_example']:
-            number_points = math.ceil(config_file['number_locations'] / 0.02)
+        number_points = math.ceil(config_file['number_locations'] / (country_shape.area / world_surface.area) * 1.1)
 
         for i in range(number_points):
             z = 1 - (i / (number_points - 1)) * 2  # Map z to range [-1, 1]
@@ -244,14 +246,20 @@ if not update_only_techno_economic_data:
             i += 1
 
     # attach voronoi cells
-    if config_file['create_voronoi_cells']:
+    if config_file['use_voronoi_cells']:
         locations = attach_voronoi_cells_to_locations(locations, config_file)
 
+        # process polygons for better readability
         locations['geometry'] \
             = locations['geometry'].apply(lambda x: x.wkt)
 
+        locations.reset_index(drop=True, inplace=True)
+
         # remove
         locations.to_csv(config_file['project_folder_path'] + 'start_destination_combinations.csv')
+
+        # make again valid polygons
+        locations['geometry'] = locations['geometry'].apply(shapely.wkt.loads)
 
 else:
     logging.info('Update existing locations')
@@ -263,14 +271,14 @@ else:
     locations = locations[columns_to_keep]
 
     # convert polygon strings to shapely objects
-    if config_file['create_voronoi_cells']:
+    if config_file['use_voronoi_cells']:
         locations['geometry'] \
             = locations['geometry'].apply(shapely.wkt.loads)
 
 # convert polygon strings to shapely objects
-if config_file['create_voronoi_cells']:
+if config_file['use_voronoi_cells']:
     levelized_costs_location['polygon'] \
-        = pd.Series(levelized_costs_location['polygon'].tolist()).apply(shapely.wkt.loads)
+        = levelized_costs_location['polygon'].apply(shapely.wkt.loads)
 
     # Create a spatial index
     spatial_index = index.Index()
@@ -294,7 +302,8 @@ for i in locations.index:
 logging.info('Calculate conversion costs and efficiency')
 locations = attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_economic_data_conversion, config_file)
 
-columns_to_keep = ['longitude', 'latitude', 'country_start', 'continent_start'] + config_file['available_commodity']
+columns_to_keep = ['longitude', 'latitude', 'country_start', 'continent_start', 'geometry', 'Hydrogen_Gas_Quantity'] + config_file['available_commodity']
 locations = locations[columns_to_keep]
 
-locations.to_excel(config_file['project_folder_path'] + 'start_destination_combinations.xlsx')
+locations['geometry'] = locations['geometry'].apply(lambda x: x.wkt)
+locations.to_csv(config_file['project_folder_path'] + 'start_destination_combinations.csv')

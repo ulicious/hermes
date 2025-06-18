@@ -1,6 +1,7 @@
 import math
 import gc
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import networkx as nx
@@ -462,6 +463,8 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                        for i in road_options.index]
         road_options['taken_route'] = taken_route
 
+        road_options['total_efficiency'] = branches.loc[branch_list, 'total_efficiency'].tolist()
+
         # calculate costs and remove all above benchmark
         road_options['current_transportation_costs'] \
             = road_options['current_distance'] * road_options['specific_transportation_costs'] / 1000
@@ -527,6 +530,8 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                         new_infrastructure_options.at[i, 'current_node']) for i in new_infrastructure_options.index]
         new_infrastructure_options['taken_route'] = taken_route
 
+        new_infrastructure_options['total_efficiency'] = branches.loc[branch_list, 'total_efficiency'].tolist()
+
         # remove all options higher than benchmark
         new_infrastructure_options \
             = new_infrastructure_options[new_infrastructure_options['current_total_costs'] <= benchmark]
@@ -560,13 +565,41 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             distances = calc_distance_list_to_list(outside_options['latitude'], outside_options['longitude'],
                                                    infrastructure_in_destination['latitude'],
                                                    infrastructure_in_destination['longitude'])
-            distances = pd.DataFrame(distances, index=infrastructure_in_destination.index, columns=outside_options['current_node']).transpose()
+            distances = pd.DataFrame(distances, index=infrastructure_in_destination.index, columns=outside_options.index).transpose()
 
-            for current_node in outside_options['current_node']:
-                print(current_node)
-                print(distances.loc[current_node, 'PG_Graph_22_Node_2665'])
+            # print(distances)
 
             outside_options['distance_to_final_destination'] = distances.min('columns')
+
+        #     print(distances.idxmin('columns'))
+        #     print(distances['PG_Graph_7_Node_2947'])
+        #     print(outside_options[['current_node', 'distance_to_final_destination']])
+        #
+        # from shapely.geometry import Point
+        # import geopandas as gpd
+        #
+        # current_nodes = complete_infrastructure.loc[outside_options['current_node']]
+        # current_nodes = [Point([complete_infrastructure.at[i, 'longitude'], complete_infrastructure.at[i, 'latitude']]) for i in current_nodes.index]
+        # current_nodes = gpd.GeoDataFrame(geometry=current_nodes)
+        #
+        # closest_node = complete_infrastructure.loc[distances.idxmin('columns')]
+        # closest_node = [
+        #     Point([complete_infrastructure.loc[i, 'longitude'], complete_infrastructure.loc[i, 'latitude']]) for i in closest_node.index]
+        # closest_node = gpd.GeoDataFrame(geometry=closest_node)
+        #
+        # benchmark_node = [Point([complete_infrastructure.loc['PG_Graph_7_Node_2947', 'longitude'], complete_infrastructure.loc['PG_Graph_7_Node_2947', 'latitude']])]
+        # benchmark_node = gpd.GeoDataFrame(geometry=benchmark_node)
+        #
+        # polygon = data['destination']['location']
+        # polygon = gpd.GeoDataFrame(geometry=[polygon])
+        #
+        # fig, ax = plt.subplots()
+        # polygon.plot(ax=ax, fc='none', ec='black')
+        # current_nodes.plot(ax=ax)
+        # closest_node.plot(ax=ax, color='red')
+        # benchmark_node.plot(ax=ax, color='yellow')
+        #
+        # plt.show()
 
         in_destination_tolerance \
             = outside_options[outside_options['distance_to_final_destination']
@@ -580,6 +613,9 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         # throw out options to expensive
         outside_options \
             = outside_options[outside_options['minimal_total_costs'] <= benchmark]
+
+        # print('after')
+        # print(outside_options[['current_node', 'distance_to_final_destination']])
 
         # add further information
         outside_options['current_infrastructure'] = None
@@ -803,6 +839,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
         all_infrastructures['specific_transportation_costs'] = transportation_costs_list
         all_infrastructures['comparison_index'] = comparison_index
         all_infrastructures['taken_route'] = taken_route
+        all_infrastructures['total_efficiency'] = branches.loc[branch_list, 'total_efficiency'].tolist()
 
         all_infrastructures['current_commodity'] = branches.loc[branch_list, 'current_commodity'].tolist()
         all_infrastructures['current_commodity_object'] \
@@ -948,6 +985,8 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
                 comparison_index.append(i + '-' + current_commodity_object.get_name())
                 taken_route.append((start_infrastructure, mot, distances.at[i], i))
 
+            total_efficiency = branches.at[o, 'total_efficiency']
+
         else:
 
             graph_id = branches.at[o, 'graph']
@@ -988,6 +1027,8 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
 
             current_infrastructure = graph_id
 
+            total_efficiency = branches.at[o, 'total_efficiency']
+
             comparison_index = []
             taken_route = []
             for i in distances.index:
@@ -1018,6 +1059,8 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
         infrastructure['current_commodity_object'] = current_commodity_object
         infrastructure['latitude'] = complete_infrastructure.loc[nodes_list, 'latitude'].tolist()
         infrastructure['longitude'] = complete_infrastructure.loc[nodes_list, 'longitude'].tolist()
+
+        infrastructure['total_efficiency'] = total_efficiency
 
         # remove duplicates
         infrastructure.sort_values(['current_total_costs'], inplace=True)

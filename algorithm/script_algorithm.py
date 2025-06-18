@@ -61,31 +61,6 @@ def run_algorithm(args):
     if configuration['destination_type'] == 'country':
         data['destination']['infrastructure'] = complete_infrastructure.loc[data['destination']['infrastructure'], :].copy()
 
-    # all_points = []
-    # for i in complete_infrastructure.index:
-    #     all_points.append(Point([complete_infrastructure.loc[i, 'longitude'], complete_infrastructure.loc[i, 'latitude']]))
-    #
-    # infrastructure_points = []
-    # infra = data['destination']['infrastructure']
-    # for i in infra.index:
-    #     infrastructure_points.append(
-    #         Point([infra.loc[i, 'longitude'], infra.loc[i, 'latitude']]))
-
-    # import geopandas as gpd
-    # import matplotlib.pyplot as plt
-    #
-    # area = gpd.GeoDataFrame(geometry=[data['destination']['location']])
-    # all_points = gpd.GeoDataFrame(geometry=all_points)
-    # infra = gpd.GeoDataFrame(geometry=infrastructure_points)
-    #
-    # fig, ax = plt.subplots()
-    #
-    # area.plot(ax=ax)
-    # all_points.plot(ax=ax, color='red')
-    # infra.plot(ax=ax, color='yellow')
-    #
-    # plt.show()
-
     complete_infrastructure = check_if_benchmark_possible(data, configuration, complete_infrastructure)
 
     # adjust minimal distances by checking if distance to destination is minimal distance
@@ -621,7 +596,7 @@ def run_algorithm(args):
             branches['conversion_costs'] = 0
 
             branches['longitude_latitude'] = [(branches.at[i, 'longitude'], branches.at[i, 'latitude'])
-                                               for i in branches.index]
+                                              for i in branches.index]
             branches['current_continent'] = branches['longitude_latitude'].apply(get_continent_from_location, world=data['world'])
             # todo previous transportation and conversion costs + sanity check: does everything work as intended
 

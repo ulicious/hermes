@@ -16,37 +16,28 @@ def plot_original_pipeline_data():
         method to plot shapely.geometry.LineString
         """
 
-        def generate_random_colors(n):
-            colors = []
-            for _ in range(n):
-                # Generate random RGB values
-                r = random.random()
-                g = random.random()
-                b = random.random()
-                # Append the color in hexadecimal format
-                colors.append('#%02x%02x%02x' % (int(r * 255), int(g * 255), int(b * 255)))
-            return colors
+        fig, ax = plt.subplots()
 
-        c = generate_random_colors(len(lines))
+        gdf_gas = gpd.GeoDataFrame(geometry=gas_lines)
+        gdf_gas.plot(color='orange', ax=ax)
 
-        gdf = gpd.GeoDataFrame(geometry=lines)
-
-        gdf.plot(color=c)
+        gdf_oil = gpd.GeoDataFrame(geometry=oil_lines)
+        gdf_oil.plot(color='black', ax=ax)
 
         plt.show()
 
     # read global energy monitor data
-    data = pd.read_excel(path_raw_data + 'network_pipelines_gas.xlsx')
+    data_gas = pd.read_excel(path_raw_data + 'network_pipelines_gas.xlsx')
 
     # filter pipeline data based on status
-    data = data.loc[data['Status'].isin(['Operating', 'Construction'])]
+    data_gas = data_gas.loc[data_gas['Status'].isin(['Operating', 'Construction'])]
 
     # remove rows which have no geodata information
-    data = data[data['WKTFormat'].notna()]
-    empty_rows = data[data['WKTFormat'] == '--'].index.tolist()
-    data.drop(empty_rows, inplace=True)
+    data_gas = data_gas[data_gas['WKTFormat'].notna()]
+    empty_rows = data_gas[data_gas['WKTFormat'] == '--'].index.tolist()
+    data_gas.drop(empty_rows, inplace=True)
 
-    lines = data['WKTFormat'].tolist()
+    lines = data_gas['WKTFormat'].tolist()
     lines = [li for li in lines if li != '--']
 
     # construct geodataframe
@@ -80,7 +71,54 @@ def plot_original_pipeline_data():
             if line.intersects(frame_polygon):
                 new_single_lines.append(line.intersection(frame_polygon))
 
-        lines = new_single_lines
+        gas_lines = new_single_lines
+
+        # read global energy monitor data
+        data_oil = pd.read_excel(path_raw_data + 'network_pipelines_oil.xlsx')
+
+        # filter pipeline data based on status
+        data_oil = data_oil.loc[data_oil['Status'].isin(['Operating', 'Construction'])]
+
+        # remove rows which have no geodata information
+        data_gas = data_oil[data_oil['WKTFormat'].notna()]
+        empty_rows = data_oil[data_oil['WKTFormat'] == '--'].index.tolist()
+        data_oil.drop(empty_rows, inplace=True)
+
+        lines = data_oil['WKTFormat'].tolist()
+        lines = [li for li in lines if li != '--']
+
+        # construct geodataframe
+        data_new = gpd.GeoDataFrame(pd.Series(lines).apply(shapely.wkt.loads), columns=['geometry'])
+        data_new.set_geometry('geometry')
+        data_new_exploded = data_new.explode(ignore_index=True)
+
+        single_lines = data_new_exploded['geometry'].tolist()
+
+        df_sl = pd.DataFrame(single_lines, columns=['single_lines'])
+        df_sl = df_sl.drop_duplicates(['single_lines'])
+        single_lines = [i for i in df_sl['single_lines'].tolist()]
+
+        if config_file['use_minimal_example']:
+            # If the minimal example is applied, we set a frame on top of Europe and only consider pipelines within this frame
+
+            x_split_point_left = -21
+            x_split_point_right = 45
+
+            y_split_point_top = 71
+            y_split_point_bottom = 35
+
+            frame_polygon = Polygon([Point(x_split_point_left, y_split_point_top),
+                                     Point(x_split_point_right, y_split_point_top),
+                                     Point(x_split_point_right, y_split_point_bottom),
+                                     Point(x_split_point_left, y_split_point_bottom)])
+
+            new_single_lines = []
+            for line in single_lines:
+
+                if line.intersects(frame_polygon):
+                    new_single_lines.append(line.intersection(frame_polygon))
+
+            oil_lines = new_single_lines
 
     plot_geometry_list()
 
@@ -231,7 +269,7 @@ path_raw_data = config_file['project_folder_path'] + 'raw_data/'
 path_techno_economic_data = config_file['project_folder_path'] + 'raw_data/'
 
 # plot original data
-# plot_original_pipeline_data()
+plot_original_pipeline_data()
 
 # plot unprocessed pipelines
 # plot_unprocessed_pipelines()

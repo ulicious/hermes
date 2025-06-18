@@ -1,7 +1,9 @@
 import itertools
 import os
 import math
+import logging
 
+import networkx as nx
 import pandas as pd
 import numpy as np
 import random
@@ -59,7 +61,7 @@ def extend_line_in_both_directions(coord1, coord2, extension_percentage):
 
 
 def close_gaps(line_combinations, existing_lines, gap_distance, apply_duplicate_removing=False,
-               return_combinations=False, min_distance=0, extend_lines=False):
+               min_distance=0, extend_lines=False):
 
     """
     checks all combinations of lines if the distance between the two lines is less than 20,000. If so, a new line is
@@ -69,7 +71,6 @@ def close_gaps(line_combinations, existing_lines, gap_distance, apply_duplicate_
     @param list existing_lines: list of existing lines for comparison with newly created lines
     @param float gap_distance: If two lines / networks are closer to each other than gap distance, connect both
     @param bool apply_duplicate_removing: if two lines are parallel and close to each other, remove one
-    @param bool return_combinations: if true, only return new lines
     @param float min_distance: only connect lines / networks where distance is higher than min distance
     @param bool extend_lines: sometimes line are not connected due to floating point errors. Increasing them slightly solves problem
 
@@ -77,8 +78,8 @@ def close_gaps(line_combinations, existing_lines, gap_distance, apply_duplicate_
     """
 
     new_lines = {}
-    line_combinations_dict = {}
-    for lines in line_combinations:
+    lines_to_remove = []
+    for lines in tqdm(line_combinations):
         l1 = lines[0]
         l2 = lines[1]
 
@@ -89,7 +90,7 @@ def close_gaps(line_combinations, existing_lines, gap_distance, apply_duplicate_
             new_line_points = ops.nearest_points(l1, l2)
             if extend_lines:
 
-                if distance < 0.01:
+                if distance < 1:
                     # sometimes distances are very short. Here it is possible to get issues with floating
                     # point errors. Therefore, very short distances are addressed by building a rectangle
                     # around the connection point and add all 4 edges to the graph
@@ -104,9 +105,64 @@ def close_gaps(line_combinations, existing_lines, gap_distance, apply_duplicate_
                     exterior = polygon_around_center.boundary.coords
                     exterior = [LineString(exterior[k:k + 2]) for k in range(len(exterior) - 1)]
 
-                    for exterior_line in exterior:
-                        if exterior_line not in existing_lines:
-                            new_lines[exterior_line] = 0
+                    # get intersection points with polygon exterior
+                    points = []
+                    l1_intersects = False
+                    l2_intersects = False
+                    for e in exterior:
+                        if e.intersects(l1):
+
+                            if isinstance(e.intersection(l1), LineString):
+                                continue
+
+                            l1_intersects = True
+
+                            if isinstance(e.intersection(l1), Point):
+                                points.append(e.intersection(l1))
+                            else:
+                                for p in e.intersection(l1).geoms:
+                                    points.append(p)
+
+                        if e.intersects(l2):
+
+                            if isinstance(e.intersection(l2), LineString):
+                                continue
+
+                            l2_intersects = True
+
+                            if isinstance(e.intersection(l2), Point):
+                                points.append(e.intersection(l2))
+                            else:
+                                for p in e.intersection(l2).geoms:
+                                    points.append(p)
+
+                    if not l1_intersects:
+                        lines_to_remove.append(l1)
+
+                    if not l2_intersects:
+                        lines_to_remove.append(l2)
+
+                    added_lines = []
+                    for combination in itertools.combinations(points, 2):
+                        int_1 = combination[0]
+                        int_2 = combination[1]
+
+                        new_line = LineString([int_1, int_2])
+                        new_lines[new_line] = 0
+
+                        added_lines.append(new_line)
+
+                    # if added_lines:
+                    #
+                    #     fig, ax = plt.subplots()
+                    #
+                    #     old = gpd.GeoDataFrame(geometry=[l1, l2])
+                    #     new = gpd.GeoDataFrame(geometry=added_lines)
+                    #
+                    #     old.plot(ax=ax, color=['blue', 'green'])
+                    #     new.plot(ax=ax, color=create_random_colors(len(added_lines)), linestyle='dashed')
+                    #
+                    #     plt.show()
 
                     continue
                 else:
@@ -120,28 +176,28 @@ def close_gaps(line_combinations, existing_lines, gap_distance, apply_duplicate_
 
                 existing_lines.append(l3)
 
-                if return_combinations:
-
-                    if l1 not in [*line_combinations_dict.keys()]:
-                        if isinstance(l1, shapely.MultiLineString):
-                            l1_segments = [s for s in l1.geoms]
-                        else:
-                            l1_segments = [l1]
-
-                        if isinstance(l3, shapely.MultiLineString):
-                            l3_segments = [s for s in l3.geoms]
-                        else:
-                            l3_segments = [l3]
-
-                        line_combinations_dict[l1] = l1_segments + l3_segments
-                    else:
-
-                        if isinstance(l3, shapely.MultiLineString):
-                            l3_segments = [s for s in l1.geoms]
-                        else:
-                            l3_segments = [l3]
-
-                        line_combinations_dict[l1] += l3_segments
+                # if return_combinations:
+                #
+                #     if l1 not in [*line_combinations_dict.keys()]:
+                #         if isinstance(l1, shapely.MultiLineString):
+                #             l1_segments = [s for s in l1.geoms]
+                #         else:
+                #             l1_segments = [l1]
+                #
+                #         if isinstance(l3, shapely.MultiLineString):
+                #             l3_segments = [s for s in l3.geoms]
+                #         else:
+                #             l3_segments = [l3]
+                #
+                #         line_combinations_dict[l1] = l1_segments + l3_segments
+                #     else:
+                #
+                #         if isinstance(l3, shapely.MultiLineString):
+                #             l3_segments = [s for s in l1.geoms]
+                #         else:
+                #             l3_segments = [l3]
+                #
+                #         line_combinations_dict[l1] += l3_segments
 
     if apply_duplicate_removing:
 
@@ -172,14 +228,155 @@ def close_gaps(line_combinations, existing_lines, gap_distance, apply_duplicate_
         new_lines = sorted_lines - lines_to_remove
 
         print(len(new_lines))
+        return new_lines, lines_to_remove
 
     else:
         new_lines = [*new_lines.keys()]
+        return new_lines, lines_to_remove
 
-    if not return_combinations:
-        return new_lines
+    # if not return_combinations:
+    #     return new_lines
+    # else:
+    #     return line_combinations_dict
+
+
+def bruteforce_fill_gaps(network, single_line, gap_distance, min_distance=0):
+
+    residual_geometries = []
+    new_single_line = single_line
+    if isinstance(single_line, MultiLineString):
+        # single line is multilinestring
+        # --> connect the closest part of geometry_2 to geometry_1 and add all other lines of geometry_2 to geometry_1
+        min_distance_to_network = math.inf
+        for line in single_line.geoms:
+            closest_distance = ops.nearest_points(line, network)
+            distance = calc_distance_single_to_single(closest_distance[0].y, closest_distance[0].x,
+                                                      closest_distance[1].y, closest_distance[1].x)
+
+            if distance < min_distance_to_network:
+                min_distance_to_network = distance
+                new_single_line = line
+
+        for line in single_line.geoms:
+            if line != new_single_line:
+                residual_geometries.append(line)
+
+    points = [Point(coord) for coord in new_single_line.coords]
+
+    start_point = points[0]
+    end_point = points[-1]
+
+    if isinstance(network, LineString):
+        network_geoms = [network]
     else:
-        return line_combinations_dict
+        network_geoms = network.geoms
+
+    # first, attach network line to start if existing
+    min_distance_to_network = math.inf
+    closest_distance_points = None
+    n_line_points = None
+    chosen_line = None
+    for n_line in network_geoms:
+        closest_distance = ops.nearest_points(start_point, n_line)
+        distance = calc_distance_single_to_single(closest_distance[0].y, closest_distance[0].x,
+                                                  closest_distance[1].y, closest_distance[1].x)
+
+        if distance < min_distance_to_network:
+            min_distance_to_network = distance
+            n_line_points = [Point(coord) for coord in n_line.coords]
+            closest_distance_points = closest_distance
+            chosen_line = n_line
+
+    if min_distance <= min_distance_to_network <= gap_distance:
+
+        # connect both lines
+        if closest_distance_points[-1] == n_line_points[0]:
+            new_line_points = points + n_line_points
+        else:
+            new_line_points = n_line_points + points
+
+        new_network_geoms = [LineString(new_line_points)]
+
+    else:
+        new_network_geoms = []
+
+    for n_line in network_geoms:
+        if n_line != chosen_line:
+            new_network_geoms.append(n_line)
+
+    network_geoms = new_network_geoms
+
+    # do the same for the end point
+    min_distance_to_network = math.inf
+    closest_distance_points = None
+    n_line_points = None
+    chosen_line = None
+    for n_line in network_geoms:
+        closest_distance = ops.nearest_points(end_point, n_line)
+        distance = calc_distance_single_to_single(closest_distance[0].y, closest_distance[0].x,
+                                                  closest_distance[1].y, closest_distance[1].x)
+
+        if distance < min_distance_to_network:
+            min_distance_to_network = distance
+            n_line_points = [Point(coord) for coord in n_line.coords]
+            closest_distance_points = closest_distance
+            chosen_line = n_line
+
+    if min_distance <= min_distance_to_network <= gap_distance:
+
+        # connect both lines
+        if closest_distance_points[-1] == n_line_points[0]:
+            new_line_points = points + n_line_points
+        else:
+            new_line_points = n_line_points + points
+
+        new_network_geoms = [LineString(new_line_points)]
+
+    else:
+        new_network_geoms = []
+
+    for n_line in network_geoms:
+        if n_line != chosen_line:
+            new_network_geoms.append(n_line)
+
+    # now run over all points and add point to line if close
+    new_lines = []
+    min_distance_to_network = math.inf
+    line_to_points = {}
+    for n_line in network_geoms:
+        for p in points:
+
+            closest_distance = ops.nearest_points(p, n_line)
+            distance = calc_distance_single_to_single(closest_distance[0].y, closest_distance[0].x,
+                                                      closest_distance[1].y, closest_distance[1].x)
+
+            if distance < min_distance_to_network:
+                min_distance_to_network = distance
+
+                if min_distance <= distance <= gap_distance:
+                    line_to_points[n_line] = p
+
+    new_network_geoms = new_lines
+    for n_line in network_geoms:
+
+        if n_line in [*line_to_points.keys()]:
+            n_line_points = [Point(coord) for coord in n_line.coords]
+            p = line_to_points[n_line]
+
+            closest_distance_points = ops.nearest_points(p, n_line)
+
+            # check which side to connect to and create order of coordinates
+            if closest_distance_points[-1] == n_line_points[0]:
+                new_line_points = [p] + n_line_points
+            else:
+                new_line_points = n_line_points + [p]
+
+            new_network_geoms.append(LineString(new_line_points))
+
+        else:
+            new_network_geoms.append(n_line)
+
+    return MultiLineString(new_network_geoms + residual_geometries)
 
 
 def find_group_in_data(data):
@@ -347,8 +544,17 @@ def process_line_strings(lines_local, num_cores, gap_distance, with_adding_lines
     if with_adding_lines:
 
         combinations = list(itertools.combinations(lines_local, 2))
-        new_lines = close_gaps(combinations, lines_local, gap_distance, extend_lines=extend_lines)
-        lines_local = lines_local + new_lines
+        new_lines, lines_to_remove = close_gaps(combinations, lines_local, gap_distance, extend_lines=extend_lines)
+
+        # remove lines to remove
+        considered_lines = []
+        for line in lines_local:
+            if line not in lines_to_remove:
+                considered_lines.append(line)
+            else:
+                print('line was removed')
+
+        lines_local = considered_lines + new_lines
 
     # process for fast accumulation of common networks
     runs = 0
@@ -363,6 +569,8 @@ def process_line_strings(lines_local, num_cores, gap_distance, with_adding_lines
         inputs = []
         for s_local in lines_local:
             inputs.append([s_local.copy(), s_local.copy()])
+
+        inputs = tqdm(inputs)
 
         results = Parallel(n_jobs=num_cores)(delayed(find_group_in_data)(i) for i in inputs)
 
@@ -412,6 +620,10 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
     data_new = gpd.GeoDataFrame(pd.Series(data['WKTFormat'].tolist()).apply(shapely.wkt.loads), columns=['geometry'])
     data_new.set_geometry('geometry')
 
+    fig, ax = plt.subplots()
+
+    data_old = data_new.copy()
+
     single_lines = data_new['geometry'].tolist()
 
     if use_minimal_example:
@@ -436,13 +648,13 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
 
         single_lines = new_single_lines
 
+    logging.info('Group single lines to networks')
     single_lines = process_line_strings(single_lines, num_cores, gap_distance, with_adding_lines=True)
     single_lines = process_line_strings(single_lines, num_cores, gap_distance, with_adding_lines=True, extend_lines=True)
 
-    import networkx as nx
-
+    logging.info('Check created networks')
     checked_single_lines = set()
-    for s in single_lines:
+    for s in single_lines:  # each s represents network geometry objects
         if isinstance(s, shapely.MultiLineString):
 
             # Add edges representing connections between LineString endpoints
@@ -478,79 +690,111 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
             # Check if all nodes are reachable from each other
             if not nx.is_connected(graph):
 
+                # not all elements of network are connected to each other (probably because of floating point error)
+
                 print('not connected')
+                # try to connect geometries again, considering only geometries of network
+                s = process_line_strings(s_geoms, num_cores, gap_distance)
+                s = process_line_strings(s, num_cores, gap_distance, with_adding_lines=True, extend_lines=True)
 
-                while True:
-                    s = process_line_strings(s_geoms, num_cores, gap_distance)  # try to connect geometries again
+                if len(s) > 1:
+                    # s should be [geometry] (length = 1) and not a nested list with individual geometries
 
-                    if not isinstance(s[0], list):  # s not nested list --> s = list with geometries each representing one network
+                    print('deep processing')
 
-                        for i in range(5):
-                            s = process_line_strings(s, num_cores, gap_distance, with_adding_lines=True, extend_lines=True)
+                    for i in range(5):
+                        s = process_line_strings(s, num_cores, gap_distance, with_adding_lines=True,
+                                                 extend_lines=True)
+                    #
+                    #     # fig, ax = plt.subplots()
+                    #     # before = gpd.GeoDataFrame(geometry=s_before)
+                    #     # before.plot(ax=ax, colors='blue')
+                    #     #
+                    #     # after = gpd.GeoDataFrame(geometry=s)
+                    #     # after.plot(ax=ax, colors=create_random_colors(len(s)))
+                    #     # plt.show()
+
+                    if len(s) > 1:
+                        print('still disconnected')
+
+                        fig, ax = plt.subplots()
+                        network = gpd.GeoDataFrame(geometry=s)
+                        network.plot(ax=ax, colors=create_random_colors(len(s)))
+                        plt.show()
+
+                        # choose network based on total distance to other geometries
+                        # geometry with the smallest distance is network
+                        min_total_distance_overall = math.inf
+                        network = None
+                        for geom_1 in s:
+                            min_total_distance_geom_1 = 0
+                            for geom_2 in s:
+                                if geom_1 == geom_2:
+                                    continue
+
+                                min_total_distance_geom_1 += geom_1.distance(geom_2)
+
+                            if min_total_distance_geom_1 < min_total_distance_overall:
+                                min_total_distance_overall = min_total_distance_geom_1
+                                network = geom_1
+
+                            elif min_total_distance_geom_1 == min_total_distance_overall:
+                                # in the case where several geometries have same distances,
+                                # choose the one which is multilinestring
+                                if isinstance(geom_1, MultiLineString):
+                                    network = geom_1
+
+                        lines = []
+                        for geom in s:
+                            if geom != network:
+                                lines.append(geom)
+
+                        for line in lines:
+                            not_connected_line = line
+
+                            old_network = network
+
+                            network = bruteforce_fill_gaps(network, line, gap_distance)
+
+                            # fig, ax = plt.subplots()
+                            #
+                            # after = gpd.GeoDataFrame(geometry=[old_network])
+                            # after.plot(ax=ax, colors='black')
+                            #
+                            # before = gpd.GeoDataFrame(geometry=[not_connected_line])
+                            # before.plot(ax=ax, colors='yellow', linestyle='dashed')
+                            #
+                            # plt.show()
+
+                        fig, ax = plt.subplots()
+                        network_gdf = gpd.GeoDataFrame(geometry=[network])
+                        network_gdf.plot(ax=ax, colors=create_random_colors(len([network])))
+                        plt.show()
+
+                        if isinstance(network, MultiLineString):
+                            network_geoms = []
+                            for n_geom in network.geoms:
+                                network_geoms.append(n_geom)
+
+                            network = network_geoms
+                        else:
+                            network = [network]
+
+                        s = process_line_strings(network, num_cores, gap_distance)
+                        s = process_line_strings(s, num_cores, gap_distance, with_adding_lines=True, extend_lines=True)
 
                         if len(s) > 1:
-                            print('still disconnected')
-
-                        checked_single_lines.update(s)
-                        break
+                            print('still not connected --> add parts individually')
+                            for s_element in s:
+                                checked_single_lines.update([s_element])
+                        else:
+                            checked_single_lines.update(s)
 
                     else:
-                        print('reached strange point?')
+                        checked_single_lines.update(s)
 
-                        print(len(s))
-
-                        if len(s) > 1:  # s is nested list with several lists inside
-                            # if two geometries, just create two graphs
-                            checked_single_lines.update([s[0], s[1]])
-
-                            break
-                        else:  # s is nested list with one list inside
-                            s = s[0]
-
-                            plt.show()
-
-                            s = shapely.unary_union(s)
-                            graph = nx.Graph()
-                            nodes = {}
-                            node_number = 0
-                            edge_number = 0
-                            edges = []
-                            edges_to_linestring = {}
-                            for line_string in s.geoms:
-                                start_point = (round(line_string.coords[0][0], 10), round(line_string.coords[0][1], 10))
-                                if start_point not in [*nodes.keys()]:
-                                    nodes[start_point] = node_number
-                                    node_number += 1
-
-                                end_point = (round(line_string.coords[-1][0], 10), round(line_string.coords[-1][1], 10))
-                                if end_point not in [*nodes.keys()]:
-                                    nodes[end_point] = node_number
-                                    node_number += 1
-
-                                graph.add_edge(nodes[start_point], nodes[end_point], name=edge_number)
-                                edges.append((nodes[start_point], nodes[end_point]))
-                                edges_to_linestring[(nodes[start_point], nodes[end_point])] = line_string
-                                edges_to_linestring[(nodes[end_point], nodes[start_point])] = line_string
-                                edge_number += 1
-
-                            if not nx.is_connected(graph):
-                                print('still not connected')
-
-                                sub_graphs = nx.connected_components(graph)
-                                for sg_nodes in sub_graphs:
-                                    sg_edges = graph.subgraph(sg_nodes).edges
-
-                                    subgraph_lines = []
-                                    for e in sg_edges:
-                                        subgraph_lines.append(edges_to_linestring[e])
-
-                                    checked_single_lines.update([MultiLineString(subgraph_lines)])
-
-                                break
-
-                            else:
-                                checked_single_lines.update([s])
-                                break
+                else:
+                    checked_single_lines.update(s)
 
             else:
                 checked_single_lines.update([s])
@@ -558,12 +802,21 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
         else:
             checked_single_lines.update([s])
 
+    fig, ax = plt.subplots()
+
     data_new = gpd.GeoDataFrame(checked_single_lines, columns=['geometry'])
     data_new.set_geometry('geometry')
 
+    data_new.plot(ax=ax, color='red')
+    data_old.plot(ax=ax)
+
+    plt.show()
+
+    fig, ax = plt.subplots()
+
     number_of_colors = len(data_new.index)
     color = ["#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)]) for i in range(number_of_colors)]
-    data_new.plot(color=color)
+    data_new.plot(ax=ax, color=color)
     plt.show()
 
     # save processed data in folder (each network own folder)

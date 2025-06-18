@@ -1,46 +1,47 @@
-# general configuration
-project_folder_path: 'C:/Users/mt5285/Transportmodell/'  # full path of folder
-use_minimal_example: True
+# general configuration  # todo: check 4820 Japan
+project_folder_path: '/home/localadmin/Dokumente/Transportmodell/'  # full path of folder
+use_minimal_example: False
 use_low_storage: False  # distances are not precalculated --> lower storage demand but higher memory and time demand
 use_low_memory: False  # avoids parallel processing and large matrix implementations --> lower memory demand but higher time demand
-number_cores: 1  # set certain number or 'max'; will be set to 1 if use_low_memory = True
+number_cores: 100  # set certain number or 'max'; will be set to 1 if use_low_memory = True
 use_provided_data: True  # if True, then will use data from GitHub
-location_data_name: 'location_data.csv'
+location_data_name: 'location_data_wacc.csv'
 country_data_name: 'country_data.csv'
 available_commodity: ['Hydrogen_Gas', 'Hydrogen_Liquid', 'Ammonia', 'Methane_Gas','Methane_Liquid', 'FTF', 'Methanol', 'DBT', 'MCH']
 available_transport_means: ['Pipeline_Gas', 'New_Pipeline_Gas', 'Pipeline_Liquid', 'New_Pipeline_Liquid', 'Shipping', 'Road']
 enforce_update_of_data: False  # if certain data has been calculated, we skip calculating again
-update_only_conversion_costs_and_efficiency: False  # set True if you only want to update location specific conversion costs and efficiencies
+update_only_conversion_costs_and_efficiency: True  # set True if you only want to update location specific conversion costs and efficiencies
 
 # parameters and assumptions for start - destination - combination file
 destination_type: 'country'  # defines the destination type: 'location' (single point) or 'country' (polygon / multipolygon)
-destination_location: [9.993682, 53.551086]  # [Longitude, Latitude]
-destination_polygon: {'Germany': []}  # dictionary with country: list of states. If complete country, leave list empty --> check Bayern
-destination_country: 'Germany'
+destination_location: [9.993682, 53.551086]  # [Longitude, Latitude]  # todo: check with single location
+destination_polygon: {"Germany": []}  # dictionary with country: list of states. If complete country, leave list empty
+use_biggest_landmass: False  # True/False; some countries have several not connected shapes (USA: mainland, Alaska, hawaii, ...) --> choose biggest
+destination_country: "Germany"  # todo: get country and continent from destination
 destination_continent: 'Europe'
-origin_continents: []  # [] if all continents are possible, else define continents like ['Europe']
-low_temp_heat_available_at_start: False
-mid_temp_heat_available_at_start: False
-high_temp_heat_available_at_start: False
-number_locations: 50
-minimal_latitude: -90  # will be overwritten if minimal_example is applied
-maximal_latitude: 90  # will be overwritten if minimal_example is applied
+origin_continents: []  # [] if all continents are possible, else define continents like ['Europe']  # todo: auch bei Voronoi Zellen implementieren
+low_temp_heat_available_at_start: True
+mid_temp_heat_available_at_start: True
+high_temp_heat_available_at_start: True
+number_locations: 10000
+minimal_latitude: -70  # will be overwritten if minimal_example is applied
+maximal_latitude: 70  # will be overwritten if minimal_example is applied
 minimal_longitude: -180  # will be overwritten if minimal_example is applied
 maximal_longitude: 180  # will be overwritten if minimal_example is applied
 location_creation_type: 'uniform'  # uniform or random
-create_voronoi_cells: True  # based on locations, onshore area is divided into voronoi cells
+use_voronoi_cells: True  # based on locations, onshore area is divided into voronoi cells
 weight_hydrogen_costs_by_quantity: True  # if True then the value of the voronoi cell is based on the by quantity weighted costs per era 5 cell
 each_country_at_least_one_location: False  # makes sure that each country is represented at least by one start location
 
 # parameters and assumptions for infrastructure processing
-low_temp_heat_available_at_ports: False
-mid_temp_heat_available_at_ports: False
-high_temp_heat_available_at_ports: False
+low_temp_heat_available_at_ports: True
+mid_temp_heat_available_at_ports: True
+high_temp_heat_available_at_ports: True
 low_temp_heat_available_at_pipelines: False
 mid_temp_heat_available_at_pipelines: False
 high_temp_heat_available_at_pipelines: False
 minimal_distance_between_pipeline_connection_points: 50000  # [m] max distance between to connection points in pipeline (will be overwritten if minimal_example is applied)
-gap_distance: 20000  # [m] If distance between two networks is below gap_distance, than networks will be connected
+gap_distance: 20000  # [m] If distance between two networks is below gap_distance, then networks will be connected
 
 # algorithm assumptions and settings
 target_commodity: ['Hydrogen_Gas', 'Hydrogen_Liquid', 'Ammonia', 'Methane_Gas','Methane_Liquid', 'FTF', 'Methanol']
@@ -51,8 +52,8 @@ max_length_road: math.inf  # [m] max distance for road transportation
 no_road_multiplier: 1.5  # distance * no_road_multiplier
 build_new_infrastructure: True
 H2_ready_infrastructure: True
-low_temp_heat_available_at_destination: False
-mid_temp_heat_available_at_destination: False
-high_temp_heat_available_at_destination: False
+low_temp_heat_available_at_destination: True
+mid_temp_heat_available_at_destination: True
+high_temp_heat_available_at_destination: True
 print_runtime_information: True
-print_benchmark_info: True
+print_benchmark_info: False

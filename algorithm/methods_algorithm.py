@@ -57,7 +57,9 @@ def create_branches_based_on_commodities_at_start(data):
                                      'all_previous_nodes', 'current_infrastructure',
                                      'all_previous_infrastructure', 'current_distance', 'all_previous_distances',
                                      'current_continent', 'distance_to_final_destination', 'branch_index',
-                                     'comparison_index'])
+                                     'comparison_index', 'taken_routes'])
+
+    branches['taken_routes'] = branches['taken_routes'].astype(object)
 
     starting_location = data['start']['location']
     starting_continent = data['start']['continent']
@@ -86,6 +88,8 @@ def create_branches_based_on_commodities_at_start(data):
         branch_index = 'S' + str(branch_number)
         branch_number += 1
 
+        import numpy as np
+
         branches.loc[branch_index, 'starting_latitude'] = starting_location.y
         branches.loc[branch_index, 'starting_longitude'] = starting_location.x
         branches.loc[branch_index, 'latitude'] = starting_location.y
@@ -104,7 +108,9 @@ def create_branches_based_on_commodities_at_start(data):
         branches.loc[branch_index, 'branch_index'] = branch_index
         branches.loc[branch_index, 'all_previous_commodities'] = [c_object.get_name()]
         branches.loc[branch_index, 'all_previous_total_costs'] = [c_object.get_production_costs()]
-        branches.loc[branch_index, 'taken_routes'] = [c_object.get_name()]
+        branches.at[branch_index, 'taken_routes'] = [(c_object.get_name(), c_object.get_starting_efficiency())]
+        branches.loc[branch_index, 'total_efficiency'] = c_object.get_starting_efficiency()
+        branches.loc[branch_index, 'destination'] = destination_location
 
         comparison_index.append(('Start', c_object.get_name()))
 
@@ -187,17 +193,20 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
             = calc_distance_single_to_single(starting_location.y, starting_location.x,
                                              destination_location.y, destination_location.x)
     else:
-        # destination is polygon -> each infrastructure has different closest point to destination
-        infrastructure_in_destination = data['destination']['infrastructure']
+        if starting_location.within(destination_location):
+            min_distance_to_destination = 0
+        else:
+            # destination is polygon -> each infrastructure has different closest point to destination
+            infrastructure_in_destination = data['destination']['infrastructure']
 
-        complete_infrastructure.loc[infrastructure_in_destination.index, 'distance_to_destination'] = 0
+            complete_infrastructure.loc[infrastructure_in_destination.index, 'distance_to_destination'] = 0
 
-        distances_to_destination \
-            = calc_distance_list_to_single(infrastructure_in_destination['latitude'],
-                                           infrastructure_in_destination['longitude'],
-                                           starting_location.y, starting_location.x)
+            distances_to_destination \
+                = calc_distance_list_to_single(infrastructure_in_destination['latitude'],
+                                               infrastructure_in_destination['longitude'],
+                                               starting_location.y, starting_location.x)
 
-        min_distance_to_destination = distances_to_destination.min()
+            min_distance_to_destination = distances_to_destination.min()
 
     if min_distance_to_destination < configuration['to_final_destination_tolerance']:
         cheapest_option = math.inf
@@ -209,8 +218,22 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
                     chosen_branch = branches.loc[s, :].copy()
 
         chosen_branch.at['status'] = 'complete'
-        chosen_branch.to_csv(configuration['path_results'] + str(location_integer) + '_final_solution.csv')
+        chosen_branch.at['solving_time'] = 0
+        chosen_branch.to_csv(configuration['path_results'] + 'location_results/' + str(location_integer) + '_final_solution.csv')
         print(str(location_integer) + ' is already in tolerance to destination')
+        continue_processing = False
+
+    # check if production costs are math.inf --> no potential at location
+    cheapest_option = math.inf
+    for s in branches.index:
+        if branches.at[s, 'current_total_costs'] < cheapest_option:
+            cheapest_option = branches.at[s, 'current_total_costs']
+
+    if cheapest_option == math.inf:
+        print(str(location_integer) + ' has no production potential')
+        result = pd.Series(['no potential', starting_location.y, starting_location.x],
+                           index=['status', 'latitude', 'longitude'])
+        result.to_csv(configuration['path_results'] + 'location_results/' + str(location_integer) + '_no_potential.csv')
         continue_processing = False
 
     return continue_processing
@@ -264,9 +287,13 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
     continent = []
     distance_to_final_destination = []
 
+    all_destinations = []
+
     previous_branches = []
 
     taken_route = []
+
+    efficiencies = []
 
     # conversion from c_start to c_end
     for c_start in branches['current_commodity'].unique():
@@ -308,7 +335,9 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
                     costs = costs - c_start_df['current_total_costs']
                     current_conversion_costs += costs.tolist()
 
-                    taken_route += [(c_start, c_end)] * len_index
+                    efficiencies += [conversion_efficiency.loc[i] * c_start_df.loc[i, 'total_efficiency'] for i in c_start_df.index]
+
+                    taken_route += [(c_start, c_end, conversion_efficiency.loc[i]) for i in conversion_efficiency.index]
                 else:
                     continue
             else:
@@ -318,7 +347,9 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
                 total_costs += c_start_df['current_total_costs'].tolist()
                 current_conversion_costs += [0] * len_index
 
-                taken_route += [(c_start, c_start)] * len_index
+                taken_route += [(c_start, c_start, 1)] * len_index
+
+                efficiencies += c_start_df['total_efficiency'].tolist()
 
             # get other necessary information for later processing
             len_index = len(c_start_df.index)
@@ -352,6 +383,8 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
             all_previous_transportation_costs += c_start_df['all_previous_transportation_costs'].values.tolist()
             all_previous_conversion_costs += c_start_df['all_previous_conversion_costs'].values.tolist()
             all_previous_total_costs += c_start_df['all_previous_total_costs'].values.tolist()
+
+            all_destinations += c_start_df['destination'].values.tolist()
 
             previous_branches += c_start_df.index.values.tolist()
 
@@ -389,7 +422,11 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
 
                      'previous_branch': previous_branches,
 
-                     'taken_route': taken_route}
+                     'taken_route': taken_route,
+
+                     'total_efficiency': efficiencies,
+
+                     'destination': all_destinations}
 
     branches = pd.DataFrame(branches_dict, index=index)
 
@@ -413,7 +450,7 @@ def postprocessing_branches(branches, old_branches):
                        'all_previous_nodes', 'all_previous_branches',
                        'all_previous_distances', 'all_previous_transportation_costs', 'all_previous_conversion_costs',
                        'all_previous_total_costs', 'all_previous_commodities', 'branch_index',
-                       'starting_latitude', 'starting_longitude', 'taken_routes']
+                       'starting_latitude', 'starting_longitude', 'taken_routes', 'total_efficiency', 'destination']
     old_branches = old_branches[columns_to_keep]
 
     branches = pd.merge(branches, old_branches, left_on='previous_branch', right_on='branch_index', how='left')
@@ -451,6 +488,10 @@ def postprocessing_branches(branches, old_branches):
 
     branches['taken_routes'] \
         = branches.apply(lambda row: row['taken_routes'] + [row['taken_route']], axis=1)
+
+    branches.rename(columns={'total_efficiency_y': 'total_efficiency'}, inplace=True)
+
+    branches.rename(columns={'destination_y': 'destination'}, inplace=True)
 
     return branches
 

@@ -17,7 +17,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 from collections import Counter, defaultdict
 
-from algorithm.methods_geographic import calc_distance_list_to_list
+from algorithm.methods_geographic import calc_distance_list_to_list, calc_distance_single_to_single
 
 
 def extend_line_in_one_direction(direction_coordinate, support_coordinate, extension_percentage):
@@ -410,6 +410,12 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
                                 nodes.append(node_end)
                                 node_number_local += 1
 
+                                # due to floating point precision, total distance could be smaller than actual distance (error is <1%)
+                                direct_distance = calc_distance_single_to_single(node_start[1], node_start[0],
+                                                                                 node_end[1], node_end[0])
+                                if direct_distance > distance:
+                                    distance = direct_distance
+
                                 # add edge
                                 edges.append([node_start, node_end, distance, sub_line])
                                 edge_number_local += 1
@@ -440,6 +446,11 @@ def process_line_super(original_line, minimal_distance_between_node=50000, singl
             if node_start == node_end:
                 return
 
+            # due to floating point precision, total distance could be smaller than actual distance (error is <1%)
+            direct_distance = calc_distance_single_to_single(node_start[1], node_start[0], node_end[1], node_end[0])
+            if direct_distance > total_distance:
+                total_distance = direct_distance
+
             # add edge information
             edges.append([node_start, node_end, total_distance, line])
             edge_number_local += 1
@@ -468,10 +479,6 @@ def remove_short_edges(graphs, nodes, number_workers, min_distance=5000):
 
     for g in graphs['graph'].unique():
 
-        print(g)
-
-        print(len(graphs[graphs['graph'] == g].index))
-
         while True:
 
             g_graphs = graphs[graphs['graph'] == g]
@@ -479,8 +486,6 @@ def remove_short_edges(graphs, nodes, number_workers, min_distance=5000):
             short_edges = g_graphs[g_graphs['distance'] < min_distance]
             if len(short_edges.index) == 0:
                 break
-
-            print(len(short_edges))
 
             affected_nodes = set(short_edges['node_start'].tolist() + short_edges['node_end'].tolist())
             edges_of_affected_nodes = g_graphs[(g_graphs['node_start'].isin(affected_nodes)) | (g_graphs['node_end'].isin(affected_nodes))]
@@ -553,8 +558,6 @@ def remove_short_edges(graphs, nodes, number_workers, min_distance=5000):
                         simulated_processed_nodes.update([n])
 
                 last_n = n
-
-            print(len(to_process_nodes))
 
             def process_node(n_local):
 
@@ -799,7 +802,6 @@ def merge_nodes(graphs, nodes, number_workers, min_distance=5000.):
                 break
 
             node_order = distances['level_0'].value_counts()
-            print(len(node_order.index))
 
             # create dictionary which has affected nodes as key and all connected nodes as values
             node_start_df = graph_g.groupby('node_start')['node_end'].agg(list).to_dict()

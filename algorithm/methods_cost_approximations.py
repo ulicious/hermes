@@ -1,6 +1,7 @@
 import math
 
 import pandas as pd
+import numpy as np
 
 
 def calculate_cheapest_option_to_final_destination(data, branches, benchmark, cost_column_name):
@@ -110,6 +111,7 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmark, co
                         c_start_df.loc[options_m, c_transported + '_transportation_costs_' + m] = math.inf
 
                     # after transportation, conversion at destination to final commodity if necessary
+                    locations_in_destination = data['destination']['infrastructure']
                     for c_end in [*data['commodities']['commodity_objects'].keys()]:
 
                         name_column = 'costs_' + c_start + '_' + c_transported + '_' + m + '_' + c_end
@@ -118,16 +120,27 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmark, co
                             if c_transported != c_end:
                                 if c_transported_conversion_options[c_end]:
 
+                                    # since we use direct distance to destination, we don't know which infrastructure
+                                    # node is that. So we use the cheapest conversion over all infrastructure nodes
+                                    # as minimal costs
                                     conversion_costs_at_destination \
-                                        = c_transported_object.get_conversion_costs_specific_commodity('Destination', c_end)
+                                        = c_transported_object.get_conversion_costs_specific_commodity(locations_in_destination.index.tolist(), c_end)
+                                    conversion_costs_at_destination = conversion_costs_at_destination.fillna(math.inf)
 
                                     conversion_efficiency_at_destination \
-                                        = c_transported_object.get_conversion_efficiency_specific_commodity('Destination', c_end)
+                                        = c_transported_object.get_conversion_efficiency_specific_commodity(locations_in_destination.index.tolist(), c_end)
+                                    conversion_efficiency_at_destination = conversion_efficiency_at_destination.fillna(math.inf)
 
-                                    cheapest_options[name_column] = \
-                                        (c_start_df[c_transported + '_conversion_costs']
-                                         + c_start_df[c_transported + '_transportation_costs_' + m]
-                                         + conversion_costs_at_destination) / conversion_efficiency_at_destination
+                                    conversion = c_start_df[c_transported + '_conversion_costs'].values.reshape(-1, 1)
+                                    transport = c_start_df[c_transported + '_transportation_costs_' + m].values.reshape(-1, 1)
+                                    reconversion_costs = conversion_costs_at_destination.values
+                                    reconversion_efficiency = conversion_efficiency_at_destination.values
+
+                                    values_matrix = (conversion + transport + reconversion_costs) / reconversion_efficiency
+
+                                    # Find the minimum value along axis 1 (for each row in dataframe_1)
+                                    min_val = pd.DataFrame(np.min(values_matrix, axis=1), index=c_start_df.index)
+                                    cheapest_options[name_column] = min_val
 
                                     created_columns.append(name_column)
                                 else:
