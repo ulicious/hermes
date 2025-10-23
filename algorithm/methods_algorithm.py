@@ -489,9 +489,15 @@ def postprocessing_branches(branches, old_branches):
     branches['taken_routes'] \
         = branches.apply(lambda row: row['taken_routes'] + [row['taken_route']], axis=1)
 
-    branches.rename(columns={'total_efficiency_y': 'total_efficiency'}, inplace=True)
+    branches.rename(columns={'total_efficiency_x': 'total_efficiency'}, inplace=True)
 
     branches.rename(columns={'destination_y': 'destination'}, inplace=True)
+
+    columns_to_keep = []
+    for c in branches.columns:
+        if '_y' not in c:
+            columns_to_keep.append(c)
+    branches = branches[columns_to_keep]
 
     return branches
 

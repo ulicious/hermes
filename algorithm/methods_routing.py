@@ -459,7 +459,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         road_options['current_continent'] = branches.loc[branch_list, 'current_continent'].tolist()
 
         taken_route = [(branches.at[road_options.at[i, 'previous_branch'], 'current_node'], 'Road',
-                        road_options.at[i, 'current_distance'], road_options.at[i, 'current_node'])
+                        road_options.at[i, 'current_distance'], road_options.at[i, 'current_node'], 1)
                        for i in road_options.index]
         road_options['taken_route'] = taken_route
 
@@ -527,7 +527,8 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         taken_route = [(branches.at[new_infrastructure_options.at[i, 'previous_branch'], 'current_node'],
                         new_infrastructure_options.at[i, 'current_transport_mean'],
                         new_infrastructure_options.at[i, 'current_distance'],
-                        new_infrastructure_options.at[i, 'current_node']) for i in new_infrastructure_options.index]
+                        new_infrastructure_options.at[i, 'current_node'],
+                        1) for i in new_infrastructure_options.index]
         new_infrastructure_options['taken_route'] = taken_route
 
         new_infrastructure_options['total_efficiency'] = branches.loc[branch_list, 'total_efficiency'].tolist()
@@ -652,6 +653,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
     all_costs = []
     comparison_index = []
     taken_route = []
+    efficiencies = []
 
     for mot in branches['current_transport_mean'].unique():
         options_m = branches.loc[branches['current_transport_mean'] == mot].copy()
@@ -700,8 +702,29 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                     continue
 
                 distances = shipping_distances.loc[start_infrastructure, shipping_infrastructure.index].copy()
-                current_total_costs_distances = distances / 1000 * transportation_costs + current_total_costs
+                durations = distances.copy() / 1000 / data['Shipping']['speed']
+
+                boil_off = current_commodity_object.get_boil_off()
+                self_consumption = current_commodity_object.get_self_consumption()
+
+                if not current_commodity_object.get_uses_commodity_as_shipping_fuel():
+                    current_total_costs_distances \
+                        = (current_total_costs + transportation_costs * distances / 1000) / (1 - (durations / 24 * boil_off))
+                    efficiency = pd.DataFrame(1, index=current_total_costs_distances.index)
+                else:
+                    total_boil_off = durations / 24 * boil_off
+                    total_self_consumption = distances / 1000 * self_consumption
+
+                    # if boil off is higher than self consumption, boil off will set efficiency, else self consumption
+                    efficiency = total_boil_off.where(total_boil_off > total_self_consumption, total_self_consumption)
+                    current_total_costs_distances = current_total_costs / (1 - efficiency)
+
                 current_total_costs_distances = current_total_costs_distances[current_total_costs_distances <= benchmark].dropna()
+                transportation_costs = current_total_costs_distances - current_total_costs
+                transportation_costs = transportation_costs.loc[current_total_costs_distances.index] / distances * 1000
+
+                efficiencies_m = [a * (1 - l) for a in branches.loc[options_m.index, 'total_efficiency'] for l in efficiency]
+                efficiencies += efficiencies_m
 
                 if current_total_costs_distances.empty:
                     continue
@@ -720,12 +743,12 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                 current_infrastructure += current_total_costs_distances.index.tolist()
                 transport_mean += ['Shipping'] * length_index
 
-                transportation_costs_list += [transportation_costs] * length_index
+                transportation_costs_list += list(transportation_costs)
 
                 for i in current_total_costs_distances.index:
                     comparison_index.append(i + '-' + current_commodity_object.get_name())
 
-                taken_route += [(start_infrastructure, mot, distances.at[i], i) for i in current_total_costs_distances.index]
+                taken_route += [(start_infrastructure, mot, distances.at[i], i, efficiency.loc[i]) for i in current_total_costs_distances.index]
 
             processed_infrastructure['Shipping'] = shipping_infrastructure
 
@@ -814,7 +837,9 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                 comparison_index += list(map(lambda x: x + '-' + current_commodity_object.get_name(),
                                              current_total_costs_distances.index.tolist()))
 
-                taken_route += [(start_infrastructure, mot, distances.at[i], i) for i in current_total_costs_distances.index]
+                taken_route += [(start_infrastructure, mot, distances.at[i], i, 1) for i in current_total_costs_distances.index]
+
+                efficiencies += branches.loc[[s], 'total_efficiency'].tolist() * length_index
 
     if list(processed_infrastructure.values()):
 
@@ -839,7 +864,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
         all_infrastructures['specific_transportation_costs'] = transportation_costs_list
         all_infrastructures['comparison_index'] = comparison_index
         all_infrastructures['taken_route'] = taken_route
-        all_infrastructures['total_efficiency'] = branches.loc[branch_list, 'total_efficiency'].tolist()
+        all_infrastructures['total_efficiency'] = efficiencies # branches.loc[branch_list, 'total_efficiency'].tolist()
 
         all_infrastructures['current_commodity'] = branches.loc[branch_list, 'current_commodity'].tolist()
         all_infrastructures['current_commodity_object'] \
@@ -975,7 +1000,25 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
                 continue
 
             distances = shipping_distances.loc[start_infrastructure, :].copy()
-            current_total_costs_distances = distances / 1000 * transportation_costs + current_total_costs
+            durations = distances / 1000 / data['Shipping_Speed']  # todo: test
+
+            boil_off = current_commodity_object.get_boil_off()
+            self_consumption = current_commodity_object.get_self_consumption()
+
+            if not current_commodity_object.get_uses_commodity_as_shipping_fuel():
+                current_total_costs_distances \
+                    = (current_total_costs + transportation_costs / 1000 * distances) / (durations / 24 * (1 - boil_off))
+            else:
+                total_boil_off = durations / 24 * boil_off
+                total_self_consumption = distances / 1000 * self_consumption
+
+                # if boil off is higher than self consumption, boil off will set efficiency, else self consumption
+                efficiency = total_boil_off.combine(total_self_consumption, func=lambda s1, s2: s1.where(s1 > s2, s2))
+                current_total_costs_distances = current_total_costs / (1 - efficiency)
+
+            current_total_costs_distances = current_total_costs_distances[current_total_costs_distances <= benchmark].dropna()
+            transportation_costs = current_total_costs_distances - current_total_costs
+            transportation_costs = transportation_costs.loc[current_total_costs_distances.index, :]  # todo: row or columns?
 
             current_infrastructure = 'Shipping'
 

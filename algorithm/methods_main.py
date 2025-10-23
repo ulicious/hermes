@@ -92,6 +92,9 @@ def prepare_data_and_configuration_dictionary(config_file):
     yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
     techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
+    yaml_file = open(path_raw_data + 'techno_economic_data_transportation.yaml')
+    techno_economic_data_transport = yaml.load(yaml_file, Loader=yaml.FullLoader)
+
     coastlines = gpd.GeoDataFrame(geometry=coastlines['geometry'].apply(loads))
     coastlines.set_geometry('geometry', inplace=True)
 
@@ -110,7 +113,7 @@ def prepare_data_and_configuration_dictionary(config_file):
 
         conversion_costs_and_efficiencies = pd.concat([conversion_costs_and_efficiencies, destination])
 
-        infrastructure_in_destination = None
+        infrastructure_in_destination = None  # todo: we have to add some infrastructure here, otherweise there's not gonna be anything around
     else:
         destination_continent = config_file['destination_continent']
 
@@ -183,7 +186,8 @@ def prepare_data_and_configuration_dictionary(config_file):
     world = gpd.read_file(country_shapefile)
 
     # The data dictionary holds common information/data/parameter which apply for all following branches.
-    data = {'Shipping': {'ports': ports},
+    data = {'Shipping': {'ports': ports,
+                         'speed': techno_economic_data_transport['Shipping_Speed']},
             'minimal_distances': minimal_distances,
             'transport_means': transport_means,
             'commodities': {'final_commodities': final_commodities,

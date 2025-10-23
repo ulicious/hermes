@@ -1,7 +1,9 @@
 import random
 import math
 
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon, Point, MultiPolygon
+import geopandas as gpd
+import cartopy.io.shapereader as shpreader
 
 
 def create_polygons(hydrogen_costs_and_quantities):
@@ -98,3 +100,49 @@ def randlatlon1(min_latitude, max_latitude, min_longitude, max_longitude):
 
         if is_within_boundaries(Lat, Lon):
             return Lon, Lat
+
+
+def get_destination(config_file):
+    # create shapely object of destination
+    if config_file['destination_type'] == 'location':
+        destination_location = Point(config_file['destination_location'])
+    else:
+        country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
+        world = gpd.read_file(country_shapefile)
+
+        state_shapefile = shpreader.natural_earth(resolution='10m', category='cultural',
+                                                  name='admin_1_states_provinces')
+        states = gpd.read_file(state_shapefile)
+
+        country_states = config_file['destination_polygon']
+
+        first = True
+        destination_location = None
+        for c in [*country_states.keys()]:
+            if country_states[c]:
+                for s in country_states[c]:
+                    if first:
+                        destination_location = states[states['name'] == s]['geometry'].values[0]
+                        first = False
+                    else:
+                        destination_location.union(states[states['name'] == s]['geometry'].values[0])
+            else:
+                if first:
+                    destination_location = world[world['NAME_EN'] == c]['geometry'].values[0]
+                    first = False
+                else:
+                    destination_location.union(world[world['NAME_EN'] == c]['geometry'].values[0])
+
+        if config_file['use_biggest_landmass']:  # use only biggest land area
+            if len([*country_states.keys()]) == 1:
+                if isinstance(destination_location, MultiPolygon):
+                    largest_area = 0
+                    chosen_geom = None
+                    for geom in destination_location.geoms:
+                        if geom.area > largest_area:
+                            largest_area = geom.area
+                            chosen_geom = geom
+
+                    destination_location = chosen_geom
+
+    return destination_location

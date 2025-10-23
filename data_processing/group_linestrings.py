@@ -588,7 +588,8 @@ def process_line_strings(lines_local, num_cores, gap_distance, with_adding_lines
     return list(lines_local)
 
 
-def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_distance, use_minimal_example=False):
+def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_distance, boundaries, destination,
+                      use_minimal_example=False):
 
     """
     Reads global energy monitor data, filters pipeline data based on status, removes rows with no geodata information,
@@ -620,11 +621,11 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
     data_new = gpd.GeoDataFrame(pd.Series(data['WKTFormat'].tolist()).apply(shapely.wkt.loads), columns=['geometry'])
     data_new.set_geometry('geometry')
 
-    fig, ax = plt.subplots()
-
-    data_old = data_new.copy()
+    # fig, ax = plt.subplots()
+    # data_old = data_new.copy()
 
     single_lines = data_new['geometry'].tolist()
+    single_lines_copy = single_lines.copy()
 
     if use_minimal_example:
         # If minimal example is applied, we set a frame on top of Europe and only consider pipelines within this frame
@@ -646,7 +647,43 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
             if line.intersects(frame_polygon):
                 new_single_lines.append(line.intersection(frame_polygon))
 
-        single_lines = new_single_lines
+    else:
+        x_split_point_left = boundaries[3]
+        x_split_point_right = boundaries[2]
+
+        y_split_point_top = boundaries[0]
+        y_split_point_bottom = boundaries[1]
+
+        frame_polygon = Polygon([Point(x_split_point_left, y_split_point_top),
+                                 Point(x_split_point_right, y_split_point_top),
+                                 Point(x_split_point_right, y_split_point_bottom),
+                                 Point(x_split_point_left, y_split_point_bottom)])
+
+        new_single_lines = []
+        for line in single_lines:
+
+            if line.intersects(frame_polygon):
+                new_single_lines.append(line.intersection(frame_polygon))
+
+    single_lines = new_single_lines
+
+    # fig, ax = plt.subplots()
+    # network = gpd.GeoDataFrame(geometry=single_lines)
+    # network.plot(ax=ax, colors='red')
+    # plt.show()
+
+    # always consider infrastructure close to destination since destination might not be in the chosen boundaries
+    if isinstance(destination, Point):
+        for line in single_lines_copy:
+            if line.distance(destination) < gap_distance:  # todo: maybe this should be a fixed, rather generous value
+                new_single_lines.append(line.intersection(destination))
+    else:
+        new_single_lines = []
+        for line in single_lines_copy:
+            if line.intersects(destination):
+                new_single_lines.append(line.intersection(destination))
+
+    single_lines = single_lines + new_single_lines
 
     logging.info('Group single lines to networks')
     single_lines = process_line_strings(single_lines, num_cores, gap_distance, with_adding_lines=True)
@@ -717,10 +754,10 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
                     if len(s) > 1:
                         print('still disconnected')
 
-                        fig, ax = plt.subplots()
-                        network = gpd.GeoDataFrame(geometry=s)
-                        network.plot(ax=ax, colors=create_random_colors(len(s)))
-                        plt.show()
+                        # fig, ax = plt.subplots()
+                        # network = gpd.GeoDataFrame(geometry=s)
+                        # network.plot(ax=ax, colors=create_random_colors(len(s)))
+                        # plt.show()
 
                         # choose network based on total distance to other geometries
                         # geometry with the smallest distance is network
@@ -766,10 +803,10 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
                             #
                             # plt.show()
 
-                        fig, ax = plt.subplots()
-                        network_gdf = gpd.GeoDataFrame(geometry=[network])
-                        network_gdf.plot(ax=ax, colors=create_random_colors(len([network])))
-                        plt.show()
+                        # fig, ax = plt.subplots()
+                        # network_gdf = gpd.GeoDataFrame(geometry=[network])
+                        # network_gdf.plot(ax=ax, colors=create_random_colors(len([network])))
+                        # plt.show()
 
                         if isinstance(network, MultiLineString):
                             network_geoms = []
@@ -808,16 +845,15 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
     data_new.set_geometry('geometry')
 
     data_new.plot(ax=ax, color='red')
-    data_old.plot(ax=ax)
+    # data_old.plot(ax=ax)
 
-    plt.show()
+    # plt.show()
 
     fig, ax = plt.subplots()
-
     number_of_colors = len(data_new.index)
     color = ["#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)]) for i in range(number_of_colors)]
     data_new.plot(ax=ax, color=color)
-    plt.show()
+    # plt.show()
 
     # save processed data in folder (each network own folder)
     name_folder = path_processed_data + name + '_network_data/'

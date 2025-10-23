@@ -99,10 +99,35 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmark, co
                     # commodity not transportable via this option
                     continue
 
-                else:
-                    c_start_df[c_transported + '_transportation_costs_' + m] \
-                        = c_transported_object.get_transportation_costs_specific_mean_of_transport(m) / 1000 \
-                        * c_start_df['distance_to_final_destination']
+                else:  # todo: test
+
+                    if m != 'Shipping':
+                        c_start_df[c_transported + '_transportation_costs_' + m] \
+                            = c_transported_object.get_transportation_costs_specific_mean_of_transport(m) / 1000 \
+                            * c_start_df['distance_to_final_destination']
+                    else:
+                        old_costs = c_start_df[c_transported + '_conversion_costs'].copy()
+                        distances = c_start_df['distance_to_final_destination'].copy()
+                        durations = c_start_df['distance_to_final_destination'].copy() / 1000 / data['Shipping']['speed']
+
+                        boil_off = c_transported_object.get_boil_off()
+                        self_consumption = c_transported_object.get_self_consumption()
+
+                        if not c_transported_object.get_uses_commodity_as_shipping_fuel():
+                            new_costs \
+                                = (old_costs + c_transported_object.get_transportation_costs_specific_mean_of_transport(m) * distances / 1000) / (1 - (durations / 24 * boil_off))
+                        else:
+                            total_boil_off = durations / 24 * boil_off
+                            total_self_consumption = distances / 1000 * self_consumption
+
+                            # if boil off is higher than self consumption, boil off will set efficiency, else self consumption
+                            # efficiency = total_boil_off.combine(total_self_consumption, func=lambda s1, s2: s1.where(s1 > s2, s2))
+                            efficiency = total_boil_off.where(total_boil_off > total_self_consumption,
+                                                              total_self_consumption)
+                            new_costs = old_costs / (1 - efficiency)   # todo: so muss es überall gemacht werden --> checken wo angepasst wurde
+
+                        c_start_df[c_transported + '_transportation_costs_' + m] = new_costs - old_costs
+
 
                     # shipping is only applicable once. Therefore, shipping costs are set to infinity for all
                     # options which have used shipping before (see below)

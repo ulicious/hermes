@@ -16,6 +16,7 @@ from data_processing.helpers_create_voronoi_cells import attach_voronoi_cells_to
 from data_processing.helpers_geometry import randlatlon1, round_to_quarter, create_polygons
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_start_locations, \
     check_if_location_is_valid, attach_feedstock_costs_and_interest_rate
+from data_processing.process_mip_data import calculate_road_distances
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -49,7 +50,7 @@ valid_polygon = Polygon([Point([minimal_longitude, minimal_latitude]),
                          Point([maximal_longitude, maximal_latitude]),
                          Point([maximal_longitude, minimal_latitude])])
 
-levelized_costs_location = pd.read_csv(path_raw_data + config_file['location_data_name'], index_col=0)
+levelized_costs_location = pd.read_csv(path_raw_data + config_file['location_data_name'], index_col=0, sep=';')
 levelized_costs_country = pd.read_csv(path_raw_data + config_file['country_data_name'], index_col=0)
 
 yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
@@ -148,7 +149,11 @@ if not update_only_techno_economic_data:
         country_shape.crs = 'epsg:4326'
         country_shape.to_crs({'proj': 'cea'}, inplace=True)
 
+        # todo: not the most efficient approach and especially difficult when
         number_points = math.ceil(config_file['number_locations'] / (country_shape.area / world_surface.area) * 1.1)
+
+        # some countries are very small and this would take a ridiculous amount of time. Therefore, limit this number
+        number_points = min(number_points, 10000)
 
         for i in range(number_points):
             z = 1 - (i / (number_points - 1)) * 2  # Map z to range [-1, 1]
@@ -277,13 +282,29 @@ else:
 
 # convert polygon strings to shapely objects
 if config_file['use_voronoi_cells']:
-    levelized_costs_location['polygon'] \
-        = levelized_costs_location['polygon'].apply(shapely.wkt.loads)
+
+    if 'polygon' in levelized_costs_location.columns:
+        levelized_costs_location['polygon'] \
+            = levelized_costs_location['polygon'].apply(shapely.wkt.loads)
 
     # Create a spatial index
     spatial_index = index.Index()
-    for idx, poly in enumerate(levelized_costs_location['polygon'].tolist()):
-        spatial_index.insert(idx, poly.bounds)
+    for i in levelized_costs_location.index:
+
+        if 'polygon' not in levelized_costs_location.columns:
+
+            longitude = levelized_costs_location.loc[i, 'longitude']
+            latitude = levelized_costs_location.loc[i, 'latitude']
+
+            poly = Polygon([Point(longitude+0.25, latitude-0.25),
+                            Point(longitude+0.25, latitude+0.25),
+                            Point(longitude-0.25, latitude+0.25),
+                            Point(longitude-0.25, latitude-0.25)])
+
+        else:
+            poly = levelized_costs_location.loc[i, 'polygon']
+
+        spatial_index.insert(i, poly.bounds)
 else:
     spatial_index = None
 
@@ -307,3 +328,28 @@ locations = locations[columns_to_keep]
 
 locations['geometry'] = locations['geometry'].apply(lambda x: x.wkt)
 locations.to_csv(config_file['project_folder_path'] + 'start_destination_combinations.csv')
+
+create_mip_data = config_file['create_mip_data']
+if create_mip_data:
+    path = config_file['project_folder_path'] + '/processed_data/'
+
+    options = pd.read_csv(path + 'mip_data/' + 'options.csv', index_col=0)
+
+    # distances
+    for ind in locations.index:
+
+        options_with_location = options.copy()
+        options_with_location = pd.concat([options_with_location, locations.loc[[ind], ['longitude', 'latitude']]], axis=0)
+        options_with_location.index.values[-1] = 'start'
+        point = Point([locations.loc[ind, 'longitude'], locations.loc[ind, 'latitude']])
+
+        road_distances = calculate_road_distances(config_file['tolerance_distance'], options_with_location,
+                                                  single_point=point, single_point_name='start')
+        new_pipeline_distances = road_distances.copy()
+        new_pipeline_distances = new_pipeline_distances[new_pipeline_distances['distance'] <= config_file['max_length_new_segment']]
+
+        road_distances['distance'] *= config_file['no_road_multiplier']
+        new_pipeline_distances['distance'] *= config_file['no_road_multiplier']
+
+        road_distances.to_csv(path + 'mip_data/' + str(ind) +  '_start_road_distances.csv')
+        new_pipeline_distances.to_csv(path + 'mip_data/' + str(ind) + '_start_new_pipeline_distances.csv')

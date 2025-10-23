@@ -59,12 +59,23 @@ def run_algorithm(args):
     complete_infrastructure = get_complete_infrastructure(data, configuration)
 
     if configuration['destination_type'] == 'country':
-        data['destination']['infrastructure'] = complete_infrastructure.loc[data['destination']['infrastructure'], :].copy()
+        infrastructure_at_destination = complete_infrastructure.loc[data['destination']['infrastructure'], :].copy()
+
+        if infrastructure_at_destination.empty:
+            print('Infrastructure at destination is empty. Adjust considered infrastructure in process raw data script')
+            return None
+
+        data['destination']['infrastructure'] = infrastructure_at_destination
 
     complete_infrastructure = check_if_benchmark_possible(data, configuration, complete_infrastructure)
 
     # adjust minimal distances by checking if distance to destination is minimal distance
     minimal_distances = data['minimal_distances']
+
+    for c in minimal_distances.index:
+        if c not in complete_infrastructure.index:
+            print(c)
+
     minimal_distances['distance_to_destination'] = complete_infrastructure.loc[minimal_distances.index, 'distance_to_destination']
     to_destination_lower = minimal_distances[minimal_distances['minimal_distance'] >= minimal_distances['distance_to_destination']].index
     minimal_distances.loc[to_destination_lower, 'minimal_distance'] = minimal_distances.loc[to_destination_lower, 'distance_to_destination']
@@ -239,29 +250,30 @@ def run_algorithm(args):
 
                     commodity_object.get_transportation_costs_specific_mean_of_transport(mot)
 
-                # attach transportation costs
-                if commodity_object.get_transportation_options_specific_mean_of_transport('New_Pipeline_Gas'):
-                    branches.loc[commodity_object_branches, 'new_transportation_costs'] \
-                        = commodity_object.get_transportation_costs_specific_mean_of_transport('New_Pipeline_Gas')
-                elif commodity_object.get_transportation_options_specific_mean_of_transport('New_Pipeline_Liquid'):
-                    branches.loc[commodity_object_branches, 'new_transportation_costs'] \
-                        = commodity_object.get_transportation_costs_specific_mean_of_transport('New_Pipeline_Liquid')
+                # attach transportation costs  # todo: are they required?
+                if False:
+                    if commodity_object.get_transportation_options_specific_mean_of_transport('New_Pipeline_Gas'):
+                        branches.loc[commodity_object_branches, 'new_transportation_costs'] \
+                            = commodity_object.get_transportation_costs_specific_mean_of_transport('New_Pipeline_Gas')
+                    elif commodity_object.get_transportation_options_specific_mean_of_transport('New_Pipeline_Liquid'):
+                        branches.loc[commodity_object_branches, 'new_transportation_costs'] \
+                            = commodity_object.get_transportation_costs_specific_mean_of_transport('New_Pipeline_Liquid')
 
-                if commodity_object.get_transportation_options_specific_mean_of_transport('Road'):
-                    branches.loc[commodity_object_branches, 'road_transportation_costs'] \
-                        = commodity_object.get_transportation_costs_specific_mean_of_transport('Road')
+                    if commodity_object.get_transportation_options_specific_mean_of_transport('Road'):
+                        branches.loc[commodity_object_branches, 'road_transportation_costs'] \
+                            = commodity_object.get_transportation_costs_specific_mean_of_transport('Road')
 
-                if commodity_object.get_transportation_options_specific_mean_of_transport('Pipeline_Gas'):
-                    branches.loc[commodity_object_branches, 'Pipeline_Gas_costs'] \
-                        = commodity_object.get_transportation_costs_specific_mean_of_transport('Pipeline_Gas')
+                    if commodity_object.get_transportation_options_specific_mean_of_transport('Pipeline_Gas'):
+                        branches.loc[commodity_object_branches, 'Pipeline_Gas_costs'] \
+                            = commodity_object.get_transportation_costs_specific_mean_of_transport('Pipeline_Gas')
 
-                if commodity_object.get_transportation_options_specific_mean_of_transport('Pipeline_Liquid'):
-                    branches.loc[commodity_object_branches, 'Pipeline_Liquid_costs'] \
-                        = commodity_object.get_transportation_costs_specific_mean_of_transport('Pipeline_Liquid')
+                    if commodity_object.get_transportation_options_specific_mean_of_transport('Pipeline_Liquid'):
+                        branches.loc[commodity_object_branches, 'Pipeline_Liquid_costs'] \
+                            = commodity_object.get_transportation_costs_specific_mean_of_transport('Pipeline_Liquid')
 
-                elif commodity_object.get_transportation_options_specific_mean_of_transport('Shipping'):
-                    branches.loc[commodity_object_branches, 'Shipping_costs'] \
-                        = commodity_object.get_transportation_costs_specific_mean_of_transport('Shipping')
+                    elif commodity_object.get_transportation_options_specific_mean_of_transport('Shipping'):
+                        branches.loc[commodity_object_branches, 'Shipping_costs'] \
+                            = commodity_object.get_transportation_costs_specific_mean_of_transport('Shipping')
 
             # we have two kind of options now:
             # 1 all branches which used new infrastructure / road previously are now at an infrastructure

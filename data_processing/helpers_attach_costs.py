@@ -3,6 +3,7 @@ import shapely
 
 import geopandas as gpd
 import pandas as pd
+import numpy as np
 
 import tqdm
 import math
@@ -326,6 +327,9 @@ def calculate_conversion_costs(specific_investment, depreciation_period, fixed_m
         + electricity_costs * electricity_demand + co2_costs * co2_demand \
         + nitrogen_costs * nitrogen_demand + heat_demand * heat_costs
 
+    # some parameters might be nan (for example, no defined interest rate since offshore) --> replace nan with inf in that case
+    conversion_costs = conversion_costs.replace(np.nan, np.inf)
+
     return conversion_costs
 
 
@@ -512,6 +516,7 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
             co2_costs = 0
 
         for c1_local in config_file['available_commodity']:
+
             for c2_local in techno_economic_data_conversion[c1_local]['potential_conversions']:
                 electricity_demand = techno_economic_data_conversion[c1_local][c2_local]['electricity_demand']
                 co2_demand = techno_economic_data_conversion[c1_local][c2_local]['co2_demand']
@@ -586,7 +591,11 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
 
     path_raw_data = config_file['project_folder_path'] + 'raw_data/'
 
-    levelized_costs_location = pd.read_csv(path_raw_data + config_file['location_data_name'], index_col=0)
+    try:
+        levelized_costs_location = pd.read_csv(path_raw_data + config_file['location_data_name'], index_col=0)
+    except:
+        levelized_costs_location = pd.read_csv(path_raw_data + config_file['location_data_name'], index_col=0, sep=';')
+
     levelized_costs_country = pd.read_csv(path_raw_data + config_file['country_data_name'], index_col=0)
 
     # add country information to options
@@ -757,11 +766,10 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
     conversion_solutions = pd.concat([country_options, no_country_options])
 
     # if data for index - commodity combination does not exist, we set costs to infinity
-    for combination in new_nan_values:
-        i = combination[0]
-        key = combination[1]
-
-        conversion_solutions.at[i, key] = math.inf
+    cols_to_update = ['Electricity', 'CO2', 'Nitrogen', 'Low_Temperature_Heat', 'Mid_Temperature_Heat',
+                      'High_Temperature_Heat', 'interest_rate']
+    for col in cols_to_update:
+        conversion_solutions[col] = conversion_solutions[col].replace(np.nan, np.inf)
 
     port_options = [i for i in conversion_solutions.index if 'H' in i]
     port_options = conversion_solutions.loc[port_options, :]

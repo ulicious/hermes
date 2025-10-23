@@ -1,45 +1,73 @@
 # all costs in € / MWh / 1000 km
+# boil-off in # % / 100 / d
+# Self_Consumption in % / km / 100
+
+Shipping_Speed: 44.448  # in kmh (24 knots)
 
 Hydrogen_Gas:
    potential_transportation: ['Pipeline_Gas', 'New_Pipeline_Gas', 'Road']
    Pipeline_Gas: 4.88
    New_Pipeline_Gas: 3.11
    Road: 126.62
+   Boil_Off: 0
+   Uses_Commodity_as_Shipping_Fuel: False
+   Self_Consumption: 0
 
 Hydrogen_Liquid:
    potential_transportation: ['Shipping', 'Road']
    Shipping: 1.36
    Road: 23
+   Boil_Off: 0.002
+   Uses_Commodity_as_Shipping_Fuel: True
+   Self_Consumption: 0.0000036
 
 Ammonia:
    potential_transportation: [ 'Shipping', 'Road' ]
    Shipping: 0.68
    Road: 33.57
+   Boil_Off: 0.0001
+   Uses_Commodity_as_Shipping_Fuel: True
+   Self_Consumption: 0.0000017
 
 Methanol:
    potential_transportation: [ 'Shipping', 'Road' ]
    Shipping: 0.47
    Road: 10.29
+   Boil_Off: 0
+   Uses_Commodity_as_Shipping_Fuel: True
+   Self_Consumption: 0.0000012
 
 Methane_Gas:
    potential_transportation: ['Pipeline_Gas', 'New_Pipeline_Gas']
    Pipeline_Gas: 1.43
    New_Pipeline_Gas: 0.88
+   Boil_Off: 0
+   Uses_Commodity_as_Shipping_Fuel: False
+   Self_Consumption: 0
 
 Methane_Liquid:
    potential_transportation: [ 'Shipping', 'Road' ]
    Shipping: 0.92
    Road: 16.69
+   Boil_Off: 0.001
+   Uses_Commodity_as_Shipping_Fuel: True
+   Self_Consumption: 0.0000014
 
 DBT:
    potential_transportation: [ 'Shipping', 'Road' ]
    Shipping: 1.31
    Road: 42.58
+   Boil_Off: 0
+   Uses_Commodity_as_Shipping_Fuel: False
+   Self_Consumption: 0.0000018
 
 MCH:
    potential_transportation: [ 'Shipping', 'Road' ]
    Shipping: 1.31
    Road: 43.28
+   Boil_Off: 0
+   Uses_Commodity_as_Shipping_Fuel: False
+   Self_Consumption: 0.0000015
 
 FTF:
    potential_transportation: ['Pipeline_Liquid', 'New_Pipeline_Liquid', 'Shipping', 'Road']
@@ -47,4 +75,7 @@ FTF:
    New_Pipeline_Liquid: 0.24
    Shipping: 0.14
    Road: 5.11
+   Boil_Off: 0
+   Uses_Commodity_as_Shipping_Fuel: True
+   Self_Consumption: 0.0000003
 

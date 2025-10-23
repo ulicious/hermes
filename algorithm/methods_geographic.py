@@ -179,7 +179,7 @@ def check_if_reachable_on_land(target_location, list_longitude, list_latitude, c
 
         polygons = coastline.loc[polygons_index, :]
 
-    if False:
+    if False:  # to check the data
 
         fig, ax = plt.subplots()
 
