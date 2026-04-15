@@ -14,6 +14,39 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
+def _build_options_from_mask(values, row_index, column_index, mask):
+    row_positions, column_positions = np.nonzero(mask)
+    if len(row_positions) == 0:
+        return pd.DataFrame(columns=['previous_branch', 'current_node', 'current_distance'])
+
+    row_index = np.asarray(row_index, dtype=object)
+    column_index = np.asarray(column_index, dtype=object)
+    return pd.DataFrame({
+        'previous_branch': column_index[column_positions],
+        'current_node': row_index[row_positions],
+        'current_distance': values[row_positions, column_positions],
+    })
+
+
+def _remove_visited_options_from_mask(mask, row_index, column_index, visited_infrastructure):
+    row_lookup = pd.Index(row_index)
+    column_lookup = {branch: position for position, branch in enumerate(column_index)}
+
+    for infrastructure_data in visited_infrastructure.values():
+        affected_columns = [column_lookup[branch]
+                            for branch in infrastructure_data['branches']
+                            if branch in column_lookup]
+        if not affected_columns:
+            continue
+
+        row_positions = row_lookup.get_indexer(infrastructure_data['nodes'])
+        row_positions = row_positions[row_positions >= 0]
+        if len(row_positions) == 0:
+            continue
+
+        mask[np.ix_(row_positions, affected_columns)] = False
+
+
 def get_complete_infrastructure(data, config_file):
 
     """
@@ -130,10 +163,16 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         branches_to_keep_road = []
         branches_to_keep_new = []
 
+        distance_values = np.asarray(distances).transpose()
+        reduced_infrastructure_index = np.asarray(reduced_infrastructure_index, dtype=object)
+        road_values = distance_values.copy()
+        road_mask = np.zeros(distance_values.shape, dtype=bool)
+        new_infrastructure_mask = np.zeros(distance_values.shape, dtype=bool)
+
         # for each branch, assess if new pipelines or road is applicable based on current commodity
-        road_distances = pd.DataFrame(distances.transpose(), index=reduced_infrastructure_index, columns=branches.index)
         for branch_index in branches.index:
             current_commodity_object = branches.at[branch_index, 'current_commodity_object']
+            branch_position = branches.index.get_loc(branch_index)
 
             pipeline_applicable \
                 = current_commodity_object.get_transportation_options_specific_mean_of_transport('Pipeline_Gas') \
@@ -153,13 +192,13 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 road_transportation_costs[branch_index]\
                     = current_commodity_object.get_transportation_costs_specific_mean_of_transport('Road')
                 branches_to_keep_road.append(branch_index)
+                road_mask[:, branch_position] = distance_values[:, branch_position] <= max_length_road / no_road_multiplier
             else:
                 # branches where the above does not allow new road but as infrastructure is within tolerance, we can
                 # ignore transport mean as in this case we assume that we are already there
-                in_tolerance_options = road_distances[branch_index]
-                in_tolerance_options = in_tolerance_options[in_tolerance_options <= configuration['tolerance_distance']].index
-                road_distances[branch_index] = math.nan
-                road_distances.loc[in_tolerance_options, branch_index] = 0
+                in_tolerance_options = distance_values[:, branch_position] <= configuration['tolerance_distance']
+                road_values[in_tolerance_options, branch_position] = 0
+                road_mask[:, branch_position] = in_tolerance_options
 
                 road_transportation_costs[branch_index] = 0
                 branches_to_keep_road.append(branch_index)
@@ -178,27 +217,15 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                     new_transportation_costs[branch_index]\
                         = current_commodity_object.get_transportation_costs_specific_mean_of_transport('New_Pipeline_Liquid')
                 branches_to_keep_new.append(branch_index)
+                new_infrastructure_mask[:, branch_position] \
+                    = distance_values[:, branch_position] <= max_length_new_segment / no_road_multiplier
 
-        # for road options, only keep branches where road is applicable
-        road_distances = road_distances[branches_to_keep_road]
         road_transportation_costs = pd.Series(road_transportation_costs.values(), index=road_transportation_costs.keys())
-
-        # remove road options where distance is above allowed configuration
-        road_options = road_distances[road_distances <= max_length_road / no_road_multiplier]
-        road_options = road_options.transpose().stack().dropna().reset_index()
-        road_options.columns = ['previous_branch', 'current_node', 'current_distance']
-
-        # for new pipeline options, only keep branches where new pipelines are allowed and are applicable
-        new_infrastructure_distances = pd.DataFrame(distances.transpose(), index=reduced_infrastructure_index,
-                                                    columns=branches.index)
-
-        new_infrastructure_distances = new_infrastructure_distances[branches_to_keep_new]
         new_transportation_costs = pd.Series(new_transportation_costs.values(), index=new_transportation_costs.keys())
 
-        new_infrastructure_options \
-            = new_infrastructure_distances[new_infrastructure_distances <= max_length_new_segment / no_road_multiplier]
-        new_infrastructure_options = new_infrastructure_options.transpose().stack().dropna().reset_index()
-        new_infrastructure_options.columns = ['previous_branch', 'current_node', 'current_distance']
+        road_options = _build_options_from_mask(road_values, reduced_infrastructure_index, branches.index, road_mask)
+        new_infrastructure_options = _build_options_from_mask(distance_values, reduced_infrastructure_index,
+                                                              branches.index, new_infrastructure_mask)
 
     else:
         # if iteration is not 0, there might be a large number of branches. Therefore, we need to preselect
@@ -327,110 +354,76 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             commodity_object = data['commodities']['commodity_objects'][c]
 
             # exchange current_node columns with corresponding branch names
-            node_list = c_branches['current_node'].tolist()  # list is unique as there can be just one branch at node or port with the same commodity
-            branch_list = c_branches.index.tolist()
-            new_column_list = []
-            columns_to_keep = []
-            for n in distances.columns:
-                if n in node_list:
-                    new_column_list.append(branch_list[node_list.index(n)])
-                    columns_to_keep.append(n)
+            node_to_branch = dict(zip(c_branches['current_node'], c_branches.index))
+            columns_to_keep = [n for n in distances.columns if n in node_to_branch]
+            if not columns_to_keep:
+                continue
 
-            c_distances = distances.loc[:, columns_to_keep].copy()  # keep only the columns where current branches are
-            c_distances.columns = new_column_list  # rename columns to respective branche index
+            column_index = np.asarray([node_to_branch[n] for n in columns_to_keep], dtype=object)
+            row_index = distances.index
+            distance_values = distances.loc[:, columns_to_keep].to_numpy(copy=False)
+            branch_meta = c_branches.loc[column_index]
 
             # some locations are within tolerance. These are processed separately as we don't need transportation
-            c_distances_stacked = c_distances.transpose().stack().dropna()
-            in_tolerance_distances = c_distances_stacked[c_distances_stacked <= configuration['tolerance_distance']]
-            if not in_tolerance_distances.empty:
-                in_tolerance_distances.loc[:] = 0  # in tolerance means 0 distance
+            in_tolerance_mask = distance_values <= configuration['tolerance_distance']
+            if np.any(in_tolerance_mask):
+                in_tolerance_distances = _build_options_from_mask(distance_values, row_index, column_index,
+                                                                  in_tolerance_mask)
+                in_tolerance_distances['current_distance'] = 0  # in tolerance means 0 distance
                 all_road_distances.append(in_tolerance_distances)
 
             if commodity_object.get_transportation_options()['Road']:
 
-                road_distances = c_distances.transpose().copy()
-                columns = road_distances.columns  # get initial columns before new ones are added
-
                 # remove all branches where road is not applicable (remove rows)
-                road_distances['road_applicable'] = c_branches['Road_applicable'].tolist()
-                road_distances = road_distances[road_distances['road_applicable']]
+                road_applicable = branch_meta['Road_applicable'].to_numpy(dtype=bool)
 
                 # remove all options where max length exceeds distance (remove columns)
                 max_length_road_costs \
-                    = list((benchmarks[commodity_object.get_name()] - c_branches['current_total_costs']) * 1000
-                           / c_branches['road_transportation_costs'] / no_road_multiplier)
-                max_length_road_list = [min(n, max_length_road / no_road_multiplier) for n in max_length_road_costs]
-                road_distances['max_length'] = max_length_road_list
-
-                mask = road_distances[columns].values > road_distances['max_length'].values[:, None]
-                road_distances.loc[:, columns] = np.where(mask, np.nan, road_distances[columns].values)
-                road_distances.drop(columns=['max_length', 'road_applicable'], inplace=True)
+                    = (benchmarks[commodity_object.get_name()] - branch_meta['current_total_costs']).to_numpy() * 1000 \
+                    / branch_meta['road_transportation_costs'].to_numpy() / no_road_multiplier
+                max_length_road_array = np.minimum(max_length_road_costs, max_length_road / no_road_multiplier)
+                road_mask = (distance_values <= max_length_road_array[None, :]) & road_applicable[None, :]
 
                 # remove options based on previous used infrastructure
-                for branch_index in branches_to_remove_based_on_visited_infrastructure.keys():
-                    affected_branches \
-                        = list(set(road_distances.index.tolist()).intersection(branches_to_remove_based_on_visited_infrastructure[branch_index]['branches']))
-                    road_distances.loc[affected_branches, branches_to_remove_based_on_visited_infrastructure[branch_index]['nodes']] = np.nan
+                _remove_visited_options_from_mask(road_mask, row_index, column_index,
+                                                  branches_to_remove_based_on_visited_infrastructure)
 
-                # drop all nodes which cannot be visited
-                road_distances = road_distances.stack().dropna()
-                road_distances = road_distances.apply(pd.to_numeric, errors='coerce').dropna()
+                road_distances = _build_options_from_mask(distance_values, row_index, column_index, road_mask)
 
                 # todo: some values are b'' --> why?
 
-                all_road_distances.append(road_distances)
+                if not road_distances.empty:
+                    all_road_distances.append(road_distances)
 
             # create and process new infrastructure distances
             if (commodity_object.get_transportation_options()['New_Pipeline_Gas']
                     | commodity_object.get_transportation_options()['New_Pipeline_Liquid']):
 
-                new_distances = c_distances.transpose().copy()
-                columns = new_distances.columns
-
                 # add information before any change to distances is made
-                new_distances['pipeline_gas_applicable'] = c_branches['Pipeline_Gas_applicable'].tolist()
-                new_distances['pipeline_liquid_applicable'] = c_branches['Pipeline_Liquid_applicable'].tolist()
-                new_distances['max_length'] = max_length_new_segment / no_road_multiplier
-                new_distances['minimal_distance'] = minimal_distances.loc[columns_to_keep, 'minimal_distance'].tolist()
+                pipeline_applicable = (branch_meta['Pipeline_Gas_applicable'].to_numpy(dtype=bool)
+                                       | branch_meta['Pipeline_Liquid_applicable'].to_numpy(dtype=bool))
+                minimal_distance = minimal_distances.loc[columns_to_keep, 'minimal_distance'].to_numpy()
 
-                # remove branches where all minimal distances are already higher than minimal distance to next node
-                new_distances = \
-                    new_distances[new_distances['minimal_distance'] <= max_length_new_segment / no_road_multiplier]
-
-                # only choose branches which are applicable for new infrastructure
-                new_distances = new_distances[(new_distances['pipeline_gas_applicable']) | (new_distances['pipeline_liquid_applicable'])]
-
-                # remove all options where distance is larger than max length
-                mask = new_distances[columns].values > new_distances['max_length'].values[:, None]
-                new_distances.loc[:, columns] = np.where(mask, np.nan, new_distances[columns].values)
-
-                # remove unnecessary columns
-                new_distances.drop(
-                    columns=['minimal_distance', 'max_length', 'pipeline_gas_applicable', 'pipeline_liquid_applicable'],
-                    inplace=True)
+                # remove branches where all minimal distances are already higher than minimal distance to next node,
+                # choose branches which are applicable for new infrastructure, and remove distances above max length.
+                new_branch_mask = (minimal_distance <= max_length_new_segment / no_road_multiplier) & pipeline_applicable
+                new_mask = (distance_values <= max_length_new_segment / no_road_multiplier) & new_branch_mask[None, :]
 
                 # remove used infrastructure
-                for branch_index in branches_to_remove_based_on_visited_infrastructure.keys():
-                    affected_branches \
-                        = list(set(new_distances.index.tolist()).intersection(branches_to_remove_based_on_visited_infrastructure[branch_index]['branches']))
-                    new_distances.loc[affected_branches, branches_to_remove_based_on_visited_infrastructure[branch_index]['nodes']] = np.nan
+                _remove_visited_options_from_mask(new_mask, row_index, column_index,
+                                                  branches_to_remove_based_on_visited_infrastructure)
 
-                # restructure
-                new_distances = new_distances.stack().dropna()
-                new_distances = new_distances.apply(pd.to_numeric, errors='coerce').dropna()
-                all_new_distances.append(new_distances)
+                new_distances = _build_options_from_mask(distance_values, row_index, column_index, new_mask)
+                if not new_distances.empty:
+                    all_new_distances.append(new_distances)
 
         if all_road_distances:
-            road_options = pd.concat(all_road_distances)
-            road_options = road_options.reset_index()
-            road_options.columns = ['previous_branch', 'current_node', 'current_distance']
+            road_options = pd.concat(all_road_distances, ignore_index=True)
         else:
             road_options = pd.DataFrame()
 
         if all_new_distances:
-            new_infrastructure_options = pd.concat(all_new_distances).transpose()
-            new_infrastructure_options = new_infrastructure_options.reset_index()
-            new_infrastructure_options.columns = ['previous_branch', 'current_node', 'current_distance']
+            new_infrastructure_options = pd.concat(all_new_distances, ignore_index=True)
         else:
             new_infrastructure_options = pd.DataFrame()
 
@@ -690,8 +683,8 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                     # pass branch because infrastructure was already used
                     continue
 
-                distances = shipping_distances.loc[start_infrastructure, shipping_infrastructure.index].copy()
-                durations = distances.copy() / 1000 / current_commodity_object.get_shipping_speed()
+                distances = shipping_distances.loc[start_infrastructure, shipping_infrastructure.index]
+                durations = distances / 1000 / current_commodity_object.get_shipping_speed()
 
                 efficiency, current_total_costs_distances \
                     = current_commodity_object.get_distance_and_duration_based_costs_and_efficiency_shipping(distances, durations, current_total_costs)
@@ -741,8 +734,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
 
                     for n in nodes:
                         distances = nx.single_source_dijkstra_path_length(graph, n)
-                        distances = pd.DataFrame(distances.values(), index=[*distances.keys()], columns=[n], dtype='int32')
-                        distances = distances.loc[n]
+                        distances = pd.Series(distances, dtype='int32')
 
                         graph_distances[n] = distances
 
@@ -771,13 +763,10 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
 
                 if not configuration['use_low_storage']:
                     path_processed_data = configuration['path_processed_data']
-                    distances \
-                        = pd.read_hdf(path_processed_data + '/inner_infrastructure_distances/' + start_infrastructure + '.h5',
-                                      mode='r', title=graph_id)
-                    distances = np.ceil(distances)
-                    distances = distances.astype('int32')
-
-                    distances = pd.Series(distances.transpose().values[0], index=distances.index)
+                    distances = pd.read_hdf(path_processed_data + '/inner_infrastructure_distances/'
+                                            + start_infrastructure + '.h5', mode='r', title=graph_id)
+                    distances = pd.Series(np.ceil(distances.iloc[:, 0].to_numpy()).astype('int32', copy=False),
+                                          index=distances.index)
                     distances = distances.loc[data[mot][graph_id]['NodeLocations'].index]
                 else:
                     distances = graph_distances[start_infrastructure]
@@ -951,7 +940,7 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
             if start_infrastructure in used_infrastructure:
                 continue
 
-            distances = shipping_distances.loc[start_infrastructure, :].copy()
+            distances = shipping_distances.loc[start_infrastructure, :]
             durations = distances / 1000 / current_commodity_object.get_shipping_speed()
 
             efficiency, current_total_costs_distances \
@@ -961,10 +950,10 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
 
             # assess for benchmark
             current_total_costs_distances_benchmark = current_total_costs_distances[current_total_costs_distances <= benchmarks[current_commodity_object.get_name()]].dropna()
-            current_total_costs_distances = current_total_costs_distances.loc[current_total_costs_distances_benchmark.index, :]
+            current_total_costs_distances = current_total_costs_distances.loc[current_total_costs_distances_benchmark.index]
 
             transportation_costs = current_total_costs_distances - current_total_costs
-            transportation_costs = transportation_costs.loc[current_total_costs_distances.index, :]  # todo: row or columns?
+            transportation_costs = transportation_costs.loc[current_total_costs_distances.index]  # todo: row or columns?
 
             current_infrastructure = 'Shipping'
 
@@ -1002,16 +991,14 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
             if not configuration['use_low_storage']:
                 # uses precalculated distances
                 path_processed_data = configuration['path_processed_data']
-                distances \
-                    = pd.read_hdf(path_processed_data + '/inner_infrastructure_distances/' + start_infrastructure + '.h5',
-                                  mode='r', title=graph_id)
-                distances = np.ceil(distances)
+                distances = pd.read_hdf(path_processed_data + '/inner_infrastructure_distances/'
+                                        + start_infrastructure + '.h5', mode='r', title=graph_id)
+                distances = pd.Series(np.ceil(distances.iloc[:, 0].to_numpy()), index=distances.index)
             else:
                 # calculates distances from current node
                 graph = data[mot][graph_id]['Graph']
                 distances = nx.single_source_dijkstra_path_length(graph, start_infrastructure)
-                distances = pd.DataFrame(distances.values(), index=[*distances.keys()], columns=[start_infrastructure])
-                distances = distances.loc[start_infrastructure]  # todo: check how it looks like
+                distances = pd.Series(distances)  # todo: check how it looks like
 
             current_total_costs_distances = distances / 1000 * transportation_costs + current_total_costs
 
@@ -1023,7 +1010,7 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
             taken_route = []
             for i in distances.index:
                 comparison_index.append(i + '-' + current_commodity_object.get_name())
-                taken_route.append((start_infrastructure, mot, distances.at[i, start_infrastructure], i))
+                taken_route.append((start_infrastructure, mot, distances.at[i], i))
 
         infrastructure = pd.DataFrame(distances.values, index=distances.index, columns=['current_distance'])
         infrastructure['previous_branch'] = o
@@ -1067,10 +1054,6 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
 
             # calculate minimal potential costs to final destination
             final_destination = data['destination']['location']
-            infrastructure['distance_to_final_destination'] \
-                = calc_distance_list_to_single(infrastructure['latitude'],
-                                               infrastructure['longitude'],
-                                               final_destination.y, final_destination.x)
 
             if configuration['destination_type'] == 'location':
                 infrastructure['distance_to_final_destination']\
