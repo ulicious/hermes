@@ -324,8 +324,6 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             if c_branches.empty:
                 continue
 
-            # c_distance is the complete infrastructure (except limitations). We need to make it smaller
-            c_distances = distances.copy()
             commodity_object = data['commodities']['commodity_objects'][c]
 
             # exchange current_node columns with corresponding branch names
@@ -338,11 +336,11 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                     new_column_list.append(branch_list[node_list.index(n)])
                     columns_to_keep.append(n)
 
-            c_distances = c_distances[columns_to_keep]  # keep only the columns where current branches are
+            c_distances = distances.loc[:, columns_to_keep].copy()  # keep only the columns where current branches are
             c_distances.columns = new_column_list  # rename columns to respective branche index
 
             # some locations are within tolerance. These are processed separately as we don't need transportation
-            c_distances_stacked = c_distances.copy().transpose().stack().dropna()
+            c_distances_stacked = c_distances.transpose().stack().dropna()
             in_tolerance_distances = c_distances_stacked[c_distances_stacked <= configuration['tolerance_distance']]
             if not in_tolerance_distances.empty:
                 in_tolerance_distances.loc[:] = 0  # in tolerance means 0 distance
@@ -350,7 +348,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
             if commodity_object.get_transportation_options()['Road']:
 
-                road_distances = c_distances.copy().transpose()
+                road_distances = c_distances.transpose().copy()
                 columns = road_distances.columns  # get initial columns before new ones are added
 
                 # remove all branches where road is not applicable (remove rows)
@@ -386,7 +384,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             if (commodity_object.get_transportation_options()['New_Pipeline_Gas']
                     | commodity_object.get_transportation_options()['New_Pipeline_Liquid']):
 
-                new_distances = c_distances.copy().transpose()
+                new_distances = c_distances.transpose().copy()
                 columns = new_distances.columns
 
                 # add information before any change to distances is made
@@ -570,12 +568,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             distances = calc_distance_list_to_list(outside_options['latitude'], outside_options['longitude'],
                                                    infrastructure_in_destination['latitude'],
                                                    infrastructure_in_destination['longitude'])
-            distances = pd.DataFrame(distances, index=infrastructure_in_destination.index,
-                                     columns=outside_options.index, dtype='int32').transpose()
-
-            # print(distances)
-
-            outside_options['distance_to_final_destination'] = distances.min('columns')
+            outside_options['distance_to_final_destination'] = np.asarray(distances).min(axis=0)
 
         #     print(distances.idxmin('columns'))
         #     print(distances['PG_Graph_7_Node_2947'])
@@ -650,28 +643,17 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
 
     destination_continent = data['destination']['continent']
 
-    processed_infrastructure = {}
-    considered_branches = []
-    starting_points = []
-    branch_list = []
-    transport_mean = []
-    current_infrastructure = []
-    transportation_costs_list = []
-    all_costs = []
-    comparison_index = []
-    taken_route = []
-    efficiencies = []
+    infrastructure_chunks = []
 
     for mot in branches['current_transport_mean'].unique():
-        options_m = branches.loc[branches['current_transport_mean'] == mot].copy()
+        options_m = branches.loc[branches['current_transport_mean'] == mot]
 
         if options_m.empty:
             continue
 
         if mot == 'Shipping':
 
-            shipping_infrastructure = data['Shipping']['ports'].copy()
-            shipping_infrastructure['current_transport_mean'] = 'Shipping'
+            shipping_infrastructure = data['Shipping']['ports']
 
             # Only use ports which are on the same continent as the final destination
             if destination_continent in ['Europe', 'Asia', 'Africa']:
@@ -723,34 +705,27 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                 transportation_costs = current_total_costs_distances - current_total_costs
                 transportation_costs = transportation_costs.loc[current_total_costs_distances.index] / distances.loc[current_total_costs_distances.index] * 1000
 
-                efficiencies_m = [branches.loc[s, 'total_efficiency'] * e for e in efficiency]
-                efficiencies += efficiencies_m
-
                 if current_total_costs_distances.empty:
                     continue
 
-                length_index = len(current_total_costs_distances.index)
-
-                all_costs += current_total_costs_distances.values.tolist()
-
-                shipping_infrastructure.loc[current_total_costs_distances.index, s] \
-                    = distances.loc[current_total_costs_distances.index]
-
-                considered_branches.append(s)
-                starting_points += [start_infrastructure] * length_index
-                branch_list += [s] * length_index
-
-                current_infrastructure += current_total_costs_distances.index.tolist()
-                transport_mean += ['Shipping'] * length_index
-
-                transportation_costs_list += list(transportation_costs)
-
-                for i in current_total_costs_distances.index:
-                    comparison_index.append(i + '-' + current_commodity_object.get_name())
-
-                taken_route += [(start_infrastructure, mot, distances.at[i], i, efficiency.loc[i]) for i in current_total_costs_distances.index]
-
-            processed_infrastructure['Shipping'] = shipping_infrastructure
+                current_index = current_total_costs_distances.index
+                infrastructure = pd.DataFrame({
+                    'previous_branch': s,
+                    'current_node': current_index,
+                    'current_distance': distances.loc[current_index].to_numpy(),
+                    'starting_point': start_infrastructure,
+                    'current_transport_mean': 'Shipping',
+                    'current_infrastructure': current_index,
+                    'current_total_costs': current_total_costs_distances.to_numpy(),
+                    'specific_transportation_costs': transportation_costs.to_numpy(),
+                    'comparison_index': [i + '-' + current_commodity_object.get_name() for i in current_index],
+                    'taken_route': [(start_infrastructure, mot, distances.at[i], i, efficiency.loc[i])
+                                    for i in current_index],
+                    'total_efficiency': [branches.loc[s, 'total_efficiency'] * e for e in efficiency],
+                    'current_commodity': current_commodity_object.get_name(),
+                    'current_commodity_object': current_commodity_object,
+                })
+                infrastructure_chunks.append(infrastructure)
 
         else:
 
@@ -792,11 +767,6 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                 if graph_id in used_infrastructure:
                     continue
 
-                if graph_id in processed_infrastructure.keys():
-                    pipeline_infrastructure = processed_infrastructure[graph_id]
-                else:
-                    pipeline_infrastructure = data[mot][graph_id]['NodeLocations'].copy()
-
                 start_infrastructure = options_m.at[s, 'current_node']
 
                 if not configuration['use_low_storage']:
@@ -808,7 +778,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                     distances = distances.astype('int32')
 
                     distances = pd.Series(distances.transpose().values[0], index=distances.index)
-                    distances = distances.loc[pipeline_infrastructure.index]
+                    distances = distances.loc[data[mot][graph_id]['NodeLocations'].index]
                 else:
                     distances = graph_distances[start_infrastructure]
 
@@ -822,59 +792,36 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                 if current_total_costs_distances.empty:
                     continue
 
-                length_index = len(current_total_costs_distances.index)
+                current_index = current_total_costs_distances.index
+                length_index = len(current_index)
+                infrastructure = pd.DataFrame({
+                    'previous_branch': s,
+                    'current_node': current_index,
+                    'current_distance': distances.loc[current_index].to_numpy(),
+                    'starting_point': start_infrastructure,
+                    'current_transport_mean': mot,
+                    'current_infrastructure': graph_id,
+                    'current_total_costs': current_total_costs_distances.to_numpy(),
+                    'specific_transportation_costs': transportation_costs,
+                    'comparison_index': list(map(lambda x: x + '-' + current_commodity_object.get_name(),
+                                                 current_index.tolist())),
+                    'taken_route': [(start_infrastructure, mot, distances.at[i], i, 1) for i in current_index],
+                    'total_efficiency': branches.loc[[s], 'total_efficiency'].tolist() * length_index,
+                    'current_commodity': current_commodity_object.get_name(),
+                    'current_commodity_object': current_commodity_object,
+                })
+                infrastructure_chunks.append(infrastructure)
 
-                all_costs += current_total_costs_distances.values.tolist()
+    if infrastructure_chunks:
 
-                pipeline_infrastructure.loc[current_total_costs_distances.index, s] \
-                    = distances.loc[current_total_costs_distances.index]
-
-                considered_branches.append(s)
-                starting_points += [start_infrastructure] * length_index
-                branch_list += [s] * length_index
-
-                current_infrastructure += [graph_id] * length_index
-                transport_mean += [mot] * length_index
-
-                transportation_costs_list += [transportation_costs] * length_index
-
-                processed_infrastructure[graph_id] = pipeline_infrastructure
-
-                comparison_index += list(map(lambda x: x + '-' + current_commodity_object.get_name(),
-                                             current_total_costs_distances.index.tolist()))
-
-                taken_route += [(start_infrastructure, mot, distances.at[i], i, 1) for i in current_total_costs_distances.index]
-
-                efficiencies += branches.loc[[s], 'total_efficiency'].tolist() * length_index
-
-    if list(processed_infrastructure.values()):
-
-        all_infrastructures = pd.concat(list(processed_infrastructure.values()),
-                                        ignore_index=False, verify_integrity=True).transpose()
-        all_infrastructures = all_infrastructures.loc[considered_branches, :].stack().dropna().reset_index()
-        all_infrastructures.columns = ['previous_branch', 'current_node', 'current_distance']
-
-        del processed_infrastructure
+        all_infrastructures = pd.concat(infrastructure_chunks, ignore_index=True)
+        del infrastructure_chunks
         gc.collect()
 
         if all_infrastructures.empty:
             return pd.DataFrame()
 
         nodes_list = all_infrastructures['current_node'].tolist()
-
-        all_infrastructures['starting_point'] = starting_points
-        all_infrastructures['previous_branch'] = branch_list
-        all_infrastructures['current_transport_mean'] = transport_mean
-        all_infrastructures['current_infrastructure'] = current_infrastructure
-        all_infrastructures['current_total_costs'] = all_costs
-        all_infrastructures['specific_transportation_costs'] = transportation_costs_list
-        all_infrastructures['comparison_index'] = comparison_index
-        all_infrastructures['taken_route'] = taken_route
-        all_infrastructures['total_efficiency'] = efficiencies # branches.loc[branch_list, 'total_efficiency'].tolist()
-
-        all_infrastructures['current_commodity'] = branches.loc[branch_list, 'current_commodity'].tolist()
-        all_infrastructures['current_commodity_object'] \
-            = branches.loc[branch_list, 'current_commodity_object'].tolist()
         all_infrastructures['latitude'] = complete_infrastructure.loc[nodes_list, 'latitude'].tolist()
         all_infrastructures['longitude'] = complete_infrastructure.loc[nodes_list, 'longitude'].tolist()
 
@@ -903,10 +850,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                                                        infrastructure_in_destination['latitude'],
                                                        infrastructure_in_destination['longitude'])
 
-                distances = pd.DataFrame(distances, index=infrastructure_in_destination.index,
-                                         columns=all_infrastructures.index, dtype='int32').transpose()
-
-                all_infrastructures['distance_to_final_destination'] = distances.min('columns')
+                all_infrastructures['distance_to_final_destination'] = np.asarray(distances).min(axis=0)
 
             # asses costs to final destination based on distance to final destination
             # get options in tolerance to final destination and set distance to 0
@@ -961,15 +905,14 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
     """
 
     destination_continent = data['destination']['continent']
-    all_infrastructure = pd.DataFrame()
+    infrastructure_chunks = []
 
     for o in branches.index:
 
         mot = branches.at[o, 'current_transport_mean']
         if mot == 'Shipping':
 
-            shipping_infrastructure = data['Shipping']['ports'].copy()
-            shipping_infrastructure['current_transport_mean'] = 'Shipping'
+            shipping_infrastructure = data['Shipping']['ports']
 
             shipping_distances = pd.read_csv(configuration['path_processed_data']
                                              + 'inner_infrastructure_distances/port_distances.csv',
@@ -1093,7 +1036,7 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
         infrastructure['comparison_index'] = comparison_index
         infrastructure['taken_route'] = taken_route
 
-        infrastructure['benchmark'] = infrastructure['current_commodity'].map(benchmarks)
+        infrastructure['benchmark'] = benchmarks[current_commodity_object.get_name()]
         infrastructure = infrastructure[infrastructure['current_total_costs'] <= infrastructure['benchmark']]
 
         nodes_list = infrastructure['current_node'].tolist()
@@ -1139,7 +1082,7 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
                 distances = calc_distance_list_to_list(infrastructure['latitude'], infrastructure['longitude'],
                                                        infrastructure_in_destination['latitude'],
                                                        infrastructure_in_destination['longitude'])
-                infrastructure['distance_to_final_destination'] = distances.min('columns')
+                infrastructure['distance_to_final_destination'] = np.asarray(distances).min(axis=0)
 
             # asses costs to final destination based on distance to final destination
             # get options in tolerance to final destination and set distance to 0
@@ -1172,6 +1115,9 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
             infrastructure = infrastructure[infrastructure['minimal_distances'] <= max_length]
             infrastructure.drop(['minimal_distances'], axis=1, inplace=True)
 
-        all_infrastructure = pd.concat([all_infrastructure, infrastructure])
+        if not infrastructure.empty:
+            infrastructure_chunks.append(infrastructure)
 
-    return all_infrastructure
+    if infrastructure_chunks:
+        return pd.concat(infrastructure_chunks, ignore_index=False)
+    return pd.DataFrame()
