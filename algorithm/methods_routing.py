@@ -69,7 +69,7 @@ def get_complete_infrastructure(data, config_file):
     return complete_infrastructure
 
 
-def process_out_tolerance_branches(complete_infrastructure, branches, configuration, iteration, data, benchmark,
+def process_out_tolerance_branches(complete_infrastructure, branches, configuration, iteration, data, benchmarks,
                                    use_minimal_distance=False, limitation=None):
 
     """
@@ -81,7 +81,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
     @param dict configuration: dictionary with configuration
     @param int iteration: current iteration
     @param dict data: dictionary with common data
-    @param float benchmark: current benchmark
+    @param dict benchmarks: current benchmarks
     @param bool use_minimal_distance: (optional) boolean to set if minimal distances are used to assess locations
     @param str limitation: (optional) determines which infrastructure can actually be used
 
@@ -265,7 +265,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
             distances = pd.DataFrame(distances.transpose(),
                                      index=reduced_infrastructure_index,
-                                     columns=branches_no_duplicates['current_node'])
+                                     columns=branches_no_duplicates['current_node'], dtype='int32')
 
         else:
             # Check distance not for all infrastructure but just closest one to assess, if the closest
@@ -359,7 +359,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
                 # remove all options where max length exceeds distance (remove columns)
                 max_length_road_costs \
-                    = list((benchmark - c_branches['current_total_costs']) * 1000
+                    = list((benchmarks[commodity_object.get_name()] - c_branches['current_total_costs']) * 1000
                            / c_branches['road_transportation_costs'] / no_road_multiplier)
                 max_length_road_list = [min(n, max_length_road / no_road_multiplier) for n in max_length_road_costs]
                 road_distances['max_length'] = max_length_road_list
@@ -471,7 +471,10 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         road_options['current_total_costs'] \
             = road_options['previous_total_costs'] + road_options['current_transportation_costs']
 
-        road_options = road_options[road_options['current_total_costs'] <= benchmark]
+        # compare to total costs minus fuel price
+        # to compare the different commodities, the benchmark is adjusted by the fuel price
+        road_options['benchmark'] = road_options['current_commodity'].map(benchmarks)
+        road_options = road_options[road_options['current_total_costs'] <= road_options['benchmark']]
 
         road_options['distance_type'] = 'road'
 
@@ -533,9 +536,10 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
         new_infrastructure_options['total_efficiency'] = branches.loc[branch_list, 'total_efficiency'].tolist()
 
-        # remove all options higher than benchmark
-        new_infrastructure_options \
-            = new_infrastructure_options[new_infrastructure_options['current_total_costs'] <= benchmark]
+        # compare to total costs minus fuel price
+        # to compare the different commodities, the benchmark is adjusted by the fuel price
+        new_infrastructure_options['benchmark'] = new_infrastructure_options['current_commodity'].map(benchmarks)
+        new_infrastructure_options = new_infrastructure_options[new_infrastructure_options['current_total_costs'] <= new_infrastructure_options['benchmark']]
 
         new_infrastructure_options['distance_type'] = 'new'
 
@@ -566,7 +570,8 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             distances = calc_distance_list_to_list(outside_options['latitude'], outside_options['longitude'],
                                                    infrastructure_in_destination['latitude'],
                                                    infrastructure_in_destination['longitude'])
-            distances = pd.DataFrame(distances, index=infrastructure_in_destination.index, columns=outside_options.index).transpose()
+            distances = pd.DataFrame(distances, index=infrastructure_in_destination.index,
+                                     columns=outside_options.index, dtype='int32').transpose()
 
             # print(distances)
 
@@ -608,12 +613,14 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         outside_options.loc[in_destination_tolerance, 'distance_to_final_destination'] = 0
 
         # get costs for all options outside tolerance
-        outside_options['minimal_total_costs'] \
-            = calculate_cheapest_option_to_final_destination(data, outside_options, benchmark, 'current_total_costs')
+        min_values, min_commodities = calculate_cheapest_option_to_final_destination(data, outside_options, benchmarks, 'current_total_costs')
+
+        outside_options['minimal_total_costs'] = min_values
+        outside_options['minimal_commodity'] = min_commodities
 
         # throw out options to expensive
-        outside_options \
-            = outside_options[outside_options['minimal_total_costs'] <= benchmark]
+        outside_options['benchmark'] = outside_options['minimal_commodity'].map(benchmarks)
+        outside_options = outside_options[outside_options['minimal_total_costs'] <= outside_options['benchmark']]
 
         # print('after')
         # print(outside_options[['current_node', 'distance_to_final_destination']])
@@ -624,7 +631,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
     return outside_options
 
 
-def process_in_tolerance_branches_high_memory(data, branches, complete_infrastructure, benchmark, configuration,
+def process_in_tolerance_branches_high_memory(data, branches, complete_infrastructure, benchmarks, configuration,
                                               with_assessment=True):
 
     """
@@ -634,7 +641,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
     @param dict data: dictionary with common data
     @param pandas.DataFrame branches: DataFrame with current branches
     @param pandas.DataFrame complete_infrastructure: DataFrame with all nodes, ports and destination
-    @param float benchmark: current benchmark
+    @param dict benchmarks: current benchmarks
     @param dict configuration: dictionary with configuration
     @param bool with_assessment: boolean to start assessment of resulting dataframe
 
@@ -702,28 +709,21 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                     continue
 
                 distances = shipping_distances.loc[start_infrastructure, shipping_infrastructure.index].copy()
-                durations = distances.copy() / 1000 / data['Shipping']['speed']
+                durations = distances.copy() / 1000 / current_commodity_object.get_shipping_speed()
 
-                boil_off = current_commodity_object.get_boil_off()
-                self_consumption = current_commodity_object.get_self_consumption()
+                efficiency, current_total_costs_distances \
+                    = current_commodity_object.get_distance_and_duration_based_costs_and_efficiency_shipping(distances, durations, current_total_costs)
 
-                if not current_commodity_object.get_uses_commodity_as_shipping_fuel():
-                    current_total_costs_distances \
-                        = (current_total_costs + transportation_costs * distances / 1000) / (1 - (durations / 24 * boil_off))
-                    efficiency = pd.DataFrame(1, index=current_total_costs_distances.index)
-                else:
-                    total_boil_off = durations / 24 * boil_off
-                    total_self_consumption = distances / 1000 * self_consumption
+                # assess for benchmark
+                current_total_costs_distances_benchmark = current_total_costs_distances[current_total_costs_distances <= benchmarks[current_commodity_object.get_name()]].dropna()
 
-                    # if boil off is higher than self consumption, boil off will set efficiency, else self consumption
-                    efficiency = total_boil_off.where(total_boil_off > total_self_consumption, total_self_consumption)
-                    current_total_costs_distances = current_total_costs / (1 - efficiency)
+                current_total_costs_distances = current_total_costs_distances.loc[current_total_costs_distances_benchmark.index]
+                efficiency = efficiency.loc[current_total_costs_distances.index]
 
-                current_total_costs_distances = current_total_costs_distances[current_total_costs_distances <= benchmark].dropna()
                 transportation_costs = current_total_costs_distances - current_total_costs
-                transportation_costs = transportation_costs.loc[current_total_costs_distances.index] / distances * 1000
+                transportation_costs = transportation_costs.loc[current_total_costs_distances.index] / distances.loc[current_total_costs_distances.index] * 1000
 
-                efficiencies_m = [a * (1 - l) for a in branches.loc[options_m.index, 'total_efficiency'] for l in efficiency]
+                efficiencies_m = [branches.loc[s, 'total_efficiency'] * e for e in efficiency]
                 efficiencies += efficiencies_m
 
                 if current_total_costs_distances.empty:
@@ -766,7 +766,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
 
                     for n in nodes:
                         distances = nx.single_source_dijkstra_path_length(graph, n)
-                        distances = pd.DataFrame(distances.values(), index=[*distances.keys()], columns=[n])
+                        distances = pd.DataFrame(distances.values(), index=[*distances.keys()], columns=[n], dtype='int32')
                         distances = distances.loc[n]
 
                         graph_distances[n] = distances
@@ -803,7 +803,9 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                     path_processed_data = configuration['path_processed_data']
                     distances \
                         = pd.read_hdf(path_processed_data + '/inner_infrastructure_distances/' + start_infrastructure + '.h5',
-                                      mode='r', title=graph_id, dtype=np.float16)
+                                      mode='r', title=graph_id)
+                    distances = np.ceil(distances)
+                    distances = distances.astype('int32')
 
                     distances = pd.Series(distances.transpose().values[0], index=distances.index)
                     distances = distances.loc[pipeline_infrastructure.index]
@@ -811,7 +813,11 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                     distances = graph_distances[start_infrastructure]
 
                 current_total_costs_distances = distances / 1000 * transportation_costs + current_total_costs
-                current_total_costs_distances = current_total_costs_distances[current_total_costs_distances <= benchmark].dropna()
+
+                # assess for benchmark
+                current_total_costs_distances_benchmark = current_total_costs_distances[current_total_costs_distances <= benchmarks[current_commodity_object.get_name()]].dropna()
+
+                current_total_costs_distances = current_total_costs_distances.loc[current_total_costs_distances_benchmark.index]
 
                 if current_total_costs_distances.empty:
                     continue
@@ -898,7 +904,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                                                        infrastructure_in_destination['longitude'])
 
                 distances = pd.DataFrame(distances, index=infrastructure_in_destination.index,
-                                         columns=all_infrastructures.index).transpose()
+                                         columns=all_infrastructures.index, dtype='int32').transpose()
 
                 all_infrastructures['distance_to_final_destination'] = distances.min('columns')
 
@@ -910,13 +916,16 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
             all_infrastructures.loc[in_destination_tolerance, 'distance_to_final_destination'] = 0
 
             # get costs for all options outside tolerance
-            all_infrastructures['minimal_total_costs'] \
-                = calculate_cheapest_option_to_closest_infrastructure(data, all_infrastructures, configuration,
-                                                                      benchmark, 'current_total_costs')
+
+            min_values, min_commodities = calculate_cheapest_option_to_closest_infrastructure(data, all_infrastructures, configuration,
+                                                                                              benchmarks, 'current_total_costs')
+
+            all_infrastructures['minimal_total_costs'] = min_values
+            all_infrastructures['minimal_commodity'] = min_commodities
 
             # throw out options to expensive
-            all_infrastructures \
-                = all_infrastructures[all_infrastructures['minimal_total_costs'] <= benchmark]
+            all_infrastructures['benchmark'] = all_infrastructures['minimal_commodity'].map(benchmarks)
+            all_infrastructures = all_infrastructures[all_infrastructures['minimal_total_costs'] <= all_infrastructures['benchmark']]
 
             # next iteration either uses road or new pipeline. Remove options where the closest infrastructure is already
             # further away than this distance
@@ -934,7 +943,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
         return pd.DataFrame()
 
 
-def process_in_tolerance_branches_low_memory(data, branches, complete_infrastructure, benchmark, configuration,
+def process_in_tolerance_branches_low_memory(data, branches, complete_infrastructure, benchmarks, configuration,
                                              with_assessment=True):
 
     """
@@ -944,7 +953,7 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
     @param dict data: dictionary with common data
     @param pandas.DataFrame branches: DataFrame with current branches
     @param pandas.DataFrame complete_infrastructure: DataFrame with all nodes, ports and destination
-    @param float benchmark: current benchmark
+    @param dict benchmarks: current benchmarks
     @param dict configuration: dictionary with configuration
     @param bool with_assessment: boolean to start assessment of resulting dataframe
 
@@ -1000,23 +1009,17 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
                 continue
 
             distances = shipping_distances.loc[start_infrastructure, :].copy()
-            durations = distances / 1000 / data['Shipping_Speed']  # todo: test
+            durations = distances / 1000 / current_commodity_object.get_shipping_speed()
 
-            boil_off = current_commodity_object.get_boil_off()
-            self_consumption = current_commodity_object.get_self_consumption()
+            efficiency, current_total_costs_distances \
+                = current_commodity_object.get_distance_and_duration_based_costs_and_efficiency_shipping(distances,
+                                                                                                         durations,
+                                                                                                         current_total_costs)
 
-            if not current_commodity_object.get_uses_commodity_as_shipping_fuel():
-                current_total_costs_distances \
-                    = (current_total_costs + transportation_costs / 1000 * distances) / (durations / 24 * (1 - boil_off))
-            else:
-                total_boil_off = durations / 24 * boil_off
-                total_self_consumption = distances / 1000 * self_consumption
+            # assess for benchmark
+            current_total_costs_distances_benchmark = current_total_costs_distances[current_total_costs_distances <= benchmarks[current_commodity_object.get_name()]].dropna()
+            current_total_costs_distances = current_total_costs_distances.loc[current_total_costs_distances_benchmark.index, :]
 
-                # if boil off is higher than self consumption, boil off will set efficiency, else self consumption
-                efficiency = total_boil_off.combine(total_self_consumption, func=lambda s1, s2: s1.where(s1 > s2, s2))
-                current_total_costs_distances = current_total_costs / (1 - efficiency)
-
-            current_total_costs_distances = current_total_costs_distances[current_total_costs_distances <= benchmark].dropna()
             transportation_costs = current_total_costs_distances - current_total_costs
             transportation_costs = transportation_costs.loc[current_total_costs_distances.index, :]  # todo: row or columns?
 
@@ -1028,7 +1031,7 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
                 comparison_index.append(i + '-' + current_commodity_object.get_name())
                 taken_route.append((start_infrastructure, mot, distances.at[i], i))
 
-            total_efficiency = branches.at[o, 'total_efficiency']
+            total_efficiency = branches.at[o, 'total_efficiency'] * efficiency
 
         else:
 
@@ -1058,7 +1061,8 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
                 path_processed_data = configuration['path_processed_data']
                 distances \
                     = pd.read_hdf(path_processed_data + '/inner_infrastructure_distances/' + start_infrastructure + '.h5',
-                                  mode='r', title=graph_id, dtype=np.float16)
+                                  mode='r', title=graph_id)
+                distances = np.ceil(distances)
             else:
                 # calculates distances from current node
                 graph = data[mot][graph_id]['Graph']
@@ -1089,7 +1093,9 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
         infrastructure['comparison_index'] = comparison_index
         infrastructure['taken_route'] = taken_route
 
-        infrastructure = infrastructure[infrastructure['current_total_costs'] <= benchmark].dropna()
+        infrastructure['benchmark'] = infrastructure['current_commodity'].map(benchmarks)
+        infrastructure = infrastructure[infrastructure['current_total_costs'] <= infrastructure['benchmark']]
+
         nodes_list = infrastructure['current_node'].tolist()
 
         infrastructure['starting_point'] = start_infrastructure
@@ -1143,13 +1149,17 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
             infrastructure.loc[in_destination_tolerance, 'distance_to_final_destination'] = 0
 
             # get costs for all options outside tolerance
-            infrastructure['minimal_total_costs'] \
-                = calculate_cheapest_option_to_closest_infrastructure(data, infrastructure, configuration, benchmark,
-                                                                      'current_total_costs')
+            min_values, min_commodities = calculate_cheapest_option_to_closest_infrastructure(data, infrastructure,
+                                                                                              configuration,
+                                                                                              benchmarks,
+                                                                                              'current_total_costs')
+
+            infrastructure['minimal_total_costs'] = min_values
+            infrastructure['minimal_commodity'] = min_commodities
 
             # throws out options to expensive
-            infrastructure \
-                = infrastructure[infrastructure['minimal_total_costs'] <= benchmark]
+            infrastructure['benchmark'] = infrastructure['minimal_commodity'].map(benchmarks)
+            infrastructure = infrastructure[infrastructure['minimal_total_costs'] <= infrastructure['benchmark']]
 
             # next iteration either uses road or new pipeline. Remove options where the closest infrastructure is already
             # further away than this distance
