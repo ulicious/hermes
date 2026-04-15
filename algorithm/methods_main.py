@@ -79,10 +79,10 @@ def prepare_data_and_configuration_dictionary(config_file):
     location_data = pd.read_csv(path_project_folder + 'start_destination_combinations.csv', index_col=0)
 
     pipeline_gas_node_locations = pd.read_csv(path_processed_data + 'gas_pipeline_node_locations.csv', index_col=0,
-                                       dtype={'latitude': np.float16, 'longitude': np.float16})
+                                       dtype={'latitude': np.float32, 'longitude': np.float32})
     pipeline_gas_graphs = pd.read_csv(path_processed_data + 'gas_pipeline_graphs.csv', index_col=0)
     pipeline_liquid_node_locations = pd.read_csv(path_processed_data + 'oil_pipeline_node_locations.csv', index_col=0,
-                                          dtype={'latitude': np.float16, 'longitude': np.float16})
+                                          dtype={'latitude': np.float32, 'longitude': np.float32})
     pipeline_liquid_graphs = pd.read_csv(path_processed_data + 'oil_pipeline_graphs.csv', index_col=0)
     ports = pd.read_csv(path_processed_data + 'ports.csv', index_col=0)
     coastlines = pd.read_csv(path_processed_data + 'landmasses.csv', index_col=0)
@@ -95,10 +95,23 @@ def prepare_data_and_configuration_dictionary(config_file):
     yaml_file = open(path_raw_data + 'techno_economic_data_transportation.yaml')
     techno_economic_data_transport = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-    coastlines = gpd.GeoDataFrame(geometry=coastlines['geometry'].apply(loads))
+    coastlines = gpd.GeoDataFrame(coastlines, geometry=coastlines['geometry'].apply(loads))
+    coastlines = coastlines.sort_index()
     coastlines.set_geometry('geometry', inplace=True)
 
+    country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
+    world = gpd.read_file(country_shapefile)
+
     final_commodities = config_file['target_commodity']
+    strike_prices_commodity = {}
+    for c in config_file['available_commodity']:
+        if c in final_commodities:
+            if config_file['consider_commodity_prices']:
+                strike_prices_commodity[c] = techno_economic_data_conversion['strike_prices'][c]
+            else:
+                strike_prices_commodity[c] = 0
+        else:
+            strike_prices_commodity[c] = 0
 
     # create shapely object of destination
     if config_file['destination_type'] == 'location':
@@ -117,9 +130,6 @@ def prepare_data_and_configuration_dictionary(config_file):
     else:
         destination_continent = config_file['destination_continent']
 
-        country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
-        world = gpd.read_file(country_shapefile)
-
         state_shapefile = shpreader.natural_earth(resolution='10m', category='cultural',
                                                   name='admin_1_states_provinces')
         states = gpd.read_file(state_shapefile)
@@ -128,20 +138,22 @@ def prepare_data_and_configuration_dictionary(config_file):
 
         first = True
         destination_location = None
-        for c in [*country_states.keys()]:
+        for c in sorted(country_states.keys()):
             if country_states[c]:
-                for s in country_states[c]:
+                for s in sorted(country_states[c]):
                     if first:
                         destination_location = states[states['name'] == s]['geometry'].values[0]
                         first = False
                     else:
-                        destination_location.union(states[states['name'] == s]['geometry'].values[0])
+                        destination_location = destination_location.union(states[states['name'] == s]['geometry'].values[0])
             else:
                 if first:
                     destination_location = world[world['NAME_EN'] == c]['geometry'].values[0]
                     first = False
                 else:
-                    destination_location.union(world[world['NAME_EN'] == c]['geometry'].values[0])
+                    destination_location = destination_location.union(world[world['NAME_EN'] == c]['geometry'].values[0])
+
+        destination_location = destination_location.buffer(0)
 
         if config_file['use_biggest_landmass']:  # use only biggest land area
             if len([*country_states.keys()]) == 1:
@@ -182,16 +194,13 @@ def prepare_data_and_configuration_dictionary(config_file):
 
     transport_means = config_file['available_transport_means']
 
-    country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
-    world = gpd.read_file(country_shapefile)
-
     # The data dictionary holds common information/data/parameter which apply for all following branches.
-    data = {'Shipping': {'ports': ports,
-                         'speed': techno_economic_data_transport['Shipping_Speed']},
+    data = {'Shipping': {'ports': ports},
             'minimal_distances': minimal_distances,
             'transport_means': transport_means,
             'commodities': {'final_commodities': final_commodities,
-                            'commodity_objects': {}},
+                            'commodity_objects': {},
+                            'strike_prices': strike_prices_commodity},
             'destination': {'location': destination_location,
                             'continent': destination_continent,
                             'infrastructure': infrastructure_in_destination},

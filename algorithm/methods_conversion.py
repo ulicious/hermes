@@ -2,12 +2,13 @@ import time
 
 import pandas as pd
 
-from algorithm.methods_algorithm import create_new_branches_based_on_conversion, postprocessing_branches
+from algorithm.methods_algorithm import create_new_branches_based_on_conversion, postprocessing_branches, assess_for_benchmark
 from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list
 from algorithm.methods_cost_approximations import calculate_cheapest_option_to_final_destination
 
 
-def apply_conversion(branches, configuration, data, branch_number, benchmark, local_benchmarks, iteration, start_time):
+def apply_conversion(branches, configuration, data, branch_number, benchmark, benchmarks, benchmark_locations,
+                     local_benchmarks, iteration, complete_infrastructure):
 
     """
     Script for conversion of current branches
@@ -17,9 +18,9 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, lo
     @param dict data: dictionary with common data
     @param int branch_number: current branch number
     @param float benchmark: current benchmark
+    @param dict benchmarks: current benchmarks
     @param pandas.DataFrame local_benchmarks: dataframe with local benchmarks at nodes and ports
     @param int iteration: current iteration
-    @param float start_time: seconds since start of processing of current start location
 
     @return:
     - update branches dataframe
@@ -41,10 +42,11 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, lo
     # others will
     conversion_branches = branches[branches['current_distance'] > 0].copy()
     conversion_branches, branch_number \
-        = create_new_branches_based_on_conversion(conversion_branches, data, branch_number, benchmark)
+        = create_new_branches_based_on_conversion(conversion_branches, data, branch_number, benchmarks)
 
-    # assess newly created branches
-    conversion_branches = conversion_branches[conversion_branches['current_total_costs'] <= benchmark]
+    # assess for benchmark
+    conversion_branches['benchmark'] = conversion_branches['current_commodity'].map(benchmarks)
+    conversion_branches = conversion_branches[conversion_branches['current_total_costs'] <= conversion_branches['benchmark']]
 
     final_destination = data['destination']['location']
 
@@ -72,13 +74,17 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, lo
     conversion_branches.loc[in_destination_tolerance, 'distance_to_final_destination'] = 0
 
     # get costs for all options outside tolerance
-    conversion_branches['minimal_total_costs_to_final_destination'] \
-        = calculate_cheapest_option_to_final_destination(data, conversion_branches,
-                                                         benchmark, 'current_total_costs')
 
-    # throws out options to expensive
-    conversion_branches \
-        = conversion_branches[conversion_branches['minimal_total_costs_to_final_destination'] <= benchmark]
+    min_values, min_commodities = calculate_cheapest_option_to_final_destination(data, conversion_branches, benchmarks,
+                                                                                 'current_total_costs')
+
+    conversion_branches['minimal_total_costs'] = min_values
+    conversion_branches['minimal_commodity'] = min_commodities
+
+    # throws out options too expensive
+    # to compare the different commodities, the benchmark is adjusted by the fuel price
+    conversion_branches['benchmark'] = conversion_branches['minimal_commodity'].map(benchmarks)
+    conversion_branches = conversion_branches[conversion_branches['minimal_total_costs'] <= conversion_branches['benchmark']]
 
     # remove duplicates
     conversion_branches['comparison_index'] = conversion_branches.apply(
@@ -114,7 +120,7 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, lo
         local_benchmarks = local_benchmarks.drop_duplicates(subset=['comparison_index'], keep='first')
 
     if no_conversion_branches.empty & conversion_branches.empty:
-        return pd.DataFrame(), final_solution, branch_number, benchmark, local_benchmarks
+        return pd.DataFrame(), final_solution, branch_number, benchmark, benchmarks, benchmark_locations, local_benchmarks
 
     conversion_branches = postprocessing_branches(conversion_branches, old_branches)
 
@@ -124,37 +130,14 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, lo
     branches = branches.drop_duplicates(subset=['comparison_index'], keep='first')
 
     # check if branches are at destination
-    at_destination = branches[
-        branches['distance_to_final_destination'] <= configuration['to_final_destination_tolerance']]
-    if not at_destination.empty:
-
-        # check if final commodity
-        at_destination_and_correct_commodity = at_destination[
-            at_destination['current_commodity'].isin(final_commodities)]
-        if not at_destination_and_correct_commodity.empty:
-
-            # check if lower than benchmark
-            at_destination_and_lower_benchmark_and_correct_commodity = \
-                at_destination_and_correct_commodity[
-                    at_destination_and_correct_commodity['current_total_costs'] <= benchmark]
-            if not at_destination_and_lower_benchmark_and_correct_commodity.empty:
-
-                # update final solution
-                min_benchmark_costs \
-                    = at_destination_and_lower_benchmark_and_correct_commodity['current_total_costs'].min()
-                benchmark = min_benchmark_costs
-                final_solution_index \
-                    = at_destination_and_lower_benchmark_and_correct_commodity['current_total_costs'].idxmin()
-                final_solution = branches.loc[final_solution_index, :].copy()
-                final_solution.loc['solving_time'] = time.time() - start_time
-
-                # set current node to destination
-                final_solution['current_node'] = 'Destination'
-
-            # remove all branches which are at final destination with correct commodity
-            branches.drop(at_destination_and_correct_commodity.index, inplace=True)
+    final_solution, benchmark, benchmarks, benchmark_locations, branches \
+        = assess_for_benchmark(data, configuration, benchmark, benchmarks, benchmark_locations, final_commodities, branches,
+                               final_solution, complete_infrastructure)
 
     # check again all branches because benchmark might have changed
-    branches = branches[branches['current_total_costs'] <= benchmark]
+    # to compare the different commodities, the benchmark is adjusted by the fuel price
+    if not branches.empty:
+        branches['benchmark'] = branches['current_commodity'].map(benchmarks)
+        branches = branches[branches['current_total_costs'] <= branches['benchmark']]
 
-    return branches, final_solution, branch_number, benchmark, local_benchmarks
+    return branches, final_solution, branch_number, benchmark, benchmarks, benchmark_locations, local_benchmarks

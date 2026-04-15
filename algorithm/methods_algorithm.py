@@ -3,6 +3,7 @@ import os
 import yaml
 
 import pandas as pd
+import numpy as np
 
 from shapely.geometry import Point
 from shapely.ops import nearest_points
@@ -29,6 +30,12 @@ def prepare_commodities(config_file, location_data, data):
     techno_economic_data_transportation = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
     conversion_costs_and_efficiencies = data['conversion_costs_and_efficiencies']
+
+    # remove all commodities which do not have conversions and are not final commodities -> dead end
+    for commodity in config_file['available_commodity']:
+        if commodity not in config_file['target_commodity']: # is not a target commodity
+            if not techno_economic_data_conversion[commodity]['potential_conversions']: # no conversion possible
+                config_file['available_commodity'].remove(commodity)
 
     # get commodities and associated data
     commodities, commodity_names \
@@ -179,7 +186,7 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
     reachable_from_start = complete_infrastructure[complete_infrastructure['reachable_from_start']].index
     reachable_from_destination = complete_infrastructure[complete_infrastructure['reachable_from_destination']].index
 
-    if (len(reachable_from_start) == 0) | (len(reachable_from_destination) == 0):
+    if continue_processing & ((len(reachable_from_start) == 0) | (len(reachable_from_destination) == 0)):
         print(str(location_integer) + ': No infrastructure on same land mass as start or destination')
 
         result = pd.Series(['no benchmark', starting_location.y, starting_location.x],
@@ -208,7 +215,7 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
 
             min_distance_to_destination = distances_to_destination.min()
 
-    if min_distance_to_destination < configuration['to_final_destination_tolerance']:
+    if continue_processing & (min_distance_to_destination < configuration['to_final_destination_tolerance']):
         cheapest_option = math.inf
         chosen_branch = None
         for s in branches.index:
@@ -229,7 +236,7 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
         if branches.at[s, 'current_total_costs'] < cheapest_option:
             cheapest_option = branches.at[s, 'current_total_costs']
 
-    if cheapest_option == math.inf:
+    if continue_processing & (cheapest_option == math.inf):
         print(str(location_integer) + ' has no production potential')
         result = pd.Series(['no potential', starting_location.y, starting_location.x],
                            index=['status', 'latitude', 'longitude'])
@@ -239,14 +246,14 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
     return continue_processing
 
 
-def create_new_branches_based_on_conversion(branches, data, branch_number, benchmark):
+def create_new_branches_based_on_conversion(branches, data, branch_number, benchmarks):
     """
     Iterates through all commodities and creates new branches based on conversions from current branches
 
     @param pandas.DataFrame branches: dataframe with current branches
     @param dict data: dictionary with common data
     @param int branch_number: current branch number
-    @param float benchmark: current benchmark
+    @param dict benchmarks: current benchmarks
     @return: dataframe with new branches based on conversion and new branch number
     """
 
@@ -312,7 +319,8 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
                     min_conversion_costs \
                         = c_start_object.get_conversion_costs_specific_commodity(c_start_df['current_node'],
                                                                                  c_end).min()
-                    if min_conversion_costs > benchmark:
+
+                    if min_conversion_costs > benchmarks[c_end]:
                         continue
 
                     len_index = len(c_start_df.index)
@@ -558,3 +566,195 @@ def apply_local_benchmark(branches, local_benchmarks, branches_to_remove, update
     branches.drop(columns=['old_index'], inplace=True)
 
     return branches, local_benchmarks, branches_to_remove
+
+
+def assess_for_benchmark(data, configuration, benchmark, benchmarks, benchmark_locations, final_commodities, branches,
+                         final_solution, complete_infrastructure):
+    # check if branches are at destination
+    at_destination = branches[branches['distance_to_final_destination']
+                              <= configuration['to_final_destination_tolerance']]
+
+    # branches at destination update the benchmarks of each commodity
+    for commodity in at_destination['current_commodity'].unique():
+        if commodity in final_commodities:
+            com_ind = at_destination[at_destination['current_commodity'] == commodity].index
+            com_df = at_destination.loc[com_ind, :]
+
+            idx_min_costs = com_df['current_total_costs'].idxmax()
+            min_costs = com_df.at[idx_min_costs, 'current_total_costs']
+            min_costs_location = com_df.at[idx_min_costs, 'current_node']
+
+            # max because all branches are at destination but conversion might be necessary which could change cheapest branch
+            if min_costs < benchmarks[commodity]:
+                benchmarks[commodity] = math.ceil(min_costs)
+                benchmark_locations[commodity] = min_costs_location
+
+    # now check for at destination and right commodity to
+    if not at_destination.empty:
+        at_destination_and_correct_commodity \
+            = at_destination[at_destination['current_commodity'].isin(final_commodities)]
+
+        if not at_destination_and_correct_commodity.empty:
+
+            # assess for benchmark
+            at_destination_and_correct_commodity['benchmark'] = at_destination_and_correct_commodity[
+                'current_commodity'].map(benchmarks)
+            at_destination_and_lower_benchmark_and_correct_commodity = at_destination_and_correct_commodity[
+                at_destination_and_correct_commodity['current_total_costs'] <=
+                at_destination_and_correct_commodity['benchmark']]
+
+            if not at_destination_and_lower_benchmark_and_correct_commodity.empty:
+
+                for commodity in at_destination_and_lower_benchmark_and_correct_commodity['current_commodity'].unique():
+                    com_ind \
+                        = at_destination_and_lower_benchmark_and_correct_commodity[
+                        at_destination_and_correct_commodity['current_commodity'] == commodity].index
+                    com_df = at_destination_and_lower_benchmark_and_correct_commodity.loc[com_ind, :]
+                    min_costs = com_df['current_total_costs'].max()
+                    benchmarks[commodity] = math.ceil(min_costs)
+
+                    min_costs = com_df['current_total_costs'].min()
+                    fuel_price = data['commodities']['strike_prices'][commodity]
+                    if min_costs - fuel_price < benchmark:
+                        benchmark = min_costs - fuel_price
+                        min_costs_index = com_df['current_total_costs'].idxmin()
+
+                        final_solution = branches.loc[min_costs_index, :].copy()
+
+            # check which of the branches at destination and with right commodity can be removed and which one should be kept since
+            # conversion at another infrastructure might be possible
+            index_to_remove = at_destination_and_correct_commodity.index
+            at_destination_locations = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= configuration['to_final_destination_tolerance']].index
+
+            for commodity_start in at_destination_and_correct_commodity['current_commodity'].unique():
+                for commodity_target in data['commodities']['final_commodities']:
+                    com_ind = at_destination_and_correct_commodity[at_destination_and_correct_commodity['current_commodity'] == commodity_start].index
+                    com_df = at_destination_and_correct_commodity.loc[com_ind, :]
+
+                    c_start_object = data['commodities']['commodity_objects'][commodity_start]
+                    if c_start_object.get_conversion_options()[commodity_target]:
+                        conversion_costs = c_start_object.get_conversion_costs().loc[at_destination_locations, commodity_target]
+                        conversion_efficiency = c_start_object.get_conversion_efficiencies().loc[at_destination_locations, commodity_target]
+
+                        row2 = conversion_costs.values
+                        row3 = conversion_efficiency.values
+
+                        conversion_costs = pd.DataFrame(np.tile(row2, (len(com_df.index), 1)), index=com_df.index, columns=conversion_costs.index)
+                        conversion_efficiency = pd.DataFrame(np.tile(row3, (len(com_df.index), 1)), index=com_df.index, columns=conversion_efficiency.index)
+
+                        costs = conversion_costs.add(com_df['current_total_costs'], axis=0).div(conversion_efficiency)
+
+                        row_min = costs.min(axis=1) - data['commodities']['strike_prices'][commodity_target]
+                        idx = row_min[row_min < benchmark].index
+
+                        index_to_remove = [i for i in index_to_remove if i not in idx]  # as soon as one index achieves costs below benchmark --> keep
+
+            # remove all branches which are at final destination with correct commodity
+            branches.drop(index_to_remove, inplace=True)
+
+            if final_solution is not None:
+                at_destination = branches[branches['distance_to_final_destination'] <= configuration['to_final_destination_tolerance']]
+                if not at_destination.empty:
+                    at_destination_and_correct_commodity = at_destination[at_destination['current_commodity'].isin(final_commodities)]
+
+                    if not at_destination_and_correct_commodity.empty:
+
+                        # based on current benchmark, we can calculate for each branch if they can achieve this benchmark at all
+                        index_to_remove = at_destination_and_correct_commodity.index
+                        at_destination_locations \
+                            = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= configuration[ 'to_final_destination_tolerance']].index
+
+                        for commodity_start in at_destination_and_correct_commodity['current_commodity'].unique():
+                            commodity_target = final_solution.at['current_commodity']
+                            com_ind = at_destination_and_correct_commodity[at_destination_and_correct_commodity['current_commodity'] == commodity_start].index
+                            com_df = at_destination_and_correct_commodity.loc[com_ind, :]
+
+                            c_start_object = data['commodities']['commodity_objects'][commodity_start]
+                            if c_start_object.get_conversion_options()[commodity_target]:
+                                conversion_costs = c_start_object.get_conversion_costs().loc[at_destination_locations, commodity_target]
+                                conversion_costs = conversion_costs.replace([np.inf, -np.inf], np.nan).dropna()
+
+                                conversion_efficiency = c_start_object.get_conversion_efficiencies().loc[conversion_costs.index, commodity_target]
+
+                                row2 = conversion_costs.values
+                                row3 = conversion_efficiency.values
+
+                                conversion_costs = pd.DataFrame(np.tile(row2, (len(com_df.index), 1)), index=com_df.index,
+                                                                columns=conversion_costs.index)
+                                conversion_efficiency = pd.DataFrame(np.tile(row3, (len(com_df.index), 1)), index=com_df.index,
+                                                                     columns=conversion_efficiency.index)
+
+                                costs = benchmarks[commodity_target] / conversion_efficiency - conversion_costs
+
+                                row_min = costs.min(axis=1)
+                                idx = row_min[row_min < benchmarks[commodity_start]].index
+
+                                index_to_remove = [i for i in index_to_remove if i not in idx]  # as soon as one index achieves costs below benchmark --> keep
+
+                        # remove all branches which are at final destination with correct commodity
+                        branches.drop(index_to_remove, inplace=True)
+
+    # similar to the benchmark script, compare benchmarks with each other
+    final_commodities = data['commodities']['final_commodities']
+    old_benchmarks = {}
+
+    while old_benchmarks != benchmarks:
+        old_benchmarks = benchmarks.copy()
+        benchmarks_keys = [*benchmarks.keys()]
+
+        for commodity_target in data['commodities']['commodity_objects'].keys():
+            commodity_benchmark = -math.inf
+            commodity_location = None
+
+            for commodity_start in benchmarks_keys:
+
+                if commodity_start == commodity_target:
+                    continue
+
+                if (commodity_start in final_commodities) & (not math.isinf(benchmarks[commodity_start])) & (commodity_target in final_commodities):
+                    # if target commodity is final commodity, then it's always possible to change between commodities
+
+                    c_start_object = data['commodities']['commodity_objects'][commodity_start]
+                    if c_start_object.get_conversion_options()[commodity_target]:
+
+                        conversion_costs = c_start_object.get_conversion_costs().loc[benchmark_locations[commodity_start], commodity_target]
+                        conversion_efficiency = c_start_object.get_conversion_efficiencies().loc[benchmark_locations[commodity_start], commodity_target]
+
+                        costs = (benchmarks[commodity_start] + conversion_costs) / conversion_efficiency
+
+                        if costs < benchmarks[commodity_target]:  # only replace if cheaper
+                            benchmarks[commodity_target] = math.ceil(costs)
+                            benchmark_locations[commodity_target] = benchmark_locations[commodity_start]
+
+                elif (commodity_start in final_commodities) & (not math.isinf(benchmarks[commodity_start])) & (commodity_target not in final_commodities):
+                    # if target commodity is not final commodity, upper bound is more difficult to address
+                    # since different locations and fuel prices might favor more expensive commodities and latter conversion
+                    # In this case, iterate over final commodities and check maximal costs the target commodity can have
+                    # to allow a conversion to the final commodities
+
+                    c_target_object = data['commodities']['commodity_objects'][commodity_target]
+                    if c_target_object.get_conversion_options()[commodity_start]:
+
+                        conversion_costs = c_target_object.get_conversion_costs().loc[:, commodity_start]
+                        conversion_costs = conversion_costs.replace([np.inf, -np.inf], np.nan).dropna()
+
+                        conversion_efficiency = c_target_object.get_conversion_efficiencies().loc[conversion_costs.index, commodity_start]
+
+                        costs = benchmarks[commodity_start] * conversion_efficiency - conversion_costs
+                        costs = pd.to_numeric(costs, errors="coerce")
+
+                        if costs.max() > commodity_benchmark:  # only replace if more expensive
+                            commodity_benchmark = math.ceil(costs.max())
+                            commodity_location = costs.idxmax()
+
+            if commodity_target not in final_commodities:
+                benchmarks[commodity_target] = commodity_benchmark
+                benchmark_locations[commodity_target] = commodity_location
+
+    # benchmarks might have updated --> remove branches if higher than benchmarks
+    branches['benchmark'] = branches['current_commodity'].map(benchmarks)
+    branches = branches[branches['current_total_costs'] <= branches['benchmark']]
+
+    return final_solution, benchmark, benchmarks, benchmark_locations, branches
+
+

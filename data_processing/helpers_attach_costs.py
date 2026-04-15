@@ -7,6 +7,7 @@ import numpy as np
 
 import tqdm
 import math
+from collections import defaultdict
 
 import cartopy.io.shapereader as shpreader
 
@@ -516,8 +517,8 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
             co2_costs = 0
 
         for c1_local in config_file['available_commodity']:
-
             for c2_local in techno_economic_data_conversion[c1_local]['potential_conversions']:
+
                 electricity_demand = techno_economic_data_conversion[c1_local][c2_local]['electricity_demand']
                 co2_demand = techno_economic_data_conversion[c1_local][c2_local]['co2_demand']
                 nitrogen_demand = techno_economic_data_conversion[c1_local][c2_local]['nitrogen_demand']
@@ -584,8 +585,8 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
 
                         conversion_efficiency = techno_economic_data_conversion[c1_local][c2_local]['efficiency_autothermal']
 
-                locations_to_process[c1_local + '_' + c2_local + '_conversion_costs'] = conversion_costs
-                locations_to_process[c1_local + '_' + c2_local + '_conversion_efficiency'] = conversion_efficiency
+                locations_to_process[c1_local + '-' + c2_local + '-conversion_costs'] = conversion_costs
+                locations_to_process[c1_local + '-' + c2_local + '-conversion_efficiency'] = conversion_efficiency
 
         return locations_to_process
 
@@ -769,7 +770,10 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
     cols_to_update = ['Electricity', 'CO2', 'Nitrogen', 'Low_Temperature_Heat', 'Mid_Temperature_Heat',
                       'High_Temperature_Heat', 'interest_rate']
     for col in cols_to_update:
-        conversion_solutions[col] = conversion_solutions[col].replace(np.nan, np.inf)
+        if col in conversion_solutions.columns:
+            conversion_solutions[col] = conversion_solutions[col].replace(np.nan, np.inf)
+        else:
+            conversion_solutions[col] = np.inf
 
     port_options = [i for i in conversion_solutions.index if 'H' in i]
     port_options = conversion_solutions.loc[port_options, :]
@@ -800,11 +804,160 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
     # if offshore, no conversion possible
     for c1 in config_file['available_commodity']:
         for c2 in techno_economic_data_conversion[c1]['potential_conversions']:
-            columns_to_keep.append(c1 + '_' + c2 + '_conversion_costs')
-            columns_to_keep.append(c1 + '_' + c2 + '_conversion_efficiency')
+            columns_to_keep.append(c1 + '-' + c2 + '-conversion_costs')
+            columns_to_keep.append(c1 + '-' + c2 + '-conversion_efficiency')
 
     locations = pd.concat([port_options, pipeline_options, start_options, destination_options])
 
     locations = locations[columns_to_keep]
+
+    return locations
+
+
+def calculate_conversion_costs_and_efficiencies_for_all_combinations(config_file, locations, techno_economic_data_conversion):
+
+    new_conversions = []
+    for c1 in config_file['available_commodity']:
+        if not techno_economic_data_conversion[c1]['potential_conversions']:
+            # commodity has generally no conversion
+            continue
+
+        for c2 in config_file['available_commodity']:
+            if c1 == c2:
+                continue
+
+            conversion_possible = False
+
+            conversion_costs_list = []
+            efficiency_list = []
+            mid_cs = []
+
+            if c1 + '-' + c2 + '-conversion_costs' in locations.columns:
+                conversion_costs = locations[c1 + '-' + c2 + '-conversion_costs']
+                efficiency = locations[c1 + '-' + c2 + '-conversion_efficiency']
+
+                conversion_costs_list.append(conversion_costs)
+                efficiency_list.append(efficiency)
+                mid_cs.append('direct')
+
+            for c in config_file['available_commodity']:
+                if c1 + '-' + c + '-conversion_costs' in locations.columns:
+                    if c + '-' + c2 + '-conversion_costs' in locations.columns:
+
+                        conversion_possible = True
+
+                        conv_1 = locations[c1 + '-' + c + '-conversion_costs']
+                        conv_2 = locations[c + '-' + c2 + '-conversion_costs']
+
+                        eff_1 = locations[c1 + '-' + c + '-conversion_efficiency']
+                        eff_2 = locations[c + '-' + c2 + '-conversion_efficiency']
+
+                        conversion_costs = conv_1 + conv_2 * eff_1
+                        efficiency = eff_1 * eff_2
+
+                        conversion_costs_list.append(conversion_costs)
+                        efficiency_list.append(efficiency)
+                        mid_cs.append(c)
+
+            if conversion_possible:
+                new_conversions.append([c1, c2])
+                conversion_costs_df = pd.concat(conversion_costs_list, axis=1)
+                efficiency_df = pd.concat(efficiency_list, axis=1)
+
+                conversion_costs_df.columns = range(len(conversion_costs_df.columns))
+                efficiency_df.columns = range(len(efficiency_df.columns))
+
+                cost_efficiency = conversion_costs_df / efficiency_df
+
+                if (cost_efficiency >= conversion_costs_df).to_numpy().all():
+                    index_min = cost_efficiency.idxmin(axis=1)
+                else:
+                    # print('check')  # todo : why check?
+                    index_min = conversion_costs_df.min(axis=1)
+
+                if isinstance(conversion_costs_df, pd.DataFrame):
+                    costs_min = conversion_costs_df.to_numpy()[np.arange(len(conversion_costs_df)), conversion_costs_df.columns.get_indexer(index_min)]
+                    costs_min = pd.Series(costs_min, index=conversion_costs_df.index)
+
+                    efficiency_min = efficiency_df.to_numpy()[np.arange(len(efficiency_df)), efficiency_df.columns.get_indexer(index_min)]
+                    efficiency_min = pd.Series(efficiency_min, index=efficiency_df.index)
+                else:
+                    print('not df')
+
+                locations[c1 + '-' + c2 + '-conversion_costs'] = costs_min
+                locations[c1 + '-' + c2 + '-conversion_efficiency'] = efficiency_min
+
+    # do it again to make sure that really the lowest conversion costs are used
+    for c1 in config_file['available_commodity']:
+        if not techno_economic_data_conversion[c1]['potential_conversions']:
+            # commodity has generally no conversion
+            continue
+
+        for c2 in config_file['available_commodity']:
+            if c1 == c2:
+                continue
+
+            conversion_possible = False
+
+            conversion_costs_list = []
+            efficiency_list = []
+            mid_cs = []
+
+            if c1 + '-' + c2 + '-conversion_costs' in locations.columns:
+                conversion_costs = locations[c1 + '-' + c2 + '-conversion_costs']
+                efficiency = locations[c1 + '-' + c2 + '-conversion_efficiency']
+
+                conversion_costs_list.append(conversion_costs)
+                efficiency_list.append(efficiency)
+                mid_cs.append('direct')
+
+            for c in config_file['available_commodity']:
+                if c1 + '-' + c + '-conversion_costs' in locations.columns:
+                    if c + '-' + c2 + '-conversion_costs' in locations.columns:
+
+                        conversion_possible = True
+
+                        conv_1 = locations[c1 + '-' + c + '-conversion_costs']
+                        conv_2 = locations[c + '-' + c2 + '-conversion_costs']
+
+                        eff_1 = locations[c1 + '-' + c + '-conversion_efficiency']
+                        eff_2 = locations[c + '-' + c2 + '-conversion_efficiency']
+
+                        conversion_costs = conv_1 + conv_2 * eff_1
+                        efficiency = eff_1 * eff_2
+
+                        conversion_costs_list.append(conversion_costs)
+                        efficiency_list.append(efficiency)
+                        mid_cs.append(c)
+
+            if conversion_possible:
+                if (c1, c2) not in new_conversions:
+                    new_conversions.append((c1, c2))
+
+                conversion_costs_df = pd.concat(conversion_costs_list, axis=1)
+                conversion_costs_df.columns = mid_cs
+
+                efficiency_df = pd.concat(efficiency_list, axis=1)
+                efficiency_df.columns = mid_cs
+
+                cost_efficiency = conversion_costs_df / efficiency_df
+
+                if (cost_efficiency >= conversion_costs_df).to_numpy().all():
+                    index_min = cost_efficiency.idxmin(axis=1)
+                else:
+                    # print('check')  # todo: why check?
+                    index_min = conversion_costs_df.min(axis=1)
+
+                if isinstance(conversion_costs_df, pd.DataFrame):
+                    costs_min = conversion_costs_df.to_numpy()[np.arange(len(conversion_costs_df)), conversion_costs_df.columns.get_indexer(index_min)]
+                    costs_min = pd.Series(costs_min, index=conversion_costs_df.index)
+
+                    efficiency_min = efficiency_df.to_numpy()[np.arange(len(efficiency_df)), efficiency_df.columns.get_indexer(index_min)]
+                    efficiency_min = pd.Series(efficiency_min, index=efficiency_df.index)
+                else:
+                    print('not df')
+
+                locations[c1 + '-' + c2 + '-conversion_costs'] = costs_min
+                locations[c1 + '-' + c2 + '-conversion_efficiency'] = efficiency_min
 
     return locations

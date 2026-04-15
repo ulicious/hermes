@@ -1,3 +1,14 @@
+strike_prices:  # € / MWh
+   Hydrogen_Gas: 0 #66.299
+   Hydrogen_Liquid: 0 # 70.942
+   Ammonia: 0 # 119.706
+   Methanol: 0 # 110.155
+   Methane_Gas: 0 # 22.68
+   Methane_Liquid: 0 # 47.896
+   DBT: 0
+   MCH: 0
+   FTF: 0 # 33.12
+
 cost_type:
    # viable options:
    # 'location' --> costs will be looked up for each location (from location_data)

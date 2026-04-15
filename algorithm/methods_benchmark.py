@@ -1,6 +1,8 @@
 import math
 
 import pandas as pd
+from pandas.core.interchange import dataframe
+import numpy as np
 
 from shapely.geometry import Point
 from shapely.ops import nearest_points
@@ -61,7 +63,8 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
                                          infrastructure_in_destination['latitude'],
                                          infrastructure_in_destination['longitude'])
 
-        other_distances = pd.DataFrame(other_distances, index=infrastructure_in_destination.index, columns=infrastructure_not_in_destination).transpose()
+        other_distances = pd.DataFrame(other_distances, index=infrastructure_in_destination.index,
+                                       columns=infrastructure_not_in_destination).transpose()
 
         complete_infrastructure.loc[infrastructure_not_in_destination, 'distance_to_destination'] = other_distances.min(axis='columns')
 
@@ -86,12 +89,12 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
                 break
 
     # get all locations in destination (if polygon)
+    complete_infrastructure.sort_values(['distance_to_destination'], inplace=True)
     distance_to_destination = complete_infrastructure[complete_infrastructure['distance_to_destination'] == 0].index.tolist()
     if len(distance_to_destination) < 1000:
         # if less than 1000 locations within 0 distance to destination, add more locations
-        additional_locations = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= max_length].index.tolist()
-        distance_to_destination = list(set(distance_to_destination + additional_locations))
-        distance_to_destination = distance_to_destination[:1000]
+        additional_locations = complete_infrastructure[(complete_infrastructure['distance_to_destination'] <= max_length) & (complete_infrastructure['distance_to_destination'] > 0)].index.tolist()
+        distance_to_destination = list(set(distance_to_destination + additional_locations[:1000 - len(distance_to_destination)]))
 
     if 'Destination' in distance_to_destination:
         distance_to_destination.remove('Destination')
@@ -173,6 +176,10 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
         6. costs (list): A list of costs associated with the shipping process.
     """
 
+    import time
+
+    time_now = time.time()
+
     used_commodities = [shipping_commodity.get_name()]
     used_nodes = ['Start']
     used_transport_means = []
@@ -193,15 +200,27 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
     port_index = [i for i in shipping_options.index if 'H' in i]
     shipping_options = shipping_options.loc[port_index, :]
 
-    shipping_distances = pd.read_csv(configuration['path_processed_data'] + 'inner_infrastructure_distances/port_distances.csv', index_col=0)
+    shipping_distances = pd.read_csv(configuration['path_processed_data'] + 'inner_infrastructure_distances/port_distances.csv',
+                                 index_col=0, header=0, dtype=str, sep=None, engine='python', keep_default_na=False)
+
+    try:
+        shipping_distances = np.ceil(shipping_distances.apply(pd.to_numeric, errors='raise'))
+    except Exception as e:
+        print(e)
+        for col in shipping_distances.columns:
+            converted = pd.to_numeric(shipping_distances[col], errors='coerce')
+            bad_mask = converted.isna() & shipping_distances[col].notna()
+
+            for idx in shipping_distances.index[bad_mask]:
+                print(f"Index: {idx}, Column: {col}, Value: {repr(shipping_distances.at[idx, col])}")
+
+        print(bla)
 
     if shipping_options.empty:
         return None
 
     transportation_options = shipping_commodity.get_transportation_options()
     transportation_costs = shipping_commodity.get_transportation_costs()
-    boil_off = shipping_commodity.get_boil_off()
-    self_consumption = shipping_commodity.get_self_consumption()
 
     conversion_options = shipping_commodity.get_conversion_options()
     conversion_costs = shipping_commodity.get_conversion_costs()
@@ -290,18 +309,13 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
         for mot_2 in ['road', 'pipeline_gas', 'pipeline_liquid']:
 
             old_costs = shipping_commodity.get_production_costs() + shipping_options[mot_1 + '_transportation_costs_from_start']
-            durations = shipping_distances.copy() / 1000 / data['Shipping']['speed']
 
-            if not shipping_commodity.get_uses_commodity_as_shipping_fuel():
-                shipping_costs = (old_costs + transportation_costs * shipping_distances / 1000) / (
-                            1 - (durations / 24 * boil_off))
-            else:
-                total_boil_off = durations / 24 * boil_off
-                total_self_consumption = shipping_distances / 1000 * self_consumption
+            durations = shipping_distances.copy() / 1000 / shipping_commodity.get_shipping_speed()
 
-                # if boil off is higher than self consumption, boil off will set efficiency, else self consumption
-                efficiency = total_boil_off.where(total_boil_off > total_self_consumption, total_self_consumption)
-                shipping_costs = old_costs / (1 - efficiency)
+            efficiency, shipping_costs \
+                = shipping_commodity.get_distance_and_duration_based_costs_and_efficiency_shipping(shipping_distances,
+                                                                                                   durations,
+                                                                                                   old_costs)
 
             # shipping_costs = shipping_costs - old_costs
             shipping_costs = shipping_costs.loc[all_viable_ports, all_viable_ports]
@@ -328,7 +342,7 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
                 chosen_shipping_costs = only_shipping_costs
 
     if idx is None:
-        return math.inf, None, None, None, None, None
+        return math.inf, [], None, None, None, None, None, None
 
     min_value = chosen_min_value
 
@@ -366,6 +380,9 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
     costs.append(chosen_shipping_costs.at[idx[1], idx[0]])
     costs.append(shipping_options.at[idx[1], chosen_mot_2 + '_transportation_costs_to_destination'])
 
+    cost_at_destination = min_value
+    commodity_at_destination = shipping_commodity.get_name()
+
     # check if shipped commodity is in final commodity. Use the cheapest conversion if not
     if shipping_commodity.get_name() not in final_commodities:
         commodities = data['commodities']['commodity_objects']
@@ -374,6 +391,9 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
         cheapest_conversion_commodity = None
 
         for c in final_commodities:
+
+            fuel_costs = data['commodities']['strike_prices'][c]
+
             if conversion_options[c]:
 
                 if final_node_to_calculate != 'Destination':
@@ -389,15 +409,18 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
 
                 conversion_costs_c = (min_value + conversion_costs_c) / conversion_efficiency
 
-                if conversion_costs_c < cheapest_conversion:
+                if conversion_costs_c - fuel_costs < cheapest_conversion:
                     cheapest_conversion = conversion_costs_c
                     cheapest_conversion_commodity = commodities[c].get_name()
+
+        if cheapest_conversion_commodity is None: # conversion needed but not possible
+            return math.inf, [], None, None, None, None, None, None
 
         used_commodities.append(cheapest_conversion_commodity)
         costs.append(cheapest_conversion - min_value)
         min_value = cheapest_conversion
 
-    return min_value, used_commodities, used_transport_means, used_nodes, travelled_distances, costs
+    return min_value, used_commodities, used_transport_means, used_nodes, travelled_distances, costs, cost_at_destination, commodity_at_destination
 
 
 def find_pipeline_shipping_solution(data, configuration, complete_infrastructure, pipeline_commodity,
@@ -467,6 +490,7 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
         pl_index = [i for i in pipeline_options.index if ('PL' in i) & (i not in no_conversion_nodes)]
         pipeline_options = pipeline_options.loc[pl_index, :]
 
+    # todo: this could be extended since the port does not have to be reached from the start. The pipeline transport could cross seas etc.
     options_shipping_start = complete_infrastructure[complete_infrastructure['reachable_from_start']].copy()
     port_index = [i for i in options_shipping_start.index if ('H' in i) & (i not in no_conversion_nodes)]
     options_shipping_start = options_shipping_start.loc[port_index, :]
@@ -475,8 +499,12 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
     port_index = [i for i in options_shipping_destination.index if ('H' in i) & (i not in no_conversion_nodes)]
     options_shipping_destination = options_shipping_destination.loc[port_index, :]
 
+    # if start or destination cannot be reached by ship, no benchmark
+    if options_shipping_start.empty:
+        return math.inf, [], None, None, None, None, None, None
+
     if options_shipping_destination.empty:
-        return math.inf, None, None, None, None, None
+        return math.inf, [], None, None, None, None, None, None
 
     viable_start_nodes = pipeline_options[pipeline_options['reachable_from_start']].index
 
@@ -500,7 +528,7 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
             closest_node_to_start = closest_node_to_start_g
 
     if closest_graph_to_start is None:
-        return math.inf, None, None, None, None, None
+        return math.inf, [], None, None, None, None, None, None
 
     # get distance where transportation gas makes more sense than transportation liquid and conversion to gas
     distance_max_gas = 0
@@ -558,7 +586,7 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
 
     elif distance_to_start * no_road_multiplier > max(max_length_road, max_length_new_segment):
         # no first transportation possible
-        return math.inf, None, None, None, None, None
+        return math.inf, [], None, None, None, None, None, None
     else:
         min_value = shipping_commodity.get_production_costs()
         costs.append(min_value)
@@ -589,7 +617,7 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
                                                   options_shipping_start['latitude'], options_shipping_start['longitude'])
 
     distance_to_port = pd.DataFrame(distance_to_port.transpose(), index=geodata_start.index,
-                                    columns=options_shipping_start.index)
+                                    columns=options_shipping_start.index, dtype=np.int32)
 
     distance_pipeline_to_port = distance_to_port.min().min()
     if distance_pipeline_to_port <= in_tolerance_distance_option:
@@ -600,16 +628,17 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
 
     # second step: inner pipeline transportation
     infrastructure_distances \
-        = pd.read_hdf(path_data + '/inner_infrastructure_distances/' + closest_node_to_start + '.h5', mode='r',
-                      title=closest_node_to_start)
+        = np.ceil(pd.read_hdf(path_data + '/inner_infrastructure_distances/' + closest_node_to_start + '.h5', mode='r',
+                      title=closest_node_to_start))
     infrastructure_distances = infrastructure_distances.transpose()
     distance = infrastructure_distances.at[closest_node_to_start, closest_node_first_to_second]
 
-    min_value += distance / 1000 * transportation_costs_gas[pipeline_type]
-    costs.append(distance / 1000 * transportation_costs_gas[pipeline_type])
-    travelled_distances.append(distance)
-    used_transport_means.append(pipeline_type)
-    used_nodes.append(closest_node_first_to_second)
+    if distance > 0:
+        min_value += distance / 1000 * transportation_costs_gas[pipeline_type]
+        costs.append(distance / 1000 * transportation_costs_gas[pipeline_type])
+        travelled_distances.append(distance)
+        used_transport_means.append(pipeline_type)
+        used_nodes.append(closest_node_first_to_second)
 
     # calculate distance between pipeline and ship
     if (distance_pipeline_to_port * no_road_multiplier <= max_length_new_segment) & build_new_infrastructure:
@@ -632,14 +661,14 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
 
     elif distance_pipeline_to_port * no_road_multiplier > max(max_length_road, max_length_new_segment):
         # no first transportation
-        return math.inf, None, None, None, None, None
+        return math.inf, [], None, None, None, None, None, None
     else:
 
-        # needs road transportation --> conversion to shipping commodity
+        # needs road transportation --> conversion at pipeline to shipping commodity before road transport
         min_value_before = min_value
         if pipeline_commodity != shipping_commodity:
-            min_value = (min_value + conversion_costs_gas.at[closest_node_second_to_first, shipping_commodity.get_name()]) \
-                / conversion_losses_gas.at[closest_node_second_to_first, shipping_commodity.get_name()]
+            min_value = (min_value + conversion_costs_gas.at[closest_node_first_to_second, shipping_commodity.get_name()]) \
+                / conversion_losses_gas.at[closest_node_first_to_second, shipping_commodity.get_name()]
             costs.append(min_value - min_value_before)
             used_commodities.append(shipping_commodity.get_name())
 
@@ -660,73 +689,68 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
     destination_port = options_shipping_destination['distance_to_destination'].idxmin()
     to_destination_distance = options_shipping_destination['distance_to_destination'].min()
 
-    shipping_distance = shipping_distances.at[closest_node_second_to_first, destination_port]
+    shipping_distance = pd.Series(shipping_distances.at[closest_node_second_to_first, destination_port])
 
-    transportation_costs = transportation_costs_liquid['Shipping']  # todo: test
+    old_costs = pd.Series(sum(costs))
+    durations = shipping_distance.copy() / 1000 / shipping_commodity.get_shipping_speed()
 
-    old_costs = shipping_commodity.get_production_costs() + sum(costs)
-    durations = shipping_distance.copy() / 1000 / data['Shipping']['speed']
-    boil_off = shipping_commodity.get_boil_off()
-    self_consumption = shipping_commodity.get_self_consumption()
+    efficiency, new_costs \
+        = shipping_commodity.get_distance_and_duration_based_costs_and_efficiency_shipping(shipping_distance,
+                                                                                           durations, old_costs)
 
-    if not shipping_commodity.get_uses_commodity_as_shipping_fuel():
-        new_costs = (old_costs + transportation_costs * shipping_distance / 1000) / (1 - (durations / 24 * boil_off))
-    else:
-        total_boil_off = durations / 24 * boil_off
-        total_self_consumption = shipping_distance / 1000 * self_consumption
+    shipping_costs = new_costs.values - old_costs.values
 
-        # if boil off is higher than self consumption, boil off will set efficiency, else self consumption
-        if total_boil_off > total_self_consumption:
-            efficiency = total_boil_off
-        else:
-            efficiency = total_self_consumption
-
-        # efficiency = total_boil_off.combine(total_self_consumption, func=lambda s1, s2: s1.where(s1 > s2, s2))
-        new_costs = old_costs / (1 - efficiency)
-
-    shipping_costs = new_costs - old_costs
-
-    min_value += shipping_costs
-    costs.append(shipping_costs)
+    min_value += shipping_costs[0]
+    costs.append(shipping_costs[0])
     used_transport_means.append('Shipping')
-    travelled_distances.append(shipping_distance)
+    travelled_distances.append(shipping_distance.values[0])
     used_nodes.append(destination_port)
 
     if to_destination_distance <= in_tolerance_distance_destination:
         to_destination_distance = 0
 
+    if to_destination_distance * no_road_multiplier > max(max_length_road, max_length_new_segment):
+        # no first transportation
+        return math.inf, [], None, None, None, None, None, None
+
     # calculate distance between ship and destination
     if (to_destination_distance * no_road_multiplier <= max_length_new_segment) & build_new_infrastructure:
 
-        # was shipped with shipping commodity and needs to be conversed to pipeline commodity to be
-        # transported via pipeline
+        # conversion to pipeline commodity and transport in new pipeline
         min_value_before = min_value
         if pipeline_commodity != shipping_commodity:
-            min_value = (min_value + conversion_costs_liquid.at['Destination', pipeline_commodity.get_name()]) \
+            value_conversion = (min_value + conversion_costs_liquid.at['Destination', pipeline_commodity.get_name()]) \
                 / conversion_losses_liquid.at['Destination', pipeline_commodity.get_name()]
-            costs.append(min_value - min_value_before)
-            used_commodities.append(pipeline_commodity.get_name())
+        else:
+            value_conversion = min_value
 
         transportation_costs_option_gas \
             = to_destination_distance * no_road_multiplier / 1000 * transportation_costs_gas['New_' + pipeline_type]
-        costs.append(transportation_costs_option_gas)
+        value_conversion_option_pipeline = value_conversion + transportation_costs_option_gas
 
-        min_value += transportation_costs_option_gas
-        used_transport_means.append('New_' + pipeline_type)
-
-    elif to_destination_distance * no_road_multiplier > max(max_length_road, max_length_new_segment):
-        # no first transportation
-        return math.inf, None, None, None, None, None
-    else:
+        # transport via road
         transportation_costs_option_liquid \
             = to_destination_distance * no_road_multiplier / 1000 * transportation_costs_liquid['Road']
-        costs.append(transportation_costs_option_liquid)
+        value_conversion_option_road = min_value + transportation_costs_option_liquid
 
-        min_value += transportation_costs_option_liquid
-        used_transport_means.append('Road')
+        if value_conversion_option_pipeline < value_conversion_option_road:
+            costs.append(value_conversion - min_value_before)
+            costs.append(value_conversion_option_pipeline)
+            used_commodities.append(shipping_commodity)
+            used_transport_means.append('New_' + pipeline_type)
+
+            min_value = value_conversion_option_pipeline
+
+        else:
+            costs.append(value_conversion_option_road - min_value_before)
+            used_transport_means.append('Road')
+            min_value = value_conversion_option_pipeline
 
     travelled_distances.append(to_destination_distance)
     used_nodes.append('Destination')
+
+    cost_at_destination = min_value
+    commodity_at_destination = used_commodities[-1]
 
     if used_commodities[-1] not in final_commodities:
         cheapest_conversion = math.inf
@@ -737,6 +761,9 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
         min_value_before = min_value
 
         for c in final_commodities:
+
+            fuel_price = data['commodities']['strike_prices'][c]
+
             if commodity_object.get_conversion_options()[c]:
 
                 conversion_costs = commodity_object.get_conversion_costs_specific_commodity('Destination', c)
@@ -744,7 +771,7 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
 
                 conversion_costs = (min_value + conversion_costs) / conversion_efficiency
 
-                if conversion_costs < cheapest_conversion:
+                if conversion_costs - fuel_price < cheapest_conversion:
                     cheapest_conversion = conversion_costs
                     cheapest_conversion_commodity = c
 
@@ -752,7 +779,10 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
         costs.append(min_value - min_value_before)
         used_commodities.append(cheapest_conversion_commodity)
 
-    return min_value, used_commodities, used_transport_means, used_nodes, travelled_distances, costs
+    if min_value == math.inf:  # happens if conversion not possible
+        return math.inf, [], None, None, None, None, None, None
+
+    return min_value, used_commodities, used_transport_means, used_nodes, travelled_distances, costs, cost_at_destination, commodity_at_destination
 
 
 def find_pipeline_solution(data, configuration, complete_infrastructure, pipeline_commodity, road_commodity,
@@ -830,8 +860,7 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
         pl_index = [i for i in pipeline_options_from_start.index if ('PL' in i) & (i not in no_conversion_nodes)]
         pipeline_options_from_start = pipeline_options_from_start.loc[pl_index, :]
 
-        pipeline_options_to_destination = complete_infrastructure[
-            complete_infrastructure['reachable_from_destination']].copy()
+        pipeline_options_to_destination = complete_infrastructure[complete_infrastructure['reachable_from_destination']].copy()
         pl_index = [i for i in pipeline_options_to_destination.index if ('PL' in i) & (i not in no_conversion_nodes)]
         pipeline_options_to_destination = pipeline_options_to_destination.loc[pl_index, :]
 
@@ -902,10 +931,14 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
 
                 distance_between_pipelines = pd.DataFrame(distance_between_pipelines.transpose(),
                                                           index=g_options_start.index,
-                                                          columns=g_options_destination.index).stack()
+                                                          columns=g_options_destination.index, dtype=np.int32)
 
-                nodes_between_pipelines = distance_between_pipelines.idxmin()
-                distance_between_pipelines = distance_between_pipelines.min()
+                min_distance = distance_between_pipelines.min().min()
+
+                nodes_between_pipelines = np.where(distance_between_pipelines == min_distance)
+                nodes_between_pipelines = (distance_between_pipelines.index[nodes_between_pipelines[0]][0],
+                                           distance_between_pipelines.columns[nodes_between_pipelines[1]][0])
+                distance_between_pipelines = min_distance
 
                 # get the node of second pipeline which is the closest to destination
                 distance_closest_node_g_to_destination = g_options_destination['distance_to_destination'].min()
@@ -916,8 +949,8 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
                     closest_node_to_destination_g = \
                         g_options_destination[g_options_destination['distance_to_destination'] == distance_closest_node_g_to_destination].index
 
-                if distance_closest_node_g_to_start + distance_between_pipelines + distance_closest_node_g_to_destination < min_road_length:
-                    min_road_length = distance_closest_node_g_to_start + distance_between_pipelines + distance_closest_node_g_to_destination
+                if distance_closest_node_g_to_start + min_distance + distance_closest_node_g_to_destination < min_road_length:
+                    min_road_length = distance_closest_node_g_to_start + min_distance + distance_closest_node_g_to_destination
 
                     g_start_decided = g_start
                     g_destination_decided = g_destination
@@ -933,7 +966,7 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
                     distance_pipeline_to_destination = distance_closest_node_g_to_destination
 
     if (g_start_decided is None) | (g_destination_decided is None):
-        return math.inf, None, None, None, None, None
+        return math.inf, [], None, None, None, None, None, None
 
     if distance_start_to_pipeline <= in_tolerance_distance:
         distance_start_to_pipeline = 0
@@ -952,7 +985,7 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
 
     elif distance_start_to_pipeline * no_road_multiplier > max(max_length_road, max_length_new_segment):
         # no first transportation possible
-        return math.inf, None, None, None, None, None
+        return math.inf, [], None, None, None, None, None, None
     else:
         min_value = road_commodity.get_production_costs()
         costs.append(min_value)
@@ -1053,7 +1086,7 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
 
         elif distance_between_pipelines * no_road_multiplier > max(max_length_road, max_length_new_segment):
             # no first transportation
-            return math.inf, None, None, None, None, None
+            return math.inf, [], None, None, None, None, None, None
         else:
 
             # needs road transportation --> conversion to road commodity
@@ -1123,7 +1156,7 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
 
     elif distance_pipeline_to_destination * no_road_multiplier > max(max_length_road, max_length_new_segment):
         # no first transportation
-        return math.inf, None, None, None, None, None
+        return math.inf, [], None, None, None, None, None, None
     else:
         # needs road transportation --> conversion to road commodity
         min_value_before = min_value
@@ -1145,6 +1178,14 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
 
     used_nodes.append('Destination')
 
+    commodity_at_destination = used_commodities[-1]
+    cost_at_destination = min_value
+
+    if distance_pipeline_to_destination == 0:
+        nodes_at_destination = [node_end_g_start]
+    else:
+        nodes_at_destination = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= configuration['to_final_destination_tolerance']].index
+
     if used_commodities[-1] not in final_commodities:
         cheapest_conversion = math.inf
         cheapest_conversion_commodity = None
@@ -1154,37 +1195,47 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
         min_value_before = min_value
 
         for c in final_commodities:
+
+            fuel_price = data['commodities']['strike_prices'][c]
+
             if commodity_object.get_conversion_options()[c]:
 
-                conversion_costs = commodity_object.get_conversion_costs_specific_commodity('Destination', c)
-                conversion_efficiency = commodity_object.get_conversion_efficiency_specific_commodity('Destination', c)
+                conversion_costs = commodity_object.get_conversion_costs_specific_commodity(nodes_at_destination, c)
+                conversion_efficiency = commodity_object.get_conversion_efficiency_specific_commodity(nodes_at_destination, c)
 
                 conversion_costs = (min_value + conversion_costs) / conversion_efficiency
+                conversion_costs = conversion_costs.min()
 
-                if conversion_costs < cheapest_conversion:
+                if conversion_costs - fuel_price < cheapest_conversion:
                     cheapest_conversion = conversion_costs
                     cheapest_conversion_commodity = c
-            else:
-                if commodity_object.get_conversion_options()['Hydrogen_Gas']:
-                    # direct conversion not possible. Take route through hydrogen
-                    conversion_costs = commodity_object.get_conversion_costs_specific_commodity('Destination', 'Hydrogen_Gas')
-                    conversion_efficiency = commodity_object.get_conversion_efficiency_specific_commodity('Destination', 'Hydrogen_Gas')
+            # else:  # todo: not used anymore since conversion costs for all conversions are calculated now
+            #     if commodity_object.get_conversion_options()['Hydrogen_Gas']:
+            #         # direct conversion not possible. Take route through hydrogen
+            #         conversion_costs = commodity_object.get_conversion_costs_specific_commodity('Destination', 'Hydrogen_Gas')
+            #         conversion_efficiency = commodity_object.get_conversion_efficiency_specific_commodity('Destination', 'Hydrogen_Gas')
+            #
+            #         conversion_costs_value = (min_value + conversion_costs) / conversion_efficiency
+            #
+            #         commodity_object = data['commodities']['commodity_objects']['Hydrogen_Gas']
+            #
+            #         conversion_costs = commodity_object.get_conversion_costs_specific_commodity('Destination', c)
+            #         conversion_efficiency = commodity_object.get_conversion_efficiency_specific_commodity('Destination', c)
+            #
+            #         conversion_costs = (conversion_costs_value + conversion_costs) / conversion_efficiency
+            #
+            #         if conversion_costs - fuel_price < cheapest_conversion:
+            #             cheapest_conversion = conversion_costs
+            #             cheapest_conversion_commodity = c
 
-                    conversion_costs_value = (min_value + conversion_costs) / conversion_efficiency
-
-                    commodity_object = data['commodities']['commodity_objects']['Hydrogen_Gas']
-
-                    conversion_costs = commodity_object.get_conversion_costs_specific_commodity('Destination', c)
-                    conversion_efficiency = commodity_object.get_conversion_efficiency_specific_commodity('Destination', c)
-
-                    conversion_costs = (conversion_costs_value + conversion_costs) / conversion_efficiency
-
-                    if conversion_costs < cheapest_conversion:
-                        cheapest_conversion = conversion_costs
-                        cheapest_conversion_commodity = c
+        if cheapest_conversion_commodity is None:
+            return math.inf, [], None, None, None, None, None, None
 
         min_value = cheapest_conversion
         costs.append(min_value - min_value_before)
         used_commodities.append(cheapest_conversion_commodity)
 
-    return min_value, used_commodities, used_transport_means, used_nodes, travelled_distances, costs
+        if min_value == math.inf:
+            return math.inf, [], None, None, None, None, None, None
+
+    return min_value, used_commodities, used_transport_means, used_nodes, travelled_distances, costs, cost_at_destination, commodity_at_destination

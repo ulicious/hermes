@@ -75,7 +75,6 @@ class Commodity:
         return self.transportation_options[mean_of_transport]
 
     # shipping specific parameters
-
     def set_boil_off(self, boil_off):
         self.boil_off = boil_off
 
@@ -103,9 +102,39 @@ class Commodity:
     def get_starting_efficiency(self):
         return self.starting_efficiency
 
+    def set_shipping_speed(self, speed):
+        self.shipping_speed = speed
+
+    def get_shipping_speed(self):
+        return self.shipping_speed
+
+    def get_distance_and_duration_based_costs_and_efficiency_shipping(self, distances, durations, current_total_costs):
+
+        boil_off = self.get_boil_off()
+        self_consumption = self.get_self_consumption()
+        transportation_costs = self.get_transportation_costs_specific_mean_of_transport('Shipping')
+
+        if not self.get_uses_commodity_as_shipping_fuel():
+            current_total_costs_distances \
+                = current_total_costs / (1 - (durations / 24 * boil_off)) + transportation_costs * distances / 1000
+            if isinstance(durations, pd.DataFrame):
+                efficiency = pd.DataFrame(1 - (durations / 24 * boil_off), index=durations.index, columns=durations.columns)
+            else:
+                efficiency = pd.Series(1 - (durations / 24 * boil_off), index=current_total_costs_distances.index)
+        else:
+            total_boil_off = durations / 24 * boil_off
+            total_self_consumption = distances / 1000 * self_consumption
+
+            # if boil off is higher than self consumption, boil off will set efficiency, else self consumption
+            losses = total_boil_off.where(total_boil_off > total_self_consumption, total_self_consumption)
+            efficiency = 1 - losses
+            current_total_costs_distances = current_total_costs / (1 - losses)
+
+        return efficiency, current_total_costs_distances
+
     def __init__(self, name, production_costs, conversion_options, conversion_costs, conversion_efficiencies,
                  transportation_options, transportation_costs, boil_off, uses_commodity_as_shipping_fuel,
-                 self_consumption, starting_efficiency=1):
+                 self_consumption, shipping_speed, starting_efficiency=1):
 
         """
         Creates instance of commodity object
@@ -134,6 +163,7 @@ class Commodity:
         self.self_consumption = self_consumption
 
         self.starting_efficiency = starting_efficiency
+        self.shipping_speed = shipping_speed
 
 
 def create_commodity_objects(location_data,
@@ -161,7 +191,9 @@ def create_commodity_objects(location_data,
     for source_commodity in commodity_names:
 
         # -- conversions
-        potential_conversions = techno_economic_data_conversion[source_commodity]['potential_conversions']
+        columns_with_commodity = [c for c in conversion_costs_and_efficiencies.columns if c.split('-')[0] == source_commodity]
+        potential_conversions = list(set([c.split('-')[1] for c in columns_with_commodity if c.split('-')[1] in commodity_names]))
+
         conversion_options = {}
 
         conversion_cost_columns = []
@@ -176,8 +208,8 @@ def create_commodity_objects(location_data,
 
                 conversion_options[target_commodity] = True
 
-                conversion_cost_columns.append(source_commodity + '_' + target_commodity + '_conversion_costs')
-                conversion_cost_efficiency_columns.append(source_commodity + '_' + target_commodity + '_conversion_efficiency')
+                conversion_cost_columns.append(source_commodity + '-' + target_commodity + '-conversion_costs')
+                conversion_cost_efficiency_columns.append(source_commodity + '-' + target_commodity + '-conversion_efficiency')
 
                 order_commodities.append(target_commodity)
 
@@ -230,29 +262,30 @@ def create_commodity_objects(location_data,
         if source_commodity == 'Hydrogen_Gas':
             starting_efficiency = 1
         else:
-            if 'Hydrogen_Gas_' + source_commodity + '_conversion_efficiency' not in locations_with_conversion.columns:
+            if 'Hydrogen_Gas-' + source_commodity + '-conversion_efficiency' not in locations_with_conversion.columns:
                 # direct conversion from hydrogen gas to target commodity to possible
                 efficiency_columns = [c for c in locations_with_conversion.columns
-                                      if source_commodity + '_conversion_efficiency' in c]
-                input_commodity = efficiency_columns[0].split('_' + source_commodity)[0]
+                                      if source_commodity + '-conversion_efficiency' in c]
+                input_commodity = efficiency_columns[0].split('-' + source_commodity)[0]
 
-                h2_to_input = locations_with_conversion.loc['Start', 'Hydrogen_Gas_' + input_commodity + '_conversion_efficiency']
-                input_to_target = locations_with_conversion.loc['Start', input_commodity + '_' + source_commodity + '_conversion_efficiency']
+                h2_to_input = locations_with_conversion.loc['Start', 'Hydrogen_Gas-' + input_commodity + '-conversion_efficiency']
+                input_to_target = locations_with_conversion.loc['Start', input_commodity + '-' + source_commodity + '-conversion_efficiency']
 
                 starting_efficiency = h2_to_input * input_to_target
 
             else:
-                starting_efficiency = locations_with_conversion.loc['Start', 'Hydrogen_Gas_' + source_commodity + '_conversion_efficiency']
+                starting_efficiency = locations_with_conversion.loc['Start', 'Hydrogen_Gas-' + source_commodity + '-conversion_efficiency']
 
         # shipping specific parameters
         boil_off = techno_economic_data_transportation[source_commodity]['Boil_Off']
         uses_commodity_as_shipping_fuel = techno_economic_data_transportation[source_commodity]['Uses_Commodity_as_Shipping_Fuel']
         self_consumption = techno_economic_data_transportation[source_commodity]['Self_Consumption']
+        shipping_speed = techno_economic_data_transportation[source_commodity]['Shipping_Speed']
 
         commodity = Commodity(source_commodity, location_data.loc['Start', source_commodity], conversion_options,
                               conversion_costs, conversion_efficiencies,
                               transportation_options, transportation_costs,
-                              boil_off, uses_commodity_as_shipping_fuel, self_consumption,
+                              boil_off, uses_commodity_as_shipping_fuel, self_consumption, shipping_speed,
                               starting_efficiency)
 
         commodities.append(commodity)

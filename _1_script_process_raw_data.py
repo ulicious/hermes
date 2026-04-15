@@ -15,9 +15,11 @@ from data_processing.process_network_data_to_network_objects import \
     process_network_data_to_network_objects_with_additional_connection_points
 from data_processing.process_ports import process_ports
 from data_processing.calculate_inner_distances import get_distances_within_networks, get_distances_of_closest_infrastructure, calculate_searoute_distances
-from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure
+from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure, calculate_conversion_costs_and_efficiencies_for_all_combinations
 from data_processing.process_mip_data import calculate_road_distances, calculate_efficiencies
 from data_processing.helpers_geometry import get_destination
+
+from shapely.geometry import Point, MultiPolygon
 
 
 import warnings
@@ -91,8 +93,11 @@ create_mip_data = config_file['create_mip_data']
 
 destination = get_destination(config_file)
 
+# todo: separate more clearly: Creation of basic infrastructure data and case sensitive data
+
 # based on the input data, the data can further be processed to input data of a mixed-integer model to validate the heuristic
 # This will be done while processing the data of the heuristic. However, this can significantly increase the processing time
+files_in_mip_folder = []
 if create_mip_data:
     name_folder = path_processed_data + 'mip_data/'
     if 'mip_data' not in os.listdir(path_processed_data):
@@ -152,8 +157,8 @@ if not update_only_conversion_costs_and_efficiency:
                                                                                             path_gas_pipeline_data,
                                                                                             number_workers=num_cores)
 
-        gas_graph.to_csv(path_processed_data + 'gas_pipeline_graphs.csv')
-        gas_nodes.to_csv(path_processed_data + 'gas_pipeline_node_locations.csv')
+        gas_graph.to_csv(path_processed_data + 'gas_pipeline_graphs.csv', encoding='utf-8', index=True)
+        gas_nodes.to_csv(path_processed_data + 'gas_pipeline_node_locations.csv', encoding='utf-8', index=True)
 
     else:
         gas_graph = pd.read_csv(path_processed_data + 'gas_pipeline_graphs.csv', index_col=0)
@@ -171,8 +176,8 @@ if not update_only_conversion_costs_and_efficiency:
                 = process_network_data_to_network_objects_with_additional_connection_points('oil_pipeline', path_oil_pipeline_data,
                                                                                             number_workers=num_cores)
 
-        oil_graph.to_csv(path_processed_data + 'oil_pipeline_graphs.csv')
-        oil_nodes.to_csv(path_processed_data + 'oil_pipeline_node_locations.csv')
+        oil_graph.to_csv(path_processed_data + 'oil_pipeline_graphs.csv', encoding='utf-8', index=True)
+        oil_nodes.to_csv(path_processed_data + 'oil_pipeline_node_locations.csv', encoding='utf-8', index=True)
 
     else:
         oil_graph = pd.read_csv(path_processed_data + 'oil_pipeline_graphs.csv', index_col=0)
@@ -182,7 +187,7 @@ if not update_only_conversion_costs_and_efficiency:
     logging.info('Processing ports')
     if not (('ports.csv' in files_in_folder) & (not enforce_update_of_data)):
         ports = process_ports(path_raw_data, coastlines, landmasses, boundaries, destination, use_minimal_example=use_minimal_example)
-        ports.to_csv(path_processed_data + 'ports.csv')
+        ports.to_csv(path_processed_data + 'ports.csv', encoding='utf-8', index=True)
     else:
         ports = pd.read_csv(path_processed_data + 'ports.csv', index_col=0)
 
@@ -195,7 +200,8 @@ if not update_only_conversion_costs_and_efficiency:
         if 'inner_infrastructure_distances' not in os.listdir(path_processed_data):
             os.mkdir(name_folder)
 
-        if not (('inner_infrastructure_distances' in files_in_folder) & (not enforce_update_of_data) & ('port_distances.csv' in files_in_mip_folder)):
+        if not (('inner_infrastructure_distances' in files_in_folder) & (not enforce_update_of_data)
+                & (not (create_mip_data & (not 'port_distances.csv' in files_in_mip_folder)))):
             get_distances_within_networks(gas_graph, gas_nodes, path_processed_data, num_cores, use_low_memory=use_low_memory, create_mip_data=create_mip_data)
             get_distances_within_networks(oil_graph, oil_nodes, path_processed_data, num_cores, use_low_memory=use_low_memory, create_mip_data=create_mip_data)
             calculate_searoute_distances(ports, techno_economic_data_transport['Shipping_Speed'], num_cores, path_processed_data, create_mip_data=create_mip_data)
@@ -217,7 +223,11 @@ else:
 logging.info('Calculate conversion costs and efficiency')
 conversion_costs_and_efficiency \
     = attach_conversion_costs_and_efficiency_to_infrastructure(options, config_file, techno_economic_data_conversion)
-conversion_costs_and_efficiency.to_csv(path_processed_data + 'conversion_costs_and_efficiency.csv')
+
+conversion_costs_and_efficiency \
+    = calculate_conversion_costs_and_efficiencies_for_all_combinations(config_file, conversion_costs_and_efficiency, techno_economic_data_conversion)
+
+conversion_costs_and_efficiency.to_csv(path_processed_data + 'conversion_costs_and_efficiency.csv', encoding='utf-8', index=True)
 
 # missing data not yet processed: road and new pipeline distances; efficiencies; costs
 if create_mip_data:  # todo: distances to the destination + conversion cost at destination
@@ -229,8 +239,23 @@ if create_mip_data:  # todo: distances to the destination + conversion cost at d
     # remove unnecessary columns
     options.drop(columns=['name', 'country', 'continent', 'longitude_on_coastline', 'latitude_on_coastline'], inplace=True)
 
+    # get destination infrastructure
+    destination_infrastructure = []
+    if isinstance(destination, MultiPolygon):
+        for op in options.index:
+            op_point = Point([options.loc[op, 'longitude'], options.loc[op, 'latitude']])
+
+            if destination.contains(op_point):
+                destination_infrastructure.append(op)
+    else:
+        print('')
+        # todo: if destination is single point --> adjust
+
+    destination_infrastructure = pd.DataFrame(destination_infrastructure, columns=['destination_infrastructure'])
+    destination_infrastructure.to_csv(path_processed_data + 'mip_data/' + 'destination_infrastructure.csv', encoding='utf-8', index=True)
+
     # save overall options data
-    options.to_csv(path_processed_data + 'mip_data/' + 'options.csv')
+    options.to_csv(path_processed_data + 'mip_data/' + 'options.csv', encoding='utf-8', index=True)
 
     # distances
     road_distances = calculate_road_distances(config_file['tolerance_distance'], options)
@@ -240,8 +265,8 @@ if create_mip_data:  # todo: distances to the destination + conversion cost at d
     road_distances['distance'] *= config_file['no_road_multiplier']
     new_pipeline_distances['distance'] *= config_file['no_road_multiplier']
 
-    road_distances.to_csv(path_processed_data + 'mip_data/' + 'road_distances.csv')
-    new_pipeline_distances.to_csv(path_processed_data + 'mip_data/' + 'new_pipeline_distances.csv')
+    road_distances.to_csv(path_processed_data + 'mip_data/' + 'road_distances.csv', encoding='utf-8', index=True)
+    new_pipeline_distances.to_csv(path_processed_data + 'mip_data/' + 'new_pipeline_distances.csv', encoding='utf-8', index=True)
 
     # transport efficiencies: depend on distance and duration
     ports_distances = pd.read_csv(path_processed_data + 'mip_data/' + 'port_distances.csv', index_col=0)
@@ -254,10 +279,10 @@ if create_mip_data:  # todo: distances to the destination + conversion cost at d
             self_consumption = techno_economic_data_transport[commodity]['Self_Consumption']
 
             efficiency = calculate_efficiencies(ports_distances, ports_durations, boil_off, uses_commodity_as_shipping_fuel, self_consumption)
-            efficiency.to_csv(path_processed_data + 'mip_data/' + commodity + '_efficiencies.csv')
+            efficiency.to_csv(path_processed_data + 'mip_data/' + commodity + '_efficiencies.csv', encoding='utf-8', index=True)
 
     # conversion costs and efficiencies at nodes
-    conversion_costs_and_efficiency.to_csv(path_processed_data + 'mip_data/' + 'conversion_costs_and_efficiency.csv')
+    conversion_costs_and_efficiency.to_csv(path_processed_data + 'mip_data/' + 'conversion_costs_and_efficiency.csv', encoding='utf-8', index=True)
 
 
 if time.time() - time_start < 60:

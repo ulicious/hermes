@@ -38,14 +38,14 @@ def get_routes_figure(sub_axes, routes, starting_locations, line_styles, line_wi
         for m, r_segment in enumerate(r):
 
             if m == 0:
-                commodity = r_segment
+                commodity = r_segment[0]
 
                 start_longitude = starting_locations[n][0]
                 start_latitude = starting_locations[n][1]
 
                 continue
 
-            elif len(r_segment) == 2:
+            elif len(r_segment) == 3:
                 # conversion
                 commodity = r_segment[1]
             else:
@@ -294,7 +294,7 @@ def get_cost_figure(sub_axes, data, norm, cmap_chosen, boundaries, destination_l
             affected_locations = data[data['color'] == color].index
             voronois = production_costs.loc[affected_locations, 'geometry'].tolist()
             voronois = gpd.GeoDataFrame(geometry=voronois)
-            voronois.plot(ax=sub_axes, color=color, ec='black', linewidth=0.1)
+            voronois.plot(ax=sub_axes, color=color, ec='black', linewidth=0.01)
     elif not plot_era:
         data.plot(x="longitude", y="latitude", kind="scatter", c=col, ax=sub_axes, s=s, linewidths=0)
     else:
@@ -319,7 +319,7 @@ def get_cost_figure(sub_axes, data, norm, cmap_chosen, boundaries, destination_l
         destination_location = gpd.GeoDataFrame(geometry=[destination_location])
         destination_location.plot(ax=sub_axes, fc='none', ec='red', linewidth=0.5)
 
-    sub_axes.grid(visible=True, alpha=0.5)
+    sub_axes.grid(visible=True, alpha=0.1)
     sub_axes.text(0.6, 0.05, fig_title, transform=sub_axes.transAxes, va='bottom', ha='left')
 
     sub_axes.set_ylabel('')
@@ -577,7 +577,7 @@ def get_production_costs_figure(sub_axes, data, norm, cmap_chosen, boundaries, d
             affected_locations = data[data['color'] == color].index
             voronois = production_costs.loc[affected_locations, 'geometry'].tolist()
             voronois = gpd.GeoDataFrame(geometry=voronois)
-            voronois.plot(ax=sub_axes, color=color, ec='black', linewidth=0.1)
+            voronois.plot(ax=sub_axes, color=color, ec='black', linewidth=0.01)
     elif not plot_era:
         data.plot(x="longitude", y="latitude", kind="scatter", c=col, ax=sub_axes, s=s, linewidths=0)
     else:
@@ -639,7 +639,7 @@ def get_energy_carrier_figure(sub_axes, data, boundaries, color_dictionary, nice
             affected_locations = data[data['color'] == color].index
             voronois = production_costs.loc[affected_locations, 'geometry'].tolist()
             voronois = gpd.GeoDataFrame(geometry=voronois)
-            voronois.plot(ax=sub_axes, color=color, ec='black', linewidth=0.1)
+            voronois.plot(ax=sub_axes, color=color, ec='black', linewidth=0.01)
     elif not plot_era:
         data.plot(x="longitude", y="latitude", kind="scatter", c=col, ax=sub_axes, s=s, linewidths=0)
     else:

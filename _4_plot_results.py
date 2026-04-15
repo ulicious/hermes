@@ -11,7 +11,7 @@ import matplotlib.lines as mlines
 import geopandas as gpd
 import cartopy.io.shapereader as shpreader
 
-from shapely.geometry import Point
+from shapely.geometry import Point, MultiPolygon
 
 from plotting.helpers_plotting import load_data, get_complete_infrastructure
 from plotting.get_figures import get_routes_figure, get_cost_figure, get_production_costs_figure, get_infrastructure_figure, \
@@ -67,6 +67,18 @@ else:
                 first = False
             else:
                 destination_location.union(world[world['NAME_EN'] == c]['geometry'].values[0])
+
+    if config_file['use_biggest_landmass']:  # use only biggest land area
+        if len([*country_states.keys()]) == 1:
+            if isinstance(destination_location, MultiPolygon):
+                largest_area = 0
+                chosen_geom = None
+                for geom in destination_location.geoms:
+                    if geom.area > largest_area:
+                        largest_area = geom.area
+                        chosen_geom = geom
+
+                destination_location = chosen_geom
 
 infrastructure_data, destination = load_data(path_processed_data, config_file)
 complete_infrastructure = get_complete_infrastructure(infrastructure_data, destination)

@@ -1,3 +1,4 @@
+import itertools
 import time
 import math
 import gc
@@ -11,12 +12,12 @@ from algorithm.methods_benchmark import check_if_benchmark_possible
 from algorithm.methods_routing import process_out_tolerance_branches, process_in_tolerance_branches_high_memory,\
     process_in_tolerance_branches_low_memory, get_complete_infrastructure
 from algorithm.methods_algorithm import postprocessing_branches, create_branches_based_on_commodities_at_start,\
-    check_for_inaccessibility_and_at_destination, prepare_commodities
+    check_for_inaccessibility_and_at_destination, prepare_commodities, assess_for_benchmark
 from algorithm.script_benchmark import calculate_benchmark
 from algorithm.methods_geographic import get_continent_from_location
 from algorithm.methods_conversion import apply_conversion
 from algorithm.methods_cost_approximations import calculate_minimal_costs_conversion_for_oil_and_gas_infrastructure
-from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure
+from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure, calculate_conversion_costs_and_efficiencies_for_all_combinations
 
 import logging
 logging.getLogger().setLevel(logging.INFO)
@@ -39,6 +40,7 @@ def run_algorithm(args):
     start_time = time.time()
 
     data = data.copy()
+    data['location_index'] = location_index
 
     print_information = configuration['print_runtime_information']
 
@@ -62,7 +64,7 @@ def run_algorithm(args):
         infrastructure_at_destination = complete_infrastructure.loc[data['destination']['infrastructure'], :].copy()
 
         if infrastructure_at_destination.empty:
-            print('Infrastructure at destination is empty. Adjust considered infrastructure in process raw data script')
+            print(str(data['k']) + ': Infrastructure at destination is empty. Adjust considered infrastructure in process raw data script')
             return None
 
         data['destination']['infrastructure'] = infrastructure_at_destination
@@ -95,11 +97,16 @@ def run_algorithm(args):
     conversions_location_data \
         = attach_conversion_costs_and_efficiency_to_infrastructure(location_data, config_file,
                                                                    techno_economic_data_conversion, with_tqdm=False)
+    conversion_costs_and_efficiency \
+        = calculate_conversion_costs_and_efficiencies_for_all_combinations(config_file, conversions_location_data,
+                                                                           techno_economic_data_conversion)
     conversion_costs_and_efficiencies = pd.concat([data['conversion_costs_and_efficiencies'], conversions_location_data])
     data['conversion_costs_and_efficiencies'] = conversion_costs_and_efficiencies
 
     # add commodities
     commodities, commodity_names = prepare_commodities(config_file, location_data, data)
+
+    data['commodities']['all_commodities'] = commodity_names
 
     for c in commodities:
         data['commodities']['commodity_objects'][c.get_name()] = c
@@ -118,15 +125,23 @@ def run_algorithm(args):
                                              'current_node', 'current_commodity'])
 
     # calculate benchmarks
-    benchmark = calculate_benchmark(data, configuration, complete_infrastructure)
+    benchmark, benchmarks, benchmark_locations, benchmark_info = calculate_benchmark(data, configuration, complete_infrastructure)
     if math.isinf(benchmark):
-        print('Not able to calculate benchmark')
+        print(str(data['k']) + ': Not able to calculate benchmark')
         return None
+
+    cumulative_benchmark_costs = []
+    total = 0
+    for i in benchmark_info[4]:
+        total += i
+        cumulative_benchmark_costs.append(total)
 
     initial_benchmark_costs = benchmark
 
     # remove initial branches if they exceed benchmark
-    branches = branches[branches['current_total_costs'] <= benchmark]
+    # to compare the different commodities, the benchmark is adjusted by the fuel price
+    branches['benchmark'] = branches['current_commodity'].map(benchmarks)
+    conversion_branches = branches[branches['current_total_costs'] <= branches['benchmark']]
 
     # Start iterations. While loop runs as long as branches dataframe
     final_solution = None
@@ -156,9 +171,10 @@ def run_algorithm(args):
             conversion_possible_locations = [i for i in all_locations.index if i not in no_conversion_possible_locations]
             conversion_possible_branches = branches[branches['current_node'].isin(conversion_possible_locations)]
 
-            branches, potential_final_solution, branch_number, benchmark, local_benchmarks = \
+            branches, potential_final_solution, branch_number, benchmark, benchmarks, benchmark_locations, local_benchmarks = \
                 apply_conversion(conversion_possible_branches, configuration, data, branch_number,
-                                 benchmark, local_benchmarks, iteration, start_time)
+                                 benchmark, benchmarks, benchmark_locations, local_benchmarks, iteration,
+                                 complete_infrastructure)
 
             if potential_final_solution is not None:
                 final_solution = potential_final_solution
@@ -168,21 +184,36 @@ def run_algorithm(args):
             # todo (for further increase of speed): comparison to local benchmarks
 
             if not branches.empty:
-                branches, potential_final_solution, branch_number, benchmark, local_benchmarks = \
+                branches, potential_final_solution, branch_number, benchmark, benchmarks, benchmark_locations, local_benchmarks = \
                     apply_conversion(branches, configuration, data, branch_number,
-                                     benchmark, local_benchmarks, iteration, start_time)
+                                     benchmark, benchmarks, benchmark_locations, local_benchmarks, iteration,
+                                     complete_infrastructure)
 
             if potential_final_solution is not None:
                 final_solution = potential_final_solution
 
-            # drop all branches which are at destination but not final solution
-            if not branches.empty:
-                at_destination \
-                    = branches[branches['distance_to_final_destination'] <= configuration['to_final_destination_tolerance']].index.tolist()
-                branches.drop(at_destination, inplace=True)
-
             # merge all processed and not processed branches
             branches = pd.concat([branches, no_conversion_possible_branches])
+
+        # check if benchmark solution is still in branches
+        if configuration['print_benchmark_info']:
+            print('Conversion')
+            commodities = benchmark_info[0]
+            locations = benchmark_info[2]
+
+            combinations = [(c, l) for c in commodities for l in locations]
+            benchmark_branches = []
+
+            for com in set(combinations):
+                branch = branches[(branches['current_commodity'] == com[0]) & (branches['current_node'] == com[1])]
+
+                if not branch.empty:
+                    benchmark_branches.append(branch)
+
+            if benchmark_branches:
+                benchmark_branches = pd.concat(benchmark_branches, ignore_index=True)
+                print(cumulative_benchmark_costs)
+                print(benchmark_branches[['current_commodity', 'current_node', 'current_total_costs']])
 
         time_conversion = time.time() - time_conversion
         len_conversion_branches = len(branches.index)
@@ -250,8 +281,8 @@ def run_algorithm(args):
 
                     commodity_object.get_transportation_costs_specific_mean_of_transport(mot)
 
-                # attach transportation costs  # todo: are they required?
-                if False:
+                # attach transportation costs
+                if True:
                     if commodity_object.get_transportation_options_specific_mean_of_transport('New_Pipeline_Gas'):
                         branches.loc[commodity_object_branches, 'new_transportation_costs'] \
                             = commodity_object.get_transportation_costs_specific_mean_of_transport('New_Pipeline_Gas')
@@ -351,12 +382,12 @@ def run_algorithm(args):
                 if configuration['use_low_memory']:
                     preselection = process_in_tolerance_branches_low_memory(data, preselection,
                                                                             complete_infrastructure,
-                                                                            benchmark, configuration,
+                                                                            benchmarks, configuration,
                                                                             with_assessment=False)
                 else:
                     preselection = process_in_tolerance_branches_high_memory(data, preselection,
                                                                              complete_infrastructure,
-                                                                             benchmark, configuration,
+                                                                             benchmarks, configuration,
                                                                              with_assessment=False)
 
                 if not preselection.empty:
@@ -425,21 +456,23 @@ def run_algorithm(args):
 
                 # now check which branch can potentially use pipelines. If a branch cannot use a pipeline type,
                 # we don't have to assess the pipeline type for this branch
+                out_infrastructure_branches['benchmark'] = out_infrastructure_branches['current_commodity'].map(benchmarks)
+
                 no_pipeline_gas_branches \
-                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] > benchmark)
-                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] <= benchmark)].index.tolist()
+                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] > out_infrastructure_branches['benchmark'])
+                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] <= out_infrastructure_branches['benchmark'])].index.tolist()
 
                 no_pipeline_liquid_branches \
-                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] <= benchmark)
-                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] > benchmark)].index.tolist()
+                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] <= out_infrastructure_branches['benchmark'])
+                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] > out_infrastructure_branches['benchmark'])].index.tolist()
 
                 only_shipping_branches \
-                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] > benchmark)
-                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] > benchmark)].index.tolist()
+                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] > out_infrastructure_branches['benchmark'])
+                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] > out_infrastructure_branches['benchmark'])].index.tolist()
 
                 no_limitation \
-                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] <= benchmark)
-                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] <= benchmark)].index.tolist()
+                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] <= out_infrastructure_branches['benchmark'])
+                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] <= out_infrastructure_branches['benchmark'])].index.tolist()
 
                 # process all branches twice:
                 # 1: use minimal distances as road distances are quite expensive and transporting to the closest
@@ -450,7 +483,7 @@ def run_algorithm(args):
                     outside_options_no_gas \
                         = process_out_tolerance_branches(complete_infrastructure,
                                                          out_infrastructure_branches.loc[no_pipeline_gas_branches],
-                                                         configuration, iteration, data, benchmark,
+                                                         configuration, iteration, data, benchmarks,
                                                          limitation='no_pipeline_gas', use_minimal_distance=True)
 
                     if not outside_options_no_gas.empty:
@@ -459,7 +492,7 @@ def run_algorithm(args):
                         outside_options_no_gas \
                             = process_out_tolerance_branches(complete_infrastructure,
                                                              out_infrastructure_branches.loc[options_to_consider],
-                                                             configuration, iteration, data, benchmark,
+                                                             configuration, iteration, data, benchmarks,
                                                              limitation='no_pipeline_gas')
                     else:
                         outside_options_no_gas = pd.DataFrame()
@@ -470,7 +503,7 @@ def run_algorithm(args):
                     outside_options_no_liquid \
                         = process_out_tolerance_branches(complete_infrastructure,
                                                          out_infrastructure_branches.loc[no_pipeline_liquid_branches],
-                                                         configuration, iteration, data, benchmark,
+                                                         configuration, iteration, data, benchmarks,
                                                          limitation='no_pipeline_liquid', use_minimal_distance=True)
 
                     if not outside_options_no_liquid.empty:
@@ -479,7 +512,7 @@ def run_algorithm(args):
                         outside_options_no_liquid \
                             = process_out_tolerance_branches(complete_infrastructure,
                                                              out_infrastructure_branches.loc[options_to_consider],
-                                                             configuration, iteration, data, benchmark,
+                                                             configuration, iteration, data, benchmarks,
                                                              limitation='no_pipeline_liquid')
                     else:
                         outside_options_no_liquid = pd.DataFrame()
@@ -491,7 +524,7 @@ def run_algorithm(args):
                     outside_options_only_shipping \
                         = process_out_tolerance_branches(complete_infrastructure,
                                                          out_infrastructure_branches.loc[only_shipping_branches],
-                                                         configuration, iteration, data, benchmark,
+                                                         configuration, iteration, data, benchmarks,
                                                          limitation='no_pipelines', use_minimal_distance=True)
 
                     if not outside_options_only_shipping.empty:
@@ -500,7 +533,7 @@ def run_algorithm(args):
                         outside_options_only_shipping \
                             = process_out_tolerance_branches(complete_infrastructure,
                                                              out_infrastructure_branches.loc[options_to_consider],
-                                                             configuration, iteration, data, benchmark,
+                                                             configuration, iteration, data, benchmarks,
                                                              limitation='no_pipelines')
 
                     else:
@@ -512,7 +545,7 @@ def run_algorithm(args):
                     outside_options_no_limitation \
                         = process_out_tolerance_branches(complete_infrastructure,
                                                          out_infrastructure_branches.loc[no_limitation],
-                                                         configuration, iteration, data, benchmark,
+                                                         configuration, iteration, data, benchmarks,
                                                          use_minimal_distance=True)
 
                     if not outside_options_no_limitation.empty:
@@ -521,7 +554,7 @@ def run_algorithm(args):
                         outside_options_no_limitation \
                             = process_out_tolerance_branches(complete_infrastructure,
                                                              out_infrastructure_branches.loc[options_to_consider],
-                                                             configuration, iteration, data, benchmark)
+                                                             configuration, iteration, data, benchmarks)
                     else:
                         outside_options_no_limitation = pd.DataFrame()
                 else:
@@ -537,12 +570,12 @@ def run_algorithm(args):
                 if not configuration['use_low_memory']:
                     in_tolerance_options \
                         = process_in_tolerance_branches_high_memory(data, in_infrastructure_branches,
-                                                                    complete_infrastructure, benchmark, configuration)
+                                                                    complete_infrastructure, benchmarks, configuration)
                 else:
                     in_tolerance_options \
                         = process_in_tolerance_branches_low_memory(data, in_infrastructure_branches,
                                                                    complete_infrastructure,
-                                                                   benchmark, configuration)
+                                                                   benchmarks, configuration)
 
                 if not outside_options.empty:
                     branches = pd.concat([in_tolerance_options, outside_options], ignore_index=True)
@@ -610,45 +643,40 @@ def run_algorithm(args):
             branches['longitude_latitude'] = [(branches.at[i, 'longitude'], branches.at[i, 'latitude'])
                                               for i in branches.index]
             branches['current_continent'] = branches['longitude_latitude'].apply(get_continent_from_location, world=data['world'])
-            # todo previous transportation and conversion costs + sanity check: does everything work as intended
+            # todo: takes quite some time --> could be improved
 
-            branches.drop(['minimal_total_costs', 'longitude_latitude'], axis=1, inplace=True)
+            branches.drop(['minimal_total_costs', 'minimal_commodity', 'longitude_latitude'], axis=1, inplace=True)
 
             branches = postprocessing_branches(branches, old_branches)
 
-            # check if branches are at destination
-            at_destination = branches[branches['distance_to_final_destination']
-                                      <= configuration['to_final_destination_tolerance']]
-            if not at_destination.empty:
-                at_destination_and_correct_commodity \
-                    = at_destination[at_destination['current_commodity'].isin(final_commodities)]
-
-                at_destination = branches[
-                    branches['distance_to_final_destination'] <= configuration['to_final_destination_tolerance']]
-                if not at_destination_and_correct_commodity.empty:
-
-                    at_destination_and_lower_benchmark_and_correct_commodity = \
-                        at_destination_and_correct_commodity[at_destination_and_correct_commodity['current_total_costs']
-                                                             <= benchmark]
-
-                    if not at_destination_and_lower_benchmark_and_correct_commodity.empty:
-
-                        min_benchmark_costs \
-                            = at_destination_and_lower_benchmark_and_correct_commodity['current_total_costs'].min()
-
-                        benchmark = min_benchmark_costs
-
-                        final_solution_index \
-                            = at_destination_and_lower_benchmark_and_correct_commodity['current_total_costs'].idxmin()
-
-                        final_solution = branches.loc[final_solution_index, :].copy()
-                        final_solution.loc['solving_time'] = time.time() - start_time
-
-                    # remove all branches which are at final destination with correct commodity
-                    branches.drop(at_destination_and_correct_commodity.index, inplace=True)
+            final_solution, benchmark, benchmarks, benchmark_locations, branches \
+                = assess_for_benchmark(data, configuration, benchmark, benchmarks, benchmark_locations, final_commodities, branches,
+                                       final_solution, complete_infrastructure)
 
             # check again all branches because benchmark might has changed
-            branches = branches[branches['current_total_costs'] <= benchmark]
+            # to compare the different commodities, the benchmark is adjusted by the strike price
+            if not branches.empty:
+                branches['benchmark'] = branches['current_commodity'].map(benchmarks)
+                branches = branches[branches['current_total_costs'] <= branches['benchmark']]
+
+        if configuration['print_benchmark_info']:
+            print('Routing')
+            commodities = benchmark_info[0]
+            locations = benchmark_info[2]
+
+            combinations = [(c, l) for c in commodities for l in locations]
+            benchmark_branches = []
+
+            for com in set(combinations):
+                branch = branches[(branches['current_commodity'] == com[0]) & (branches['current_node'] == com[1])]
+
+                if not branch.empty:
+                    benchmark_branches.append(branch)
+
+            if benchmark_branches:
+                benchmark_branches = pd.concat(benchmark_branches, ignore_index=True)
+                print(cumulative_benchmark_costs)
+                print(benchmark_branches[['current_commodity', 'current_node', 'current_total_costs']])
 
         time_routing = time.time() - time_routing
         total_time = time.time() - total_time
@@ -677,6 +705,8 @@ def run_algorithm(args):
     # store solution in csv
     if final_solution is not None:
         if not final_solution.empty:
+            final_solution.loc['current_node'] = 'Destination'
+            final_solution.loc['solving_time'] = time.time() - start_time
             final_solution.loc['status'] = 'complete'
             final_solution.to_csv(configuration['path_results'] + 'location_results/' + str(location_index) + '_final_solution.csv')
         else:

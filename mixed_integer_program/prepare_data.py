@@ -14,7 +14,7 @@ import cartopy.io.shapereader as shpreader
 from itertools import combinations
 
 
-def prepare_data(start_location, end_node=None):
+def prepare_data(start_location, end_node=None, create_results=False):
 
     path_config = os.getcwd()
     path_config = os.path.dirname(path_config) + '/algorithm_configuration.yaml'
@@ -60,6 +60,8 @@ def prepare_data(start_location, end_node=None):
         production_costs[com] = start_data.loc[start_location, com]
 
     edges = {}
+    conversion_edges = {}
+    transport_edges = {}
 
     # conversions
     if True:
@@ -93,9 +95,16 @@ def prepare_data(start_location, end_node=None):
                                 ('conversion', node_1 + '_' + com_1, node_2 + '_' + com_2, conversion_costs,
                                  conversion_efficiency, com_2)
 
+                            conversion_edges[node_1 + '_' + com_1 + '-' + node_2 + '_' + com_2] = \
+                                (node_1 + '_' + com_1, node_2 + '_' + com_2, conversion_costs,
+                                 conversion_efficiency, com_2)
+
                             # if node_2 == end_node:
                             #     edges[node_1 + '_' + com_1 + '-end'] =\
                             #         ('conversion', node_1 + '_' + com_1, 'end', 0, 0, com_2)
+
+    columns = ['start', 'end', 'costs', 'efficiency', 'end_commodity']
+    conversion_edges = pd.DataFrame.from_dict(conversion_edges, orient="index", columns=columns)
 
     # load transport data
     road_distances = pd.read_csv(path_overall_data + 'processed_data/mip_data/road_distances.csv', index_col=0)
@@ -111,7 +120,7 @@ def prepare_data(start_location, end_node=None):
     port_durations = port_durations.stack().reset_index()
     port_durations.columns = ['pointA', 'pointB', 'duration']
 
-    if False:
+    if False:  # removes road transport to pipelines --> remove in final version
 
         road_distances = road_distances[~road_distances['pointA'].str.contains('PG', na=False)]
         road_distances = road_distances[~road_distances['pointB'].str.contains('PG', na=False)]
@@ -119,19 +128,46 @@ def prepare_data(start_location, end_node=None):
         road_distances = road_distances[~road_distances['pointA'].str.contains('PL', na=False)]
         road_distances = road_distances[~road_distances['pointB'].str.contains('PL', na=False)]
 
-    start_road_distances = start_road_distances[~start_road_distances['pointA'].str.contains('PG', na=False)]
-    start_road_distances = start_road_distances[~start_road_distances['pointB'].str.contains('PG', na=False)]
+        start_road_distances = start_road_distances[~start_road_distances['pointA'].str.contains('PG', na=False)]
+        start_road_distances = start_road_distances[~start_road_distances['pointB'].str.contains('PG', na=False)]
 
-    start_road_distances = start_road_distances[~start_road_distances['pointA'].str.contains('PL', na=False)]
-    start_road_distances = start_road_distances[~start_road_distances['pointB'].str.contains('PL', na=False)]
+        start_road_distances = start_road_distances[~start_road_distances['pointA'].str.contains('PL', na=False)]
+        start_road_distances = start_road_distances[~start_road_distances['pointB'].str.contains('PL', na=False)]
+
+    # calculate distance of gas pipelines
+    gas_pipelines_distances = []
+    for file in os.listdir(path_overall_data + 'processed_data/mip_data/'):
+        if 'PG' in file:
+            file_data = pd.read_csv(path_overall_data + 'processed_data/mip_data/' + file, index_col=0)
+            file_data = file_data.stack().reset_index()
+            file_data.columns = ['pointA', 'pointB', 'distance']
+            file_data = file_data[file_data['pointA'] != file_data['pointB']]  # remove same start and end
+
+            gas_pipelines_distances.append(file_data)
+
+    gas_pipelines_distances = pd.concat(gas_pipelines_distances, ignore_index=True)
+
+    # calculate distance of oil pipelines
+    oil_pipelines_distances = []
+    for file in os.listdir(path_overall_data + 'processed_data/mip_data/'):
+        if 'PL' in file:
+            file_data = pd.read_csv(path_overall_data + 'processed_data/mip_data/' + file, index_col=0)
+            file_data = file_data.stack().reset_index()
+            file_data.columns = ['pointA', 'pointB', 'distance']
+            file_data = file_data[file_data['pointA'] != file_data['pointB']]
+
+            oil_pipelines_distances.append(file_data)
+
+    oil_pipelines_distances = pd.concat(oil_pipelines_distances, ignore_index=True)
 
     options = {'Road': [road_distances, start_road_distances],
                'New_Pipeline': [new_pipeline_distances, start_new_pipeline_distances],
-               'Shipping': [port_distances]}
+               'Shipping': [port_distances],
+               'Pipeline_Gas': [gas_pipelines_distances],
+               'Pipeline_Oil': [oil_pipelines_distances]}
 
-    # todo: end distances berechnen
-    # todo: kleinen case finden, den man nutzen kann
     # todo: sind hier beide Richtungen in den Distanzen drin --> checken
+
     max_costs = 0
     if True:
         for transport_mean in options.keys():
@@ -178,56 +214,70 @@ def prepare_data(start_location, end_node=None):
                             ('transport', start + '_' + com, end + '_' + com, transport_costs, transport_losses, com,
                              transport_mean)
 
+                        transport_edges[start + '_' + com + '-' + end + '_' + com + '-' + transport_mean] = \
+                            (start + '_' + com, end + '_' + com, transport_costs, transport_losses, com,
+                             transport_mean)
+
                         # if the node is also an end node, one edge is added which leads to final sink
-                        if (end == end_node) & (com in target_commodities):
+                        if (end in end_node) & (com in target_commodities):
                             edges[end + '_' + com + '-' + 'end'] = \
                                 ('transport', end + '_' + com, 'end', 0, 0, com, transport_mean)
 
+                            transport_edges[end + '_' + com + '-' + 'end'] = \
+                                (end + '_' + com, 'end', 0, 0, com, transport_mean)
+
+    columns = ['start', 'end', 'costs', 'efficiency', 'commodity', 'mean']
+    transport_edges = pd.DataFrame.from_dict(transport_edges, orient="index", columns=columns)
+
     # create warm-start solution from results
-    result = pd.read_csv(path_overall_data + '/results/location_results/' + str(start_location) +'_final_solution.csv', index_col=0)
-    result = result[result.columns[0]]
-    route = ast.literal_eval(result.loc['taken_routes'])
-    total_costs = result.loc['current_total_costs']
+    if create_results:
+        result = pd.read_csv(path_overall_data + '/results/location_results/' + str(start_location) +'_final_solution.csv', index_col=0)
+        result = result[result.columns[0]]
+        route = ast.literal_eval(result.loc['taken_routes'])
+        total_costs = result.loc['current_total_costs']
 
-    cost_route = ast.literal_eval(result.loc['all_previous_total_costs'])
-    cost_route = list(set(cost_route))
+        cost_route = ast.literal_eval(result.loc['all_previous_total_costs'])
+        cost_route = list(set(cost_route))
 
-    commodity = None
-    transport_mean = None
-    start = None
-    end = None
-    solution_route = []  # same commodity conversion required?
-    for n, segment in enumerate(route):
-        if n > 0:
-            if len(segment) == 5:  # transport
+        commodity = None
+        transport_mean = None
+        start = None
+        end = None
+        solution_route = []  # same commodity conversion required?
+        for n, segment in enumerate(route):
+            if n > 0:
+                if len(segment) == 5:  # transport
 
-                start = segment[0]
-                end = segment[3]
+                    start = segment[0]
+                    end = segment[3]
 
-                if start == 'Start':
-                    start = 'start'
+                    if start == 'Start':
+                        start = 'start'
 
-                transport_mean = segment[1]
+                    transport_mean = segment[1]
 
-                solution_route.append(start + '_' + commodity + '-' + end + '_' + commodity + '-' + transport_mean)
-                start = end
-            elif len(segment) == 3:  # conversion
+                    solution_route.append(start + '_' + commodity + '-' + end + '_' + commodity + '-' + transport_mean)
+                    start = end
+                elif len(segment) == 3:  # conversion
 
-                if commodity == segment[1]:
-                    continue
+                    if commodity == segment[1]:
+                        continue
 
-                solution_route.append(start + '_' + commodity + '-' + end + '_' + segment[1])
-                commodity = segment[1]
-        else:
-            commodity = segment[0]
-            start = 'start'
+                    solution_route.append(start + '_' + commodity + '-' + end + '_' + segment[1])
+                    commodity = segment[1]
+            else:
+                commodity = segment[0]
+                start = 'start'
 
-    solution_route += [end + '_' + commodity + '-end']
+        solution_route += [end + '_' + commodity + '-end']
 
-    print(total_costs)
-    print(solution_route)
+        print(total_costs)
+        print(solution_route)
+    else:
+        solution_route = None
+        cost_route = None
 
-    return all_nodes_adjusted, target_nodes, edges, production_costs, transport_means, solution_route, cost_route, max_costs
+    return all_nodes_adjusted, target_nodes, edges, production_costs, transport_means, solution_route, cost_route, max_costs, conversion_edges, transport_edges
 
 
 def create_edges_from_distance_only(df_list, transport_means, techno_economic_data_transport,

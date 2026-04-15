@@ -1375,6 +1375,6 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     # delta_nodes = number_nodes_before - len(nodes.index)
     # logging.info('Remove edges: ' + str(delta_edges) + ' | removed nodes: ' + str(delta_nodes))
 
-    plt.show()
+    # plt.show()
 
     return graphs, nodes

@@ -6,6 +6,10 @@ import pandas as pd
 import gurobipy as gp
 import geopandas as gpd
 
+from gurobipy import GRB
+
+from shapely.geometry import Point
+
 from prepare_data import prepare_data, create_edges_from_distance_only, prepare_dummy_data, create_graph
 from data_processing.process_mip_data import calculate_road_distances
 
@@ -20,6 +24,10 @@ class OptimizationGurobiModel:
         self.capacity_at_node = self.model.addVars(self.all_nodes_adjusted, vtype='I', name=self.all_nodes_adjusted)
 
         self.edge_binaries = self.model.addVars([*self.edges], vtype='B', name=[*self.edges.keys()])
+
+        import time
+
+        now = time.time()
 
         for edge in self.edges.keys():
 
@@ -48,34 +56,17 @@ class OptimizationGurobiModel:
                                      name=name)
 
             if True:
-                self.model.addGenConstrIndicator(self.edge_binaries[edge], 1, (self.costs[start] + costs) / (1 - efficiency) - self.costs[end] <= 0)
+                # self.model.addGenConstrIndicator(self.edge_binaries[edge], 1, (self.costs[start] + costs) / (1 - efficiency) - self.costs[end] <= 0)
+                self.model.addGenConstrIndicator(self.edge_binaries[edge], 1, (self.costs[start] + costs) / (1 - efficiency) - self.costs[end], GRB.LESS_EQUAL, 0.0)
             else:
                 self.model.addConstr((self.costs[start] + costs) / (1 - efficiency) - self.costs[end]
                                      <= (1 - self.edge_binaries[edge]) * self.BigM,
                                      name=name)
 
-            # if 'start' not in start:
-            #     self.model.addConstr((self.costs[start] + costs) / (1 - efficiency) - self.costs[end]
-            #                          <= (1 - self.edge_binaries[edge]) * self.BigM,
-            #                          name=name)
-            #
-            #     # self.model.addConstr(self.capacity_at_node[start] - self.capacity_at_node[end] - 1 >= - (1 - self.edge_binaries[edge]) * 100,
-            #     #                      name=name + '_capacity')
-            #
-            # else:
-            #     self.model.addConstr((self.production_costs[commodity] + costs) / (1 - efficiency) - self.costs[end]
-            #                          <= (1 - self.edge_binaries[edge]) * (self.production_costs[commodity] + costs) * 1.1 / (1 - efficiency),
-            #                          name=name)
-
-        # for node in self.all_nodes_adjusted:
-        #     name = 'max_costs_' + node
-        #     self.model.addConstr(self.costs[node] <= self.BigM, name=name)
+        print(time.time() - now)
 
         self.model.addConstr(sum(self.costs[node] for node in self.target_nodes) >= min(self.production_costs.values()), name='min_costs')
 
-        # self.model.addConstr(sum(self.capacity_at_node[node] for node in self.target_nodes) <= 1, name='min_costs')  # seq 1 because maybe one conversion at final node
-
-        # todo: unterscheidung zwischen normalen nodes und end nodes. Aktuell nur ein end node definiert --> egal, oder? Dann ist end node halt der, der im ergebnis drin ist
         # ensure transport out of start node
         self.model.addConstr(sum(self.edge_binaries[key]
                                  for key in self.edges.keys()
@@ -83,19 +74,7 @@ class OptimizationGurobiModel:
                              == 1,
                              name='out_of_origin')
 
-        # ensure that the final node is reached by setting that transport to destination or conversion at destination is correct
-        # self.model.addConstr(sum(self.edge_binaries[key]
-        #                          for key in self.edges.keys()
-        #                          if ((self.edges[key][0] == 'transport') & (self.edges[key][2] in self.target_nodes)))
-        #                      + sum(self.edge_binaries[key]
-        #                          for key in self.edges.keys()
-        #                          if ((self.edges[key][0] == 'conversion') & (self.edges[key][2] in self.target_nodes))) == 1,
-        #                      name='into_destination')
-
-        # for e in self.edges.keys():
-        #     if (self.edges[e][0] == 'transport') & (self.edges[e][2] == 'end'):
-        #         print(e)
-        #         print(self.edges[e])
+        print(time.time() - now)
 
         self.model.addConstr(sum(self.edge_binaries[key]
                                  for key in self.edges.keys()
@@ -107,23 +86,35 @@ class OptimizationGurobiModel:
                                  if ((self.edges[key][0] == 'transport') & (self.edges[key][1] == 'end'))) == 0,
                              name='no_out_destination')
 
-        # ensure that each node is visited max. once or a specific conversion takes place max. once
-        for node in self.all_nodes_adjusted:
-            self.model.addConstr(sum(self.edge_binaries[key]
-                                     for key in self.edges.keys()
-                                     if self.edges[key][2] == node) <= 1,
-                                 name='only_visit_node_once')
+        print(time.time() - now)
 
-        # balance activities of all nodes but start and end
+        from collections import defaultdict
+
+        incoming_edges = defaultdict(list)  # edges with node in position 2
+        outgoing_edges = defaultdict(list)  # edges with node in position 1
+
+        for key, edge in self.edges.items():
+            # Assuming edge is something like (…, tail_node, head_node)
+            outgoing_edges[edge[1]].append(key)
+            incoming_edges[edge[2]].append(key)
+
         for node in self.all_nodes_adjusted:
-            if ('start' not in node) & ('end' not in node):
-                self.model.addConstr(sum(self.edge_binaries[key]
-                                         for key in self.edges.keys()
-                                         if self.edges[key][1] == node)
-                                     == sum(self.edge_binaries[key]
-                                         for key in self.edges.keys()
-                                         if self.edges[key][2] == node),
-                                     name='balance')
+            # sum of binaries where node is in position 2
+            sum_edge_key_2 = gp.quicksum(self.edge_binaries[key]
+                                         for key in incoming_edges[node])
+
+            self.model.addConstr(sum_edge_key_2 <= 1,
+                                 name=f'only_visit_node_once[{node}]')
+
+            if ('start' not in node) and ('end' not in node):
+                # sum of binaries where node is in position 1
+                sum_edge_key_1 = gp.quicksum(self.edge_binaries[key]
+                                             for key in outgoing_edges[node])
+
+                self.model.addConstr(sum_edge_key_1 == sum_edge_key_2,
+                                     name=f'balance[{node}]')
+
+        print(time.time() - now)
 
         self.model.setObjective(sum(self.costs[node] for node in self.target_nodes), gp.GRB.MINIMIZE)
 
@@ -187,9 +178,11 @@ class OptimizationGurobiModel:
 
     def optimize(self):
 
-        self.attach_edges_test()
+        self.attach_edges()
 
-        if False:
+        print('Constraints attached')
+
+        if True:
             if self.solution_route is not None:
                 print(self.solution_route)
                 self.model.update()
@@ -224,11 +217,11 @@ class OptimizationGurobiModel:
         # self.model.setParam("MIPGap", 0.01)
 
         self.model.Params.IntFeasTol = 1e-9
-        self.model.Params.FeasibilityTol  = 1e-9
-        self.model.Params.OptimalityTol   = 1e-9
+        self.model.Params.FeasibilityTol = 1e-9
+        self.model.Params.OptimalityTol  = 1e-9
 
-        self.model.Params.Method  = 2
-        self.model.Params.Crossover  = 0
+        self.model.Params.Method = 2
+        self.model.Params.Crossover = 0
         self.model.Params.BarHomogeneous = 1
 
         self.model.Params.MIPFocus = 3  # 2 = focus on proving optimality (tightening bounds)
@@ -333,8 +326,10 @@ class OptimizationGurobiModel:
 
         if True:
 
-            self.all_nodes_adjusted, self.target_nodes, self.edges, self.production_costs, self.transport_means,\
-                self.solution_route, self.cost_route, self.max_costs = prepare_data(0, end_location)
+            self.all_nodes_adjusted, self.target_nodes, self.edges, self.production_costs, self.transport_means, \
+                self.solution_route, self.cost_route, self.max_costs, self.conversion_edges, self.transport_edges = prepare_data(0, end_location, create_results=True)
+
+            print('The problem consists of ' + str(len(self.edges)) + ' edges and ' + str(len(self.all_nodes_adjusted)) + ' nodes.')
 
             # create_graph(self.edges, self.all_nodes_adjusted)
 
@@ -468,14 +463,20 @@ path_processed_data = path_overall_data + 'processed_data/'
 
 options = pd.read_csv(path_processed_data + 'mip_data/' + 'options.csv', index_col=0)
 
-n = 0
-result = pd.read_csv(path_overall_data + 'results/location_results/' + str(n) + '_final_solution.csv', index_col=0)
-cols = result.columns[0]
+start_locations = pd.read_csv(path_overall_data + '/' + 'start_destination_combinations.csv', index_col=0)
+destination_infrastructure = pd.read_csv(path_processed_data + 'mip_data/' + 'destination_infrastructure.csv', index_col=0)
 
-start_location = result.loc[['starting_latitude', 'starting_longitude'], :]
-start_point = gpd.points_from_xy(start_location.loc['starting_longitude', :], start_location.loc['starting_latitude', :])
-start_name = 'start'
+for i in start_locations.index:
+    start_point = Point([start_locations.loc[i, 'longitude'], start_locations.loc[i, 'latitude']])
+    start_name = 'start'
+    end_location = destination_infrastructure['destination_infrastructure'].tolist()
 
-end_location = result.at['current_infrastructure', result.columns[0]]
+    problem = OptimizationGurobiModel()  # todo: alle end infrastructure fehlen
 
-problem = OptimizationGurobiModel()
+if False:
+    result = pd.read_csv(path_overall_data + 'results/location_results/' + str(n) + '_final_solution.csv', index_col=0)
+    cols = result.columns[0]
+
+    end_location = result.at['current_infrastructure', result.columns[0]]
+
+    problem = OptimizationGurobiModel()

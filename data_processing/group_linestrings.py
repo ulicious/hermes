@@ -764,10 +764,19 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
                         min_total_distance_overall = math.inf
                         network = None
                         for geom_1 in s:
+
+                            if isinstance(geom_1, MultiLineString):  # catch empty MLS
+                                if geom_1.is_empty:
+                                    continue
+
                             min_total_distance_geom_1 = 0
                             for geom_2 in s:
                                 if geom_1 == geom_2:
                                     continue
+
+                                if isinstance(geom_2, MultiLineString):  # catch empty MLS
+                                    if geom_2.is_empty:
+                                        continue
 
                                 min_total_distance_geom_1 += geom_1.distance(geom_2)
 
@@ -779,7 +788,8 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
                                 # in the case where several geometries have same distances,
                                 # choose the one which is multilinestring
                                 if isinstance(geom_1, MultiLineString):
-                                    network = geom_1
+                                    if not geom_1.is_empty:
+                                        network = geom_1
 
                         lines = []
                         for geom in s:

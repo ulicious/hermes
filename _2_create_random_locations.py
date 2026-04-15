@@ -3,11 +3,15 @@ import os
 import logging
 import yaml
 import shapely
+import multiprocessing
 
 import pandas as pd
 import geopandas as gpd
 import cartopy.io.shapereader as shpreader
 import numpy as np
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+from joblib import Parallel, delayed
 
 from shapely.geometry import Point, Polygon
 from rtree import index
@@ -29,6 +33,12 @@ yaml_file = open(path_config)
 config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
 path_raw_data = config_file['project_folder_path'] + 'raw_data/'
+
+num_cores = config_file['number_cores']
+if num_cores == 'max':
+    num_cores = multiprocessing.cpu_count() - 1
+else:
+    num_cores = min(num_cores, multiprocessing.cpu_count() - 1)
 
 update_only_techno_economic_data = config_file['update_only_conversion_costs_and_efficiency']
 
@@ -142,66 +152,104 @@ if not update_only_techno_economic_data:
 
         # because major parts of the globe are water, we need to increase number of points to get approx. correct number
         # since locations need to be distributed first and then only onshore locations are considered
-        world_surface = gpd.GeoDataFrame(geometry=[world_surface])
-        world_surface.crs = 'epsg:4326'
-        world_surface.to_crs({'proj': 'cea'}, inplace=True)
         country_shape = gpd.GeoDataFrame(geometry=[country_shape])
         country_shape.crs = 'epsg:4326'
         country_shape.to_crs({'proj': 'cea'}, inplace=True)
 
-        # todo: not the most efficient approach and especially difficult when
-        number_points = math.ceil(config_file['number_locations'] / (country_shape.area / world_surface.area) * 1.1)
+        valid_polygon_shape = gpd.GeoDataFrame(geometry=[valid_polygon])
+        valid_polygon_shape.crs = 'epsg:4326'
+        valid_polygon_shape.to_crs({'proj': 'cea'}, inplace=True)
 
-        # some countries are very small and this would take a ridiculous amount of time. Therefore, limit this number
-        number_points = min(number_points, 10000)
+        number_points = math.ceil(config_file['number_locations'] / (country_shape.area / valid_polygon_shape.area) * 1.1)
+
+        lat_min, lat_max = config_file['minimal_latitude'], config_file['maximal_latitude']
+        lon_min, lon_max = config_file['minimal_longitude'], config_file['maximal_longitude']
+
+        z_min = np.sin(np.radians(lat_min))
+        z_max = np.sin(np.radians(lat_max))
+
+        phi = (1 + np.sqrt(5)) / 2
+        golden_angle = 2 * np.pi / phi
+
+        points = np.empty((number_points, 2), dtype=float)
 
         for i in range(number_points):
-            z = 1 - (i / (number_points - 1)) * 2  # Map z to range [-1, 1]
-            start_lat = np.degrees(np.arcsin(z))  # Latitude from -90 to 90 degrees
-            start_lon = np.degrees(2 * np.pi * i / phi) % 360  # Longitude from 0 to 360
-            if start_lon > 180:  # Adjust to range [-180, 180]
-                start_lon -= 360
+            # --- Fibonacci / low-discrepancy parameter in [0,1) ---
+            # (i + 0.5)/N avoids putting points exactly on the boundary
+            t = (i + 0.5) / number_points
+
+            # --- latitude: equal-area in the band ---
+            z = z_min + t * (z_max - z_min)
+            lat = np.degrees(np.arcsin(z))
+
+            # --- longitude: golden-angle progression mapped into your window ---
+            u = ((i * golden_angle) / (2 * np.pi)) % 1.0  # 0..1
+            lon = lon_min + u * (lon_max - lon_min)
+
+            points[i, 0] = lat
+            points[i, 1] = lon
+
+        # add country information to options
+        gdf = gpd.GeoDataFrame(geometry=gpd.points_from_xy(points[:, 1], points[:, 0])).set_crs('EPSG:4326')
+        result = gpd.sjoin(gdf, world, how='left')
+        result.dropna(subset=["NAME_EN"], inplace=True)
+
+        def process_points(i):
+            start_lon = result.loc[i, 'geometry'].x
+            start_lat = result.loc[i, 'geometry'].y
 
             # add country information to options
-            gdf = gpd.GeoDataFrame(geometry=gpd.points_from_xy([start_lon], [start_lat])).set_crs('EPSG:4326')
-            result = gpd.sjoin(gdf, world, how='left')
-            country_start = result.at[result.index[0], 'NAME_EN']
-            continent_start = result.at[result.index[0], 'CONTINENT']
+            country_start = result.at[i, 'NAME_EN']
+            continent_start = result.at[i, 'CONTINENT']
 
             if isinstance(country_start, float):
                 # country is nan
-                continue
+                return None
 
             if origin_continents:
                 if continent_start not in origin_continents:
-                    continue
+                    return None
 
             location_point = Point([start_lon, start_lat])
             if not location_point.within(valid_polygon):
-                continue
+                return None
 
             adjusted_latitude = round_to_quarter(start_lat)
             adjusted_longitude = round_to_quarter(start_lon)
-            adjusted_coords = str(int(adjusted_longitude * 100)) + 'x' + str(int(adjusted_latitude * 100))
+            # adjusted_coords = str(int(adjusted_longitude * 100)) + 'x' + str(int(adjusted_latitude * 100))
 
             valid = check_if_location_is_valid(techno_economic_data_conversion, country_start, adjusted_latitude,
                                                adjusted_longitude, levelized_costs_location,
                                                levelized_costs_country)
 
             if not valid:
-                continue
+                return None
 
             # remove country if location will be created within
             if country_start in countries:
                 countries.remove(country_start)
 
-            locations.loc[i, 'country_start'] = country_start
-            locations.loc[i, 'continent_start'] = continent_start
+            # locations.loc[i, 'country_start'] = country_start
+            # locations.loc[i, 'continent_start'] = continent_start
+            #
+            # locations.loc[i, 'longitude'] = start_lon
+            # locations.loc[i, 'latitude'] = start_lat
 
-            locations.loc[i, 'longitude'] = start_lon
-            locations.loc[i, 'latitude'] = start_lat
+            return country_start, continent_start, start_lon, start_lat
 
-            i += 1
+        inputs = tqdm(result.index)
+        results = Parallel(n_jobs=num_cores)(delayed(process_points)(i) for i in inputs)
+
+        i = 0
+        for r in results:
+            if r is not None:
+                locations.loc[i, 'country_start'] = r[0]
+                locations.loc[i, 'continent_start'] = r[1]
+
+                locations.loc[i, 'longitude'] = r[2]
+                locations.loc[i, 'latitude'] = r[3]
+
+                i += 1
 
     # Each country should have at least one start location if set
     if config_file['each_country_at_least_one_location']:  # todo: does not work with uniform distribution of points

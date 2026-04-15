@@ -5,6 +5,8 @@ import itertools
 import yaml
 import sys
 
+import numpy as np
+
 from algorithm.script_algorithm import run_algorithm
 from algorithm.methods_main import prepare_data_and_configuration_dictionary
 
@@ -34,7 +36,55 @@ if __name__ == '__main__':
 
     location_data.drop(processed_locations, inplace=True)
 
+    # location_data = location_data.loc[[7386], :]
+
     print_information = True
+
+    if print_information:  # todo: all configuration should be shown here
+        # paths
+        path_project_folder = config_file['project_folder_path']
+        path_raw_data = path_project_folder + 'raw_data/'
+        path_processed_data = path_project_folder + 'processed_data/'
+
+        yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
+        techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
+
+        yaml_file = open(path_raw_data + 'techno_economic_data_transportation.yaml')
+        techno_economic_data_transport = yaml.load(yaml_file, Loader=yaml.FullLoader)
+
+        print('Main configuration:')
+
+        target_commodity_text = ', '.join(config_file['target_commodity'])
+        print('Target commodity: ' + target_commodity_text)
+
+        print('Distance to destination requiring not transport: ' + str(config_file['to_final_destination_tolerance']))
+
+        print('Distance between infrastructure requiring no transport: ' + str(config_file['tolerance_distance']))
+
+        print('Maximal distance for road transport: ' + str(config_file['max_length_road']))
+
+        if config_file['build_new_infrastructure']:
+            print('Distance for new pipeline segments: ' + str(config_file['max_length_new_segment']))
+        else:
+            print('New pipeline segments not enabled')
+
+        print('Multiplier to consider obstacles (road transport / new pipeline segments): ' + str(config_file['no_road_multiplier']))
+
+        if config_file['H2_ready_infrastructure']:
+            print('Retroffiting of gas pipelines enabled')
+        else:
+            print('Retrofitting if gas pipelines not enabled')
+
+        if config_file['consider_commodity_prices']:
+            print(techno_economic_data_conversion['strike_prices'])
+        else:
+            for k in techno_economic_data_conversion['strike_prices'].keys():
+                techno_economic_data_conversion['strike_prices'][k] = 0
+            print(techno_economic_data_conversion['strike_prices'])
+
+        # print('Considered: ' + )
+
+        # add more info like hydrogen retrofitting and distances
 
     print('start algorithm')
     time_start = time.time()
@@ -50,7 +100,10 @@ if __name__ == '__main__':
         pool = multiprocessing.Pool(processes=num_cores, maxtasksperchild=1)
 
         # Create an iterable of tuples, each containing the task ID and shared_dict
-        task_args = zip(location_data.index,
+        rng = np.random.default_rng(seed=42)
+        indexes = rng.permutation(location_data.index)
+
+        task_args = zip(indexes,
                         itertools.repeat(location_data),
                         itertools.repeat(data),
                         itertools.repeat(config_file),
