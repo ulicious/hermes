@@ -15,7 +15,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
-def calculate_searoute_distances(ports, shipping_speed, num_cores, path_processed_data, create_mip_data=False):
+def calculate_searoute_distances(ports, num_cores, path_processed_data, create_mip_data=False):
 
     """
     Calculates sea route distances between pairs of ports and saves the distances in a CSV file.
@@ -47,7 +47,7 @@ def calculate_searoute_distances(ports, shipping_speed, num_cores, path_processe
         # apply searoute
         route = sr.searoute(start_location, end_location, append_orig_dest=True)
         distance_local = (round(float(format(route.properties['length'])), 2)) * 1000  # m
-        duration_local = (round(float(format(route.properties['length'])), 2)) / shipping_speed
+        # duration_local = (round(float(format(route.properties['length'])), 2)) / shipping_speed
 
         # searoute is not always exact as locations are mapped to nodes. Therefore, it might be possible that distances
         # between ports is 0 --> use as-the-crow-flies distance to calculate distance if distance is 0
@@ -57,9 +57,9 @@ def calculate_searoute_distances(ports, shipping_speed, num_cores, path_processe
                                                             ports.loc[end_local, 'latitude'],
                                                             ports.loc[end_local, 'longitude'])
 
-            duration_local = distance_local / 1000 / shipping_speed
+            # duration_local = distance_local / 1000 / shipping_speed
 
-        return combination, distance_local, duration_local
+        return combination, distance_local# , duration_local
 
     # get all combinations of ports
     combinations = list(itertools.combinations(ports.index, 2))
@@ -70,25 +70,25 @@ def calculate_searoute_distances(ports, shipping_speed, num_cores, path_processe
 
     # process results
     ports_distances = pd.DataFrame(0, index=ports.index, columns=ports.index.tolist())
-    ports_durations = pd.DataFrame(0, index=ports.index, columns=ports.index.tolist())
+    # ports_durations = pd.DataFrame(0, index=ports.index, columns=ports.index.tolist())
     for r in results:
         start = r[0][0]
         end = r[0][1]
         distance = r[1]
-        duration = r[2]
+        # duration = r[2]
 
         ports_distances.loc[start, end] = distance
         ports_distances.loc[end, start] = distance
 
-        ports_durations.loc[start, end] = duration
-        ports_durations.loc[end, start] = duration
+        # ports_durations.loc[start, end] = duration
+        # ports_durations.loc[end, start] = duration
 
     ports_distances.to_csv(path_processed_data + 'inner_infrastructure_distances/' + 'port_distances.csv')
-    ports_durations.to_csv(path_processed_data + 'inner_infrastructure_distances/' + 'ports_durations.csv')
+    # ports_durations.to_csv(path_processed_data + 'inner_infrastructure_distances/' + 'ports_durations.csv')
 
     if create_mip_data:
         ports_distances.to_csv(path_processed_data + 'mip_data/' + 'port_distances.csv')
-        ports_durations.to_csv(path_processed_data + 'mip_data/' + 'ports_durations.csv')
+        # ports_durations.to_csv(path_processed_data + 'mip_data/' + 'ports_durations.csv')
 
 
 def get_distances_within_networks(network_graph_data, nodes, path_processed_data, num_workers, use_low_memory=False,

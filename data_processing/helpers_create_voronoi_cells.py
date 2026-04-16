@@ -1,7 +1,7 @@
 import math
 import os
 import random
-from xxlimited import new
+# from xxlimited import new
 
 import shapely.geometry
 import yaml
@@ -125,19 +125,19 @@ def attach_polygon_to_other_voronoi_cells(polygon, locations):
         new_polygon = [shape for shape in new_polygon.geoms if shape.area > 0.001]  # some geoms are just too small to be considered
         new_polygon = shapely.ops.unary_union(new_polygon)
 
-        if isinstance(new_polygon, MultiPolygon) & (len([*affected_locations.values()]) == 2):
-            fig, ax = plt.subplots()
-            new_polygon_gdf.plot(ax=ax, cmap='tab20', legend=False, edgecolor='black')
-
-            points_gdf = gpd.GeoDataFrame(geometry=list(affected_locations.values()))
-            points_gdf.plot(ax=ax, color='yellow')
-            plt.show()
-
-            for geom in new_polygon.geoms:
-                print(geom.area)
-                test = gpd.GeoDataFrame(geometry=[geom])
-                test.plot()
-                # plt.show()
+        # if isinstance(new_polygon, MultiPolygon) & (len([*affected_locations.values()]) == 2):
+        #     fig, ax = plt.subplots()
+        #     new_polygon_gdf.plot(ax=ax, cmap='tab20', legend=False, edgecolor='black')
+        #
+        #     points_gdf = gpd.GeoDataFrame(geometry=list(affected_locations.values()))
+        #     points_gdf.plot(ax=ax, color='yellow')
+        #     plt.show()
+        #
+        #     for geom in new_polygon.geoms:
+        #         print(geom.area)
+        #         test = gpd.GeoDataFrame(geometry=[geom])
+        #         test.plot()
+        #         # plt.show()
 
     failed_polygons = []
     if len([*affected_locations.values()]) == 2:

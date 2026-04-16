@@ -111,8 +111,8 @@ if not update_only_conversion_costs_and_efficiency:
     # process coastlines
     logging.info('Processing coastlines and landmasses')
     if not (('landmasses.csv' in files_in_folder) & ('coastlines.csv' in files_in_folder) & (not enforce_update_of_data)):
-        polygons, coastlines = get_landmass_polygons_and_coastlines(use_minimal_example=use_minimal_example)
-        polygons.to_csv(path_processed_data + 'landmasses.csv')
+        landmasses, coastlines = get_landmass_polygons_and_coastlines(use_minimal_example=use_minimal_example)
+        landmasses.to_csv(path_processed_data + 'landmasses.csv')
         coastlines.to_csv(path_processed_data + 'coastlines.csv')
 
     else:
@@ -204,7 +204,7 @@ if not update_only_conversion_costs_and_efficiency:
                 & (not (create_mip_data & (not 'port_distances.csv' in files_in_mip_folder)))):
             get_distances_within_networks(gas_graph, gas_nodes, path_processed_data, num_cores, use_low_memory=use_low_memory, create_mip_data=create_mip_data)
             get_distances_within_networks(oil_graph, oil_nodes, path_processed_data, num_cores, use_low_memory=use_low_memory, create_mip_data=create_mip_data)
-            calculate_searoute_distances(ports, techno_economic_data_transport['Shipping_Speed'], num_cores, path_processed_data, create_mip_data=create_mip_data)
+            calculate_searoute_distances(ports, num_cores, path_processed_data, create_mip_data=create_mip_data)
 
     # calculate closest infrastructure for each node
     logging.info('Calculate closest infrastructure')

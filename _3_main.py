@@ -3,6 +3,7 @@ import time
 import multiprocessing
 import yaml
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pandas as pd
@@ -38,6 +39,18 @@ def initialize_worker(config_file):
     global _WORKER_CONFIG_FILE
 
     _WORKER_CONFIG_FILE = config_file
+
+
+def initialize_shared_data(config_file, data, configuration, location_data):
+    global _WORKER_LOCATION_DATA
+    global _WORKER_DATA
+    global _WORKER_CONFIG_FILE
+    global _WORKER_CONFIGURATION
+
+    _WORKER_CONFIG_FILE = config_file
+    _WORKER_DATA = data
+    _WORKER_CONFIGURATION = configuration
+    _WORKER_LOCATION_DATA = location_data
 
 
 def get_worker_data():
@@ -145,17 +158,29 @@ if __name__ == '__main__':
         rng = np.random.default_rng(seed=42)
         indexes = rng.permutation(location_data.index)
 
-        tasks_per_child = config_file.get('tasks_per_child', None)
+        parallel_backend = config_file.get('parallel_backend', 'threads')
 
-        # Workers load the large read-mostly data themselves from project_folder_path and cache it per process. The
-        # parent only sends location ids, avoiding a full data copy during Pool initialization.
-        with multiprocessing.Pool(processes=num_cores,
-                                  initializer=initialize_worker,
-                                  initargs=(config_file,),
-                                  maxtasksperchild=tasks_per_child) as pool:
+        if parallel_backend == 'processes':
+            tasks_per_child = config_file.get('tasks_per_child', None)
 
-            for _ in pool.imap_unordered(run_algorithm_for_location, indexes, chunksize=1):
-                pass
+            # Processes do not share Python objects on Windows. Use this only when enough memory is available.
+            with multiprocessing.Pool(processes=num_cores,
+                                      initializer=initialize_worker,
+                                      initargs=(config_file,),
+                                      maxtasksperchild=tasks_per_child) as pool:
+
+                for _ in pool.imap_unordered(run_algorithm_for_location, indexes, chunksize=1):
+                    pass
+
+        else:
+            # Threads share the large read-mostly pipeline data in one process. Each location run still receives fresh
+            # local copies of mutable data inside run_algorithm.
+            data, configuration, _ = prepare_data_and_configuration_dictionary(config_file)
+            initialize_shared_data(config_file, data, configuration, location_data)
+
+            with ThreadPoolExecutor(max_workers=num_cores) as executor:
+                for _ in executor.map(run_algorithm_for_location, indexes):
+                    pass
 
     else:
         data, configuration, _ = prepare_data_and_configuration_dictionary(config_file)
