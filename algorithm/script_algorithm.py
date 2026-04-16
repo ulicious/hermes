@@ -3,7 +3,6 @@ import time
 import math
 import gc
 import yaml
-import copy
 
 import pandas as pd
 
@@ -24,44 +23,6 @@ import logging
 logging.getLogger().setLevel(logging.INFO)
 
 
-def create_clean_run_data(base_data, location_index):
-    """
-    Create a per-location working view of the large shared data package.
-
-    Large immutable objects such as NetworkX graphs and geometries stay shared inside the worker process. DataFrames and
-    nested dictionaries that are modified during a run are copied so repeated tasks in one worker start clean.
-    """
-
-    data = base_data.copy()
-    data['location_index'] = location_index
-    data['k'] = location_index
-
-    data['destination'] = base_data['destination'].copy()
-    destination_infrastructure = data['destination'].get('infrastructure')
-    if isinstance(destination_infrastructure, pd.DataFrame):
-        data['destination']['infrastructure'] = destination_infrastructure.copy()
-    elif isinstance(destination_infrastructure, list):
-        data['destination']['infrastructure'] = destination_infrastructure.copy()
-
-    data['commodities'] = base_data['commodities'].copy()
-    data['commodities']['commodity_objects'] = {}
-    if isinstance(data['commodities'].get('final_commodities'), list):
-        data['commodities']['final_commodities'] = data['commodities']['final_commodities'].copy()
-    data['commodities']['strike_prices'] = data['commodities']['strike_prices'].copy()
-
-    data['Shipping'] = base_data['Shipping'].copy()
-    data['Shipping']['ports'] = base_data['Shipping']['ports'].copy()
-
-    data['minimal_distances'] = base_data['minimal_distances'].copy()
-    data['conversion_costs_and_efficiencies'] = base_data['conversion_costs_and_efficiencies'].copy()
-
-    return data
-
-
-def create_clean_run_config(config_file, configuration):
-    return copy.deepcopy(config_file), copy.deepcopy(configuration)
-
-
 def run_algorithm(args):
 
     """
@@ -72,13 +33,16 @@ def run_algorithm(args):
     """
 
     # get parameters from input
-    location_index, location_data, base_data, base_config_file, base_configuration = args
-    config_file, configuration = create_clean_run_config(base_config_file, base_configuration)
-    data = create_clean_run_data(base_data, location_index)
-    location_data = location_data.loc[[location_index], :].copy()
+    location_index, location_data, data, config_file, configuration = args
+    location_data = location_data.copy().loc[[location_index], :]
     location_data.index = ['Start']
 
+    print(str(location_index) + ': Start Processing')
+
     start_time = time.time()
+
+    data = data.copy()
+    data['location_index'] = location_index
 
     print_information = configuration['print_runtime_information']
 
@@ -88,6 +52,8 @@ def run_algorithm(args):
 
     destination_location = data['destination']['location']
     destination_continent = data['destination']['continent']
+
+    data['k'] = location_index
 
     # adjust data with new information
     data['start'] = {'location': starting_location,
@@ -108,7 +74,7 @@ def run_algorithm(args):
     complete_infrastructure = check_if_benchmark_possible(data, configuration, complete_infrastructure)
 
     # adjust minimal distances by checking if distance to destination is minimal distance
-    minimal_distances = data['minimal_distances'].copy()
+    minimal_distances = data['minimal_distances']
 
     for c in minimal_distances.index:
         if c not in complete_infrastructure.index:
@@ -178,6 +144,8 @@ def run_algorithm(args):
     # to compare the different commodities, the benchmark is adjusted by the fuel price
     branches['benchmark'] = branches['current_commodity'].map(benchmarks)
     conversion_branches = branches[branches['current_total_costs'] <= branches['benchmark']]
+
+    print(str(location_index) + ': Benchmark calculated after [s]: ' + str(time.time() - start_time))
 
     # Start iterations. While loop runs as long as branches dataframe
     final_solution = None
