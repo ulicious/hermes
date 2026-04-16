@@ -1,7 +1,6 @@
 import os
 import time
 import multiprocessing
-import itertools
 import yaml
 import sys
 
@@ -14,6 +13,33 @@ from algorithm.methods_main import prepare_data_and_configuration_dictionary
 
 import warnings
 warnings.filterwarnings('ignore')
+
+
+_WORKER_LOCATION_DATA = None
+_WORKER_DATA = None
+_WORKER_CONFIG_FILE = None
+_WORKER_CONFIGURATION = None
+
+
+def initialize_worker(location_data, data, config_file, configuration):
+    global _WORKER_LOCATION_DATA
+    global _WORKER_DATA
+    global _WORKER_CONFIG_FILE
+    global _WORKER_CONFIGURATION
+
+    _WORKER_LOCATION_DATA = location_data
+    _WORKER_DATA = data
+    _WORKER_CONFIG_FILE = config_file
+    _WORKER_CONFIGURATION = configuration
+
+
+def run_algorithm_for_location(location_index):
+    return run_algorithm((location_index,
+                          _WORKER_LOCATION_DATA,
+                          _WORKER_DATA,
+                          _WORKER_CONFIG_FILE,
+                          _WORKER_CONFIGURATION))
+
 
 if __name__ == '__main__':
 
@@ -96,25 +122,20 @@ if __name__ == '__main__':
         else:
             num_cores = min(num_cores, multiprocessing.cpu_count() - 1)
 
-        # Create a pool of worker processes
-        pool = multiprocessing.Pool(processes=num_cores, maxtasksperchild=1)
-
-        # Create an iterable of tuples, each containing the task ID and shared_dict
         rng = np.random.default_rng(seed=42)
         indexes = rng.permutation(location_data.index)
 
-        task_args = zip(indexes,
-                        itertools.repeat(location_data),
-                        itertools.repeat(data),
-                        itertools.repeat(config_file),
-                        itertools.repeat(configuration))
+        tasks_per_child = config_file.get('tasks_per_child', None)
 
-        # Start processing tasks and ensure parallelism
-        results = list(pool.imap(run_algorithm, task_args))
+        # Large read-mostly data is initialized once per worker. Each location run creates its own local working
+        # copies inside run_algorithm, so repeated tasks in a worker do not inherit changed data from previous tasks.
+        with multiprocessing.Pool(processes=num_cores,
+                                  initializer=initialize_worker,
+                                  initargs=(location_data, data, config_file, configuration),
+                                  maxtasksperchild=tasks_per_child) as pool:
 
-        # Close and join the worker pool
-        pool.close()
-        pool.join()
+            for _ in pool.imap_unordered(run_algorithm_for_location, indexes, chunksize=1):
+                pass
 
     else:
         for i in location_data.index:

@@ -32,10 +32,12 @@ def prepare_commodities(config_file, location_data, data):
     conversion_costs_and_efficiencies = data['conversion_costs_and_efficiencies']
 
     # remove all commodities which do not have conversions and are not final commodities -> dead end
-    for commodity in config_file['available_commodity']:
-        if commodity not in config_file['target_commodity']: # is not a target commodity
-            if not techno_economic_data_conversion[commodity]['potential_conversions']: # no conversion possible
-                config_file['available_commodity'].remove(commodity)
+    config_file = config_file.copy()
+    config_file['available_commodity'] = [
+        commodity for commodity in config_file['available_commodity']
+        if (commodity in config_file['target_commodity'])
+        or techno_economic_data_conversion[commodity]['potential_conversions']
+    ]
 
     # get commodities and associated data
     commodities, commodity_names \
