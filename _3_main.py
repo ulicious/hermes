@@ -5,6 +5,7 @@ import yaml
 import sys
 
 import numpy as np
+import pandas as pd
 
 from algorithm.script_algorithm import run_algorithm
 from algorithm.methods_main import prepare_data_and_configuration_dictionary
@@ -21,24 +22,44 @@ _WORKER_CONFIG_FILE = None
 _WORKER_CONFIGURATION = None
 
 
-def initialize_worker(location_data, data, config_file, configuration):
+def get_project_folder_path(config_file):
+    return config_file['project_folder_path']
+
+
+def get_results_path(config_file):
+    return get_project_folder_path(config_file) + 'results/'
+
+
+def load_location_data(config_file):
+    return pd.read_csv(get_project_folder_path(config_file) + 'start_destination_combinations.csv', index_col=0)
+
+
+def initialize_worker(config_file):
+    global _WORKER_CONFIG_FILE
+
+    _WORKER_CONFIG_FILE = config_file
+
+
+def get_worker_data():
     global _WORKER_LOCATION_DATA
     global _WORKER_DATA
-    global _WORKER_CONFIG_FILE
     global _WORKER_CONFIGURATION
 
-    _WORKER_LOCATION_DATA = location_data
-    _WORKER_DATA = data
-    _WORKER_CONFIG_FILE = config_file
-    _WORKER_CONFIGURATION = configuration
+    if _WORKER_DATA is None:
+        _WORKER_DATA, _WORKER_CONFIGURATION, _WORKER_LOCATION_DATA \
+            = prepare_data_and_configuration_dictionary(_WORKER_CONFIG_FILE)
+
+    return _WORKER_DATA, _WORKER_CONFIGURATION, _WORKER_LOCATION_DATA
 
 
 def run_algorithm_for_location(location_index):
+    data, configuration, location_data = get_worker_data()
+
     return run_algorithm((location_index,
-                          _WORKER_LOCATION_DATA,
-                          _WORKER_DATA,
+                          location_data,
+                          data,
                           _WORKER_CONFIG_FILE,
-                          _WORKER_CONFIGURATION))
+                          configuration))
 
 
 if __name__ == '__main__':
@@ -48,11 +69,10 @@ if __name__ == '__main__':
     yaml_file = open(path_config)
     config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-    data, configuration, location_data = prepare_data_and_configuration_dictionary(config_file)
-
     # used to remove processed results
+    location_data = load_location_data(config_file)
     processed_locations = []
-    files = os.listdir(configuration['path_results'] + 'location_results/')
+    files = os.listdir(get_results_path(config_file) + 'location_results/')
     for f in files:
         if 'global' in f:
             continue
@@ -127,17 +147,18 @@ if __name__ == '__main__':
 
         tasks_per_child = config_file.get('tasks_per_child', None)
 
-        # Large read-mostly data is initialized once per worker. Each location run creates its own local working
-        # copies inside run_algorithm, so repeated tasks in a worker do not inherit changed data from previous tasks.
+        # Workers load the large read-mostly data themselves from project_folder_path and cache it per process. The
+        # parent only sends location ids, avoiding a full data copy during Pool initialization.
         with multiprocessing.Pool(processes=num_cores,
                                   initializer=initialize_worker,
-                                  initargs=(location_data, data, config_file, configuration),
+                                  initargs=(config_file,),
                                   maxtasksperchild=tasks_per_child) as pool:
 
             for _ in pool.imap_unordered(run_algorithm_for_location, indexes, chunksize=1):
                 pass
 
     else:
+        data, configuration, _ = prepare_data_and_configuration_dictionary(config_file)
         for i in location_data.index:
             args = [i, location_data, data, config_file, configuration]
             run_algorithm(args)
