@@ -35,6 +35,32 @@ def load_location_data(config_file):
     return pd.read_csv(get_project_folder_path(config_file) + 'start_destination_combinations.csv', index_col=0)
 
 
+def choose_parallel_backend(config_file):
+    configured_backend = config_file.get('parallel_backend', 'auto')
+    if configured_backend != 'auto':
+        return configured_backend
+
+    if sys.platform.startswith('linux') and 'fork' in multiprocessing.get_all_start_methods():
+        return 'processes_fork'
+
+    return 'threads'
+
+
+def get_number_location_workers(config_file, number_locations):
+    configured_workers = config_file.get('number_location_workers',
+                                         config_file.get('max_parallel_locations', 1))
+
+    if configured_workers == 'max':
+        configured_workers = multiprocessing.cpu_count() - 1
+
+    configured_workers = int(configured_workers)
+    configured_workers = max(1, configured_workers)
+    configured_workers = min(configured_workers, multiprocessing.cpu_count() - 1)
+    configured_workers = min(configured_workers, number_locations)
+
+    return configured_workers
+
+
 def initialize_worker(config_file):
     global _WORKER_CONFIG_FILE
 
@@ -149,22 +175,31 @@ if __name__ == '__main__':
     time_start = time.time()
     if not config_file['use_low_memory']:
 
-        num_cores = config_file['number_cores']
-        if num_cores == 'max':
-            num_cores = multiprocessing.cpu_count() - 1
-        else:
-            num_cores = min(num_cores, multiprocessing.cpu_count() - 1)
-
         rng = np.random.default_rng(seed=42)
         indexes = rng.permutation(location_data.index)
+        number_location_workers = get_number_location_workers(config_file, len(indexes))
 
-        parallel_backend = config_file.get('parallel_backend', 'threads')
+        parallel_backend = choose_parallel_backend(config_file)
 
-        if parallel_backend == 'processes':
+        if parallel_backend == 'processes_fork':
             tasks_per_child = config_file.get('tasks_per_child', None)
 
-            # Processes do not share Python objects on Windows. Use this only when enough memory is available.
-            with multiprocessing.Pool(processes=num_cores,
+            # Linux can share the large read-mostly data efficiently via fork/copy-on-write. Load once in the parent,
+            # then fork workers so each location run still creates fresh mutable working data in run_algorithm.
+            data, configuration, _ = prepare_data_and_configuration_dictionary(config_file)
+            initialize_shared_data(config_file, data, configuration, location_data)
+
+            ctx = multiprocessing.get_context('fork')
+            with ctx.Pool(processes=number_location_workers, maxtasksperchild=tasks_per_child) as pool:
+                for _ in pool.imap_unordered(run_algorithm_for_location, indexes, chunksize=1):
+                    pass
+
+        elif parallel_backend == 'processes':
+            tasks_per_child = config_file.get('tasks_per_child', None)
+
+            # Portable process mode. On Windows/macOS this uses spawn and each worker loads its own data, so prefer
+            # threads unless enough memory is available.
+            with multiprocessing.Pool(processes=number_location_workers,
                                       initializer=initialize_worker,
                                       initargs=(config_file,),
                                       maxtasksperchild=tasks_per_child) as pool:
@@ -178,7 +213,7 @@ if __name__ == '__main__':
             data, configuration, _ = prepare_data_and_configuration_dictionary(config_file)
             initialize_shared_data(config_file, data, configuration, location_data)
 
-            with ThreadPoolExecutor(max_workers=num_cores) as executor:
+            with ThreadPoolExecutor(max_workers=number_location_workers) as executor:
                 for _ in executor.map(run_algorithm_for_location, indexes):
                     pass
 
