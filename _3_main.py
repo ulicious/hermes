@@ -47,9 +47,7 @@ def choose_parallel_backend(config_file):
 
 
 def get_number_location_workers(config_file, number_locations):
-    configured_workers = config_file.get('number_location_workers',
-                                         config_file.get('max_parallel_locations',
-                                                         config_file.get('number_workers', 1)))
+    configured_workers = config_file['number_cores']
 
     if configured_workers == 'max':
         configured_workers = multiprocessing.cpu_count() - 1
@@ -182,7 +180,7 @@ if __name__ == '__main__':
 
         parallel_backend = choose_parallel_backend(config_file)
         print('Parallel backend: ' + str(parallel_backend))
-        print('Parallel location workers: ' + str(number_location_workers))
+        print('Parallel location workers from number_cores: ' + str(number_location_workers))
 
         if parallel_backend == 'processes_fork':
             tasks_per_child = config_file.get('tasks_per_child', None)
