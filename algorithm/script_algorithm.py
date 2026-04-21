@@ -686,6 +686,10 @@ def run_algorithm(args):
         total_time = time.time() - total_time
         time_since_start = time.time() - start_time
 
+        # save branches
+        # branches.to_csv(
+        #     configuration['path_results'] + 'assessment_current_run/' + str(location_index) + '_' + str(iteration) + '.csv')
+
         if print_information:
 
             if final_solution is not None:
@@ -710,6 +714,7 @@ def run_algorithm(args):
     if final_solution is not None:
         if not final_solution.empty:
             final_solution.loc['current_node'] = 'Destination'
+            final_solution.loc['destination'] = data['destination']['location']
             final_solution.loc['solving_time'] = time.time() - start_time
             final_solution.loc['status'] = 'complete'
             final_solution.to_csv(configuration['path_results'] + 'location_results/' + str(location_index) + '_final_solution.csv')

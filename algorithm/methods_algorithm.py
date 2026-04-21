@@ -119,7 +119,7 @@ def create_branches_based_on_commodities_at_start(data):
         branches.loc[branch_index, 'all_previous_total_costs'] = [c_object.get_production_costs()]
         branches.at[branch_index, 'taken_routes'] = [(c_object.get_name(), c_object.get_starting_efficiency())]
         branches.loc[branch_index, 'total_efficiency'] = c_object.get_starting_efficiency()
-        branches.loc[branch_index, 'destination'] = destination_location
+        # branches.loc[branch_index, 'destination'] = destination_location
 
         comparison_index.append(('Start', c_object.get_name()))
 
@@ -296,7 +296,7 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
     continent = []
     distance_to_final_destination = []
 
-    all_destinations = []
+    # all_destinations = []
 
     previous_branches = []
 
@@ -394,7 +394,7 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
             all_previous_conversion_costs += c_start_df['all_previous_conversion_costs'].values.tolist()
             all_previous_total_costs += c_start_df['all_previous_total_costs'].values.tolist()
 
-            all_destinations += c_start_df['destination'].values.tolist()
+            # all_destinations += c_start_df['destination'].values.tolist()
 
             previous_branches += c_start_df.index.values.tolist()
 
@@ -434,9 +434,9 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
 
                      'taken_route': taken_route,
 
-                     'total_efficiency': efficiencies,
+                     'total_efficiency': efficiencies} # ,
 
-                     'destination': all_destinations}
+                     # 'destination': all_destinations}
 
     branches = pd.DataFrame(branches_dict, index=index)
 
@@ -460,7 +460,7 @@ def postprocessing_branches(branches, old_branches):
                        'all_previous_nodes', 'all_previous_branches',
                        'all_previous_distances', 'all_previous_transportation_costs', 'all_previous_conversion_costs',
                        'all_previous_total_costs', 'all_previous_commodities', 'branch_index',
-                       'starting_latitude', 'starting_longitude', 'taken_routes', 'total_efficiency', 'destination']
+                       'starting_latitude', 'starting_longitude', 'taken_routes', 'total_efficiency']
     old_branches = old_branches[columns_to_keep]
 
     branches = pd.merge(branches, old_branches, left_on='previous_branch', right_on='branch_index', how='left')
@@ -501,7 +501,7 @@ def postprocessing_branches(branches, old_branches):
 
     branches.rename(columns={'total_efficiency_x': 'total_efficiency'}, inplace=True)
 
-    branches.rename(columns={'destination_y': 'destination'}, inplace=True)
+    # branches.rename(columns={'destination_y': 'destination'}, inplace=True)
 
     columns_to_keep = []
     for c in branches.columns:
