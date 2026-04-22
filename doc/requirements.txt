@@ -1,0 +1,5 @@
+# Minimal dependencies for building the Sphinx documentation on Read the Docs.
+#
+# The current documentation does not import project modules or execute plotting
+# code, so the runtime dependencies from the repository root are intentionally
+# not installed here.
