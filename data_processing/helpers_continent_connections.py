@@ -100,13 +100,7 @@ def build_continent_connectivity(landmasses, gas_nodes, oil_nodes):
             for continent_b in graph_continents[index + 1:]:
                 _register_connection(connections, continent_a, continent_b)
 
-    direct_connections = {
-        continent: sorted(neighbours)
-        for continent, neighbours in connections.items()
-    }
-
     return {
-        'direct_connections': direct_connections,
         'reachable_continents': _build_reachability(connections),
     }
 
