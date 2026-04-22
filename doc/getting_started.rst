@@ -47,27 +47,35 @@ and afterwards, choose the Python .exe file in the created folder of the environ
 Using pip
 ---------
 
-First, choose a python interpreter and afterwards, install all requirements with following command in the IDE terminal.
+First, choose a python interpreter and afterwards, install all requirements with the following command in the IDE terminal.
 
 .. code-block:: none
 
-    pip install -r doc/requirements.txt
+    pip install -r requirements.txt
 
 3. Setting up folder structure
 ==============================
 
-Processed data and results need to be stored. Therefore, following folder structure needs to be implemented
+The code expects a separate project folder referenced by ``project_folder_path``
+in ``algorithm_configuration.yaml``. HERMES creates missing folders automatically,
+but the resulting structure should look as follows:
 
 .. code-block:: none
 
     PROJECT FOLDER/
-        processed_data/
         raw_data/
+        processed_data/
+            inner_infrastructure_distances/
+            mip_data/  # only if create_mip_data = True
+        start_destination_combinations.csv
         results/
             location_results/
             plots/
 
-Please indicate the path towards the PROJECT_FOLDER in :ref:`general_configuration`.
+If ``use_provided_data`` is set to ``True``, the files from the repository's
+``data/`` directory are copied into ``PROJECT FOLDER/raw_data/`` during preprocessing.
+
+Please indicate the path towards ``PROJECT FOLDER`` in :ref:`general_configuration`.
 
 .. _usage:
 
@@ -79,34 +87,47 @@ The following article will describe the necessary steps to run the HERMES model
 Adjust parameters if desired
 ============================
 
-All parameters are set based on the parameters used in the publication. Some of these parameters directly affect the creation of random locations and the raw data processing. Therefore, please adjust parameters if desired. These include:
+Most settings are controlled through ``algorithm_configuration.yaml`` and
+``plotting_configuration.yaml``. Before running the workflow, review at least:
 
-- algorithm_configuration: General configurations affecting the infrastructure processing, the algorithm, and scenario assumptions
-- data/techno_economic_data_conversion: Techno-economic data of conversions (investments, feedstock demand and costs etc.)
-- data/techno_economic_data_transportation: Techno-economic data of transport (which commodity can be transported by which transport mean and at which costs)
+- ``project_folder_path`` and the destination settings
+- preprocessing and memory settings such as ``use_low_storage``, ``use_low_memory``, and ``create_mip_data``
+- start-location settings such as ``number_locations``, ``location_creation_type``, ``use_voronoi_cells``, and island handling
+- algorithm settings such as ``target_commodity``, distance tolerances, and infrastructure switches
+- the techno-economic YAML files in ``data/`` or in ``PROJECT FOLDER/raw_data/``
 
-For the explanation of the different parameters, please see: :ref:`parameter_explanation_algorithm`, :ref:`parameter_explanation_conversion` and :ref:`parameter_explanation_transport`
+For a full explanation of the available parameters, see
+:ref:`parameter_explanation_algorithm`, :ref:`parameter_explanation_conversion`,
+:ref:`parameter_explanation_transport`, and :ref:`parameter_explanation_plotting`.
 
 Run Python code
 ===============
 
 Run following python files consecutively:
 
-1. _1_script_process_raw_data.py: Processing of raw data
-2. _2_create_random_locations.py: Creates random locations
-3. _3_main.py: Main algorithm to calculate most cost-efficient transport routes
+1. ``_1_script_process_raw_data.py``: preprocesses raw infrastructure data, ports, network distances, continent connectivity, and conversion costs at infrastructure nodes
+2. ``_2_create_random_locations.py``: creates start locations and attaches location-specific production and conversion data
+3. ``_3_main.py``: runs the routing algorithm for all not-yet-processed start locations
 
-The algorithm will process the random locations and creates a result file for each location in /PROJECT_FOLDER/results/location_results/
+The algorithm creates one result file per start location in
+``PROJECT FOLDER/results/location_results/``.
 
-If desired, _4_plot_results will create some standard plots for the results
+If desired, ``_4_plot_results.py`` can be used afterwards to create standard plots
+in ``PROJECT FOLDER/results/plots/``.
 
 Things to consider
 ==================
 
-- If techno-economic data and assumptions are changed, conversion costs need to be updated
-    - run "1_script_process_raw_data" and "2_create_random_locations" with the setting update_only_conversion_costs_and_efficiency = True
-- Data processing is quite time-consuming and heavily depends on the resources of your machine
-- The processed data will take quite some storage space (distances are not calculate if 'use_low_storage' = True)
-    - Minimal example: 11 MB (without distances) | ~500 MB (with distances)
-    - Full approach: 55 MB (without distances) | ~5 GB (with distances)
-- The computational expenses heavily rely on the data and setting
+- If techno-economic assumptions change, rerun ``_1_script_process_raw_data.py`` and
+  ``_2_create_random_locations.py``. The flag
+  ``update_only_conversion_costs_and_efficiency`` can be used to skip the full
+  infrastructure preprocessing.
+- ``enforce_update_of_data`` forces regeneration of already processed files.
+- ``use_low_storage`` reduces disk usage by skipping precomputed inner-network
+  distances, but increases runtime during routing.
+- ``use_low_memory`` disables the parallel high-memory code path and usually
+  increases runtime.
+- ``create_mip_data`` writes additional processed files for later mixed-integer
+  validation and therefore increases preprocessing effort.
+- The minimal example overwrites the geographic bounds and restricts the workflow
+  to Europe.

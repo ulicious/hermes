@@ -4,12 +4,23 @@
 HERMES: Hydrogen Economy Routing Model for cost-efficient Supply
 ================================================================
 
-HERMES is a multi commodity multi mean of transport algorithm,
-capable to find the most cost-effective transportation route from pre-defined starting points to a desired location.
-The algorithm derives possible solutions for transportation from a starting point to the final destination.
-Based on the underlying infrastructure data, the algorithm iteratively explores infrastructure nodes and calculates
-costs for each reached node. It terminates as soon as it reaches the final destination and exploration
-to other nodes is not possible anymore
+HERMES is a multi-commodity routing model for hydrogen and hydrogen-derived
+energy carriers. It combines preprocessing of ports, gas pipelines, liquid
+pipeline infrastructure, and location-specific conversion costs with a routing
+heuristic that searches for the lowest-cost supply path to a user-defined
+destination.
+
+The current workflow is split into four main steps:
+
+1. Process raw infrastructure and techno-economic input data.
+2. Create start locations and attach production and conversion costs.
+3. Run the routing algorithm for all start locations.
+4. Optionally create plots for the generated results.
+
+The documentation in this folder reflects the current repository structure,
+the active YAML configuration files, and the parameter set used by the
+latest code in ``_1_script_process_raw_data.py``, ``_2_create_random_locations.py``,
+``_3_main.py``, and ``_4_plot_results.py``.
 
 Citation
 ========

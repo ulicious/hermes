@@ -2,8 +2,9 @@ Assumption / Setting;Values;Explanation;Comment
 destination_type; 'location' or 'country'; defines destination type (single point location or country)
 destination_location;[longitude, latitude];Coordinates of destination;
 destination_polygon; {country_name: [state_name_1, state_name_2, ...]}; dictionary with country names as keys and list with country states as values; keep state name list empty if complete country
-destination_country;string;Country of destination;
-destination_continent;string;Continent of destination;
+use_biggest_landmass;True / False;If True and the destination polygon contains one country with multiple landmasses, only the largest polygon is used;
+destination_country;string;Country name of the destination;Metadata for the scenario definition
+destination_continent;string;Continent of destination;Required for routing and plotting
 origin_continents;list;If not empty, random locations will only be created on indicated continents. Empty if all continents;
 low_temp_heat_available_at_start;True / False;Indicates if low-temperature heat is available at start;"Affects conversion costs; value defined in cost_type"
 mid_temp_heat_available_at_start;True / False;Indicates if medium-temperature heat is available at start;"Affects conversion costs; value defined in cost_type"
@@ -13,7 +14,9 @@ minimal_latitude;latitude;Sets minimal latitude of random locations;will be over
 maximal_latitude;latitude;Sets maximal latitude of random locations;will be overwritten if minimal_example is applied
 minimal_longitude;longitude;Sets minimal longitude of random locations;will be overwritten if minimal_example is applied
 maximal_longitude;longitude;Sets maximal longitude of random locations;will be overwritten if minimal_example is applied
-location_creation_type; 'uniform' or 'random'; distributed start locations randomly or in uniformly
-use_voronoi_cells; True / False; based on locations, onshore area is divided into voronoi cells instead of taking value from era 5 cell
-weight_hydrogen_costs_by_quantity; True / False; if True then the value of the voronoi cell is based on the by quantity weighted costs per era 5 cell
-each_country_at_least_one_location; True / False; if True: makes sure that each country is represented at least by one start location
+location_creation_type; 'uniform' or 'random';Chooses between random sampling and a quasi-uniform point distribution;
+use_voronoi_cells; True / False;If True, onshore areas are assigned to generated locations via Voronoi cells;
+weight_hydrogen_costs_by_quantity; True / False;If True, Voronoi-cell hydrogen costs are weighted by the available quantity in the underlying cells;
+each_country_at_least_one_location; True / False;If True, an additional representative start location is created for countries that would otherwise be missing;
+create_locations_for_islands;True / False;If True, island geometries are considered explicitly during Voronoi creation and location assignment;
+island_area_threshold;float;Minimum island area in km^2 for separate treatment during island handling;Used only if island creation is enabled

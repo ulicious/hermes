@@ -1,4 +1,2 @@
 Assumption / Setting;Values;Explanation;Comment
-process_results; list with result names; creates csv file containing all results of respective folders
-categorical_routes; list with result names; creates csv file containing weighted routes categorized by costs; subset of process_results
-commodity_routes; list with result names; creates csv file containing weighted routes categorized by commodity; subset of process_results
+process_results;list with result-set names;Defines which result folders should be processed for downstream plotting or comparisons;Names are interpreted relative to the results directory

@@ -21,7 +21,9 @@ Several parameters affect the HERMES model. Following article will describe all 
 General configuration
 =====================
 
-Settings regarding general configuration include overarching settings like paths or computational resources, available commodities and transport means, and how recalculations of infrastructure and location conversion costs are processed.
+These settings define paths, computational limits, the globally available
+commodities and transport means, and whether preprocessing artefacts should be
+reused or rebuilt.
 
 .. csv-table::
    :header-rows: 1
@@ -35,7 +37,8 @@ Settings regarding general configuration include overarching settings like paths
 Setting and assumptions affecting starting locations
 ====================================================
 
-Affects number of starting locations, limits locations (continents / coordinates) and indicate if heat is available at start
+Affects the destination definition, the generation of start locations, the use of
+Voronoi cells, and whether heat is available at the origin.
 
 .. csv-table::
    :header-rows: 1
@@ -49,7 +52,8 @@ Affects number of starting locations, limits locations (continents / coordinates
 Setting and assumptions affecting infrastructure processing
 ===========================================================
 
-Affects number of access points in pipelines and indicates if heat is available at infrastructure
+Affects preprocessing of ports and pipeline networks, the spacing of pipeline
+access points, and whether heat is available at infrastructure nodes.
 
 .. csv-table::
    :header-rows: 1
@@ -63,7 +67,9 @@ Affects number of access points in pipelines and indicates if heat is available 
 Setting and assumptions affecting main algorithm
 ================================================
 
-Affects main algorithm regarding tolerances, maximal distances of road and new pipelines, heat availability at destination etc.
+Affects routing tolerances, maximum distances for additional transport segments,
+destination-side heat assumptions, and whether commodity strike prices are added
+to the optimization target.
 
 .. csv-table::
    :header-rows: 1
@@ -159,31 +165,28 @@ Transport assumptions and setting decide on availability of different transport 
         transport mean 2: costs
         ...
 
-All costs in EURO / MWh / 1000 km
+The transport input data is stored in ``techno_economic_data_transportation.yaml``.
+For each commodity, the file defines the admissible transport means together with
+the corresponding cost and loss assumptions.
 
 .. _parameter_explanation_plotting:
 
 Plotting Parameter
 ###################
 
-Several parameters exist to process and plot results. Following structure is necessary to process and plot results:
+``plotting_configuration.yaml`` controls which result folders are processed and
+how plots are styled. The current plotting workflow expects the following
+structure:
 
 .. code-block:: none
 
     PROJECT FOLDER/
         results/
-            location_results/  # folder where calculated results of algorithm are stored
-            unprocessed_results/  # folder with finished results (e.g., rename location_results/ and move here)
-                result_1/  # folder with all location results of run result_1
-                result_2/  # folder with all location results of run result_2
-                ...
-            processed_results/  # folder containing processed results
-                result_1.csv  # will be created
-                result_2.csv  # will be created
-                ...
-            plots/  # folder containing finished plots
+            location_results/  # per-location result csv files written by _3_main.py
+            plots/  # figures written by _4_plot_results.py
 
-First of all, results need to be processed. Example for list with results: ['result_1', 'result_2', ...]
+The ``process_results`` setting is used to name result sets that should be
+processed for later comparison workflows.
 
 .. csv-table::
    :header-rows: 1
@@ -192,7 +195,7 @@ First of all, results need to be processed. Example for list with results: ['res
    :widths: 20, 20, 40, 20
    :delim: ;
 
-First type of plot: Plots with single aspect of result. Example for list with results: ['result_1', 'result_2', ...]
+Single-result plotting options:
 
 .. csv-table::
    :header-rows: 1
@@ -201,7 +204,7 @@ First type of plot: Plots with single aspect of result. Example for list with re
    :widths: 20, 20, 60
    :delim: ;
 
-Second type of plot: comparison plots. For given list of results, single aspect of parameters are plotted in 2x1 or 2x2 plot. Example: [['result_1', 'result_2'], ['result_3', 'results_4'], ['result_1', 'result_2', 'result_3', 'results_4']]
+Comparison plotting options:
 
 .. csv-table::
    :header-rows: 1
@@ -210,13 +213,9 @@ Second type of plot: comparison plots. For given list of results, single aspect 
    :widths: 20, 20, 40, 20
    :delim: ;
 
-Finally, further parameters can be defined which majorly affected appearance of plots
+Styling parameters in the current plotting configuration:
 
 .. code-block:: none
-
-    colormap: ... # defines used colormaps in cost plots
-
-    limit_scale: True / False  # colors outliers differently in cost plots
 
     commodity_colors:  # adjust commodity colors
         commodity_1: color_1
@@ -236,5 +235,3 @@ Finally, further parameters can be defined which majorly affected appearance of 
 
     infrastructure_colors:  # defines colors in infrastructure plot
         ...
-
-

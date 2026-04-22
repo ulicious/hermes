@@ -10,5 +10,6 @@ H2_ready_infrastructure;True / False;If True, existing natural gas pipelines can
 low_temp_heat_available_at_destination;True / False;Indicates if low-temperature heat is available at destination;"Affects conversion costs; value defined in cost_type"
 mid_temp_heat_available_at_destination;True / False;Indicates if medium-temperature heat is available at destination;"Affects conversion costs; value defined in cost_type"
 high_temp_heat_available_at_destination;True / False;Indicates if high-temperature heat is available at destination;"Affects conversion costs; value defined in cost_type"
+consider_commodity_prices;True / False;If True, strike prices of target commodities are added to the optimization target;Only applied for commodities listed in target_commodity
 print_runtime_information;True / False;If True, regular updates on branches is given while code is running;
 print_benchmark_info;True / False;If True, information on initial benchmark for each location is given;

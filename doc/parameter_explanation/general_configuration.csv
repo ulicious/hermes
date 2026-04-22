@@ -1,13 +1,14 @@
 Assumption / Setting;Values;Explanation;Comment
 project_folder_path;string;Path to project folder;
 use_minimal_example;True / False;Reduces infrastructure data and random locations to Europe;
-use_low_storage;True / False;If True, this setting will store only the absolute necessary data on the device;Might increase calculation time if False
-use_low_memory;True / False;If False, this setting will avoid large matrices in all calculations;Might increase calculation time if False
+use_low_storage;True / False;If True, precomputed inner-network distances are skipped to reduce storage demand;Usually increases routing time
+use_low_memory;True / False;If True, memory-saving code paths are used and parallel processing is reduced;Usually increases runtime
 number_cores;integer / 'max';Integer to indicate number of usable cores / threads. 'max' if maximum amount should be used;
 use_provided_data;True / False;If True, raw_data as provided will be used. If False, data needs to be placed in PROJECT_FOLDER/raw_data;
-location_data_name;string;Indicates which location data will be used from data folder;Please see XYZ
-country_data_name;string;Indicates which country data will be used from data folder;Please see XYZ
+location_data_name;string;CSV file in raw_data with location-specific production data used for start locations;
+country_data_name;string;CSV file in raw_data with country-level fallback values for techno-economic data;
 available_commodity;list;Indicates which commodities will be considered;
 available_transport_means;list;Indicates which transport means will be considered;
 enforce_update_of_data;True / False;If True, infrastructure will be processed again even though files have been created. Otherwise, only such infrastructure will be processed which has not been processed yet;Especially useful if infrastructure processing has been stopped/interrupted
 update_only_conversion_costs_and_efficiency;True / False;If True, only techno-economic data (conversion costs at locations) will be updated. If False, infrastructure will be calculated as well;
+create_mip_data;True / False;If True, additional processed files for later mixed-integer validation are created;Increases preprocessing time and storage demand

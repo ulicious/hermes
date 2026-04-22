@@ -1,7 +1,5 @@
 # plotting settings
-process_results; list with result names; creates csv file containing all results of respective folders
-categorical_routes; list with result names; creates csv file containing weighted routes categorized by costs; subset of process_results
-commodity_routes; list with result names; creates csv file containing weighted routes categorized by commodity; subset of process_results
+process_results; list with result-set names; defines which result folders should be processed for downstream plotting and comparisons
 
 # plot infrastructure
 infrastructure_plot; True / False; plots infrastructure in a single plot
@@ -14,10 +12,7 @@ total_supply_costs_plot; list with result names; creates total_supply costs plot
 all_costs_plot; list with result names; creates plot for results in csv containing h2 production, conversion, transport and total supply costs
 commodity_plot; list with result names; creates starting commodity plot for results in csv
 full_plot; list with result names; creates 2x2 plot for results in csv (h2 production costs, total supply costs, commodity, and infrastructure plot)
-commodity_transport_mean_plot; list with result names
 routes_plot; list with result names; creates routes plot for results in csv
-weighted_routes_plot; list with result names; creates most used routes plot for results in csv
-supply_curve_plots; "results: list with result names; countries: list with country names"; creates supply curve of country based on results
 
 # e.g. [[result_1, results_2], [results_2, results_3]]
 # comparison plots --> 1x2 or 2x2 plots. Nested lists with each list containing up to 4 results (names of results); e.g. [['results_1', 'results_2'], ['results_1', 'results_2', 'results_3', 'results_4']]
@@ -26,18 +21,8 @@ transport_costs_comparison_plot; nested lists of results; create plot for each l
 total_supply_costs_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
 commodity_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
 routes_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
-weighted_routes_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
-compare_costs_and_quantities_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
-supply_curve_comparison_plots; "results: nested lists of results; countries: list of countries"; create supply curve plot for each list in nested list and fills it with supply curve for each country for each result in list; only two or four results are supported per list in nested list
-solving_time_plot; list with result names; creates plot with boxplot for each result to show solving time in minutes
-
-# direct comparison plots: results are compared with each other. Nested lists with each list containing results (names of result); e.g. [['results_1', 'results_2'], ['results_1', 'results_2', 'results_3', 'results_4']]
-matched_supply_routes_plots: []  # compares results and attaches routes to the destination which has cheapest supply costs of route
 
 # colors, widths, nice names etc.
-colormap: 'viridis_r'
-limit_scale: True
-
 commodity_colors:
    Hydrogen_Gas: 'lawngreen'
    Hydrogen_Liquid: 'forestgreen'
@@ -67,14 +52,10 @@ nice_name_dictionary:
    Pipeline_Liquid: 'Oil Pipeline'
    New_Pipeline_Gas: 'New Gas Pipeline'
    New_Pipeline_Liquid: 'New Oil Pipeline'
-   global-any_target_h2_ready: 'All-Retrofit'
-   global-any_target_not_h2_ready: 'All-Not-Retrofit'
-   global-h2_target_h2_ready: 'H2-Retrofit'
-   global-h2_target_not_h2_ready: 'H2-Not-Retrofit'
-   DE_all_ready: 'GER-All-Retrofit'
-   DE_h2_ready: 'GER-H2-Retrofit'
-   DE_all_not_ready: 'GER-All-Not-Retrofit'
-   DE_h2_not_ready: 'GER-H2-Not-Retrofit'
+   global-any_target_h2_ready: 'All-Ready'
+   global-any_target_not_h2_ready: 'All-Not-Ready'
+   global-h2_target_h2_ready: 'H2-Ready'
+   global-h2_target_not_h2_ready: 'H2-Not-Ready'
 
 transport_mean_styles:
    Road: ''

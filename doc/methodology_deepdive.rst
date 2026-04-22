@@ -96,9 +96,16 @@ Details on the calculation method is given in :ref:`calculation_conversion_costs
 Starting Location Creation
 ##########################
 
-Starting locations are created randomly all across the globe and complemented with their commodity production costs. All locations are created to reach the same destination, which needs to be defined in :ref:`locations`. The number of created locations can be defined there as well.
+Starting locations are generated for a shared destination and complemented with
+their commodity production costs. Depending on
+``location_creation_type``, HERMES either samples random points or creates a
+quasi-uniform distribution within the configured latitude and longitude bounds.
+The number of created locations can be defined in :ref:`locations`.
 
-To restrict the location process, one can either define the continents of the starting location (origin_continents), or set minimal and maximal latitudes and longitudes of the area, where the locations are placed in. The restricting parameters can be found in :ref:`locations`.
+To restrict the location process, one can define allowed continents of origin
+(``origin_continents``), configure geographic bounds, or activate the minimal
+example, which overwrites the bounds with a European subset. Optional Voronoi
+cells can then be attached to the generated locations.
 
 Attaching Conversion Costs
 ==========================
@@ -112,7 +119,8 @@ Details on the calculation method is given in :ref:`calculation_conversion_costs
 Benchmarking
 ############
 
-The main instrument to reduce branches in the algorithm is the comparison of branches with benchmarks. In the algorithm, two types of benchmarks exist:
+The main instrument to reduce branches in the algorithm is the comparison of
+branches with benchmarks. In the current algorithm, two types of benchmarks exist:
 
 - Global Benchmark
 - Nodal-Commodity Benchmark
