@@ -92,6 +92,9 @@ def prepare_data_and_configuration_dictionary(config_file):
     with open(path_processed_data + 'within_tolerance.json', 'r', encoding='utf-8') as f:
         in_tolerance_dict = json.load(f)
 
+    with open(path_processed_data + 'continent_connections.json', 'r', encoding='utf-8') as f:
+        continent_connections = json.load(f)
+
     conversion_costs_and_efficiencies = pd.read_csv(path_processed_data + 'conversion_costs_and_efficiency.csv', index_col=0)
 
     yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
@@ -203,6 +206,7 @@ def prepare_data_and_configuration_dictionary(config_file):
     data = {'Shipping': {'ports': ports},
             'minimal_distances': minimal_distances,
             'in_tolerance_locations': in_tolerance_dict,
+            'continent_connections': continent_connections,
             'transport_means': transport_means,
             'commodities': {'final_commodities': final_commodities,
                             'commodity_objects': {},

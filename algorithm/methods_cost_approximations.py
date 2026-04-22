@@ -6,6 +6,139 @@ import numpy as np
 from collections import defaultdict
 
 
+def _get_global_conversion_lower_bound(
+        commodity_object,
+        source_commodity,
+        target_commodity,
+        convertible_locations,
+        conversion_lower_bound_cache,
+):
+    if source_commodity == target_commodity:
+        return 0.0, 1.0
+
+    cache_key = (source_commodity, target_commodity)
+    if cache_key not in conversion_lower_bound_cache:
+        conversion_costs = commodity_object.get_conversion_costs_specific_commodity(
+            convertible_locations,
+            target_commodity,
+        ).to_numpy(dtype=float, copy=False)
+        conversion_efficiencies = commodity_object.get_conversion_efficiency_specific_commodity(
+            convertible_locations,
+            target_commodity,
+        ).to_numpy(dtype=float, copy=False)
+
+        finite_costs = conversion_costs[np.isfinite(conversion_costs)]
+        finite_efficiencies = conversion_efficiencies[np.isfinite(conversion_efficiencies) & (conversion_efficiencies > 0)]
+
+        if finite_costs.size == 0 or finite_efficiencies.size == 0:
+            conversion_lower_bound_cache[cache_key] = (math.inf, 0.0)
+        else:
+            conversion_lower_bound_cache[cache_key] = (float(finite_costs.min()), float(finite_efficiencies.max()))
+
+    return conversion_lower_bound_cache[cache_key]
+
+
+def _calculate_shipping_required_candidates(
+        positions,
+        current_costs,
+        distances,
+        used_shipping_mask,
+        c_start,
+        c_start_object,
+        commodity_names,
+        commodity_objects,
+        final_commodities,
+        destination_conversion_cache,
+        locations_in_destination,
+        convertible_locations,
+        conversion_lower_bound_cache,
+):
+    if positions.size == 0:
+        return np.array([], dtype=float), np.array([], dtype=object)
+
+    best_values = np.full(positions.size, math.inf, dtype=float)
+    best_commodities = np.full(positions.size, 'basic_costs', dtype=object)
+    c_start_conversion_options = c_start_object.get_conversion_options()
+
+    for c_ship in commodity_names:
+        c_ship_object = commodity_objects[c_ship]
+        if not c_ship_object.get_transportation_options().get('Shipping', False):
+            continue
+
+        if c_start != c_ship:
+            if not c_start_conversion_options[c_ship]:
+                continue
+
+            global_conversion_costs, global_conversion_efficiency = _get_global_conversion_lower_bound(
+                c_start_object,
+                c_start,
+                c_ship,
+                convertible_locations,
+                conversion_lower_bound_cache,
+            )
+            if (not np.isfinite(global_conversion_costs)) or global_conversion_efficiency <= 0:
+                continue
+
+            shipping_base_costs = (current_costs + global_conversion_costs) / global_conversion_efficiency
+        else:
+            shipping_base_costs = current_costs.copy()
+
+        distance_series = pd.Series(distances, copy=False)
+        shipping_base_series = pd.Series(shipping_base_costs, copy=False)
+        duration_series = distance_series / 1000 / c_ship_object.get_shipping_speed()
+        _, shipping_total_costs = c_ship_object.get_distance_and_duration_based_costs_and_efficiency_shipping(
+            distance_series,
+            duration_series,
+            shipping_base_series,
+        )
+        with np.errstate(invalid='ignore'):
+            shipping_transport_costs = shipping_total_costs.to_numpy(dtype=float, copy=False) - shipping_base_costs
+
+        if used_shipping_mask.any():
+            shipping_transport_costs = np.asarray(shipping_transport_costs, dtype=float).copy()
+            shipping_transport_costs[used_shipping_mask] = math.inf
+
+        c_ship_conversion_options = c_ship_object.get_conversion_options()
+        for c_end in commodity_names:
+            if c_end not in final_commodities:
+                continue
+
+            if c_ship != c_end:
+                if not c_ship_conversion_options[c_end]:
+                    continue
+
+                cache_key = (c_ship, c_end)
+                if cache_key not in destination_conversion_cache:
+                    conversion_costs_at_destination = c_ship_object.get_conversion_costs_specific_commodity(
+                        locations_in_destination,
+                        c_end,
+                    ).fillna(math.inf)
+                    conversion_efficiency_at_destination = c_ship_object.get_conversion_efficiency_specific_commodity(
+                        locations_in_destination,
+                        c_end,
+                    ).fillna(math.inf)
+                    destination_conversion_cache[cache_key] = (
+                        conversion_costs_at_destination.to_numpy(dtype=float, copy=False),
+                        conversion_efficiency_at_destination.to_numpy(dtype=float, copy=False),
+                    )
+
+                reconversion_costs, reconversion_efficiency = destination_conversion_cache[cache_key]
+                candidate_values = np.min(
+                    (shipping_base_costs[:, None] + shipping_transport_costs[:, None] + reconversion_costs[None, :])
+                    / reconversion_efficiency[None, :],
+                    axis=1,
+                )
+            else:
+                candidate_values = shipping_base_costs + shipping_transport_costs
+
+            update_mask = candidate_values < best_values
+            if np.any(update_mask):
+                best_values[update_mask] = candidate_values[update_mask]
+                best_commodities[update_mask] = c_end
+
+    return best_values, best_commodities
+
+
 def calculate_cheapest_option_to_final_destination(data, branches, benchmarks, cost_column_name):
 
     """
@@ -44,12 +177,18 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmarks, c
     current_transport_means = branches['current_transport_mean'].to_numpy()
     current_nodes_all = branches['current_node'].to_numpy()
     current_node_conversion_all = branches['current_node_conversion'].to_numpy(dtype=bool, copy=False)
+    current_continents_all = branches['current_continent'].to_numpy()
 
     best_values = np.full(number_branches, math.inf, dtype=float)
     best_commodities = np.full(number_branches, 'basic_costs', dtype=object)
 
     locations_in_destination = data['destination']['infrastructure'].index.tolist()
     destination_conversion_cache = {}
+    continent_connections = data.get('continent_connections', {})
+    reachable_continents = continent_connections.get('reachable_continents', {})
+    destination_continent = data['destination'].get('continent')
+    convertible_locations = all_locations.index[conversion_possible].tolist()
+    conversion_lower_bound_cache = {}
 
     for c_start in pd.unique(current_commodities):
         positions = np.flatnonzero(current_commodities == c_start)
@@ -64,22 +203,58 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmarks, c
         current_nodes = current_nodes_all[positions]
         can_convert_at_start = current_node_conversion_all[positions]
         used_shipping_mask = current_transport_means[positions] == 'Shipping'
+        current_continents = current_continents_all[positions]
+        shipping_required_mask = np.array([
+            destination_continent not in reachable_continents.get(current_continent, [current_continent])
+            for current_continent in current_continents
+        ], dtype=bool)
+
+        if shipping_required_mask.any():
+            shipping_required_values, shipping_required_commodities = _calculate_shipping_required_candidates(
+                positions[shipping_required_mask],
+                current_costs[shipping_required_mask],
+                distances[shipping_required_mask],
+                used_shipping_mask[shipping_required_mask],
+                c_start,
+                c_start_object,
+                commodity_names,
+                commodity_objects,
+                final_commodities,
+                destination_conversion_cache,
+                locations_in_destination,
+                convertible_locations,
+                conversion_lower_bound_cache,
+            )
+
+            update_mask = shipping_required_values < best_values[positions[shipping_required_mask]]
+            if np.any(update_mask):
+                positions_to_update = positions[shipping_required_mask][update_mask]
+                best_values[positions_to_update] = shipping_required_values[update_mask]
+                best_commodities[positions_to_update] = shipping_required_commodities[update_mask]
+
+        non_shipping_required_positions = positions[~shipping_required_mask]
+        if non_shipping_required_positions.size == 0:
+            continue
 
         for c_transported in commodity_names:
             if c_start != c_transported:
                 if not c_start_conversion_options[c_transported]:
                     continue
 
-                conversion_costs = np.full(positions.size, math.inf, dtype=float)
-                if can_convert_at_start.any():
-                    convertible_nodes = current_nodes[can_convert_at_start].tolist()
+                conversion_costs = np.full(non_shipping_required_positions.size, math.inf, dtype=float)
+                non_shipping_can_convert_at_start = can_convert_at_start[~shipping_required_mask]
+                non_shipping_current_nodes = current_nodes[~shipping_required_mask]
+                non_shipping_current_costs = current_costs[~shipping_required_mask]
+                if non_shipping_can_convert_at_start.any():
+                    convertible_nodes = non_shipping_current_nodes[non_shipping_can_convert_at_start].tolist()
                     conversion_costs_first = c_start_object.get_conversion_costs_specific_commodity(convertible_nodes, c_transported)
                     conversion_efficiency_first = c_start_object.get_conversion_efficiency_specific_commodity(convertible_nodes, c_transported)
-                    conversion_costs[can_convert_at_start] = (
-                        current_costs[can_convert_at_start] + conversion_costs_first.to_numpy(dtype=float, copy=False)
+                    conversion_costs[non_shipping_can_convert_at_start] = (
+                        non_shipping_current_costs[non_shipping_can_convert_at_start]
+                        + conversion_costs_first.to_numpy(dtype=float, copy=False)
                     ) / conversion_efficiency_first.to_numpy(dtype=float, copy=False)
             else:
-                conversion_costs = current_costs.copy()
+                conversion_costs = current_costs[~shipping_required_mask].copy()
 
             if conversion_costs.min() > benchmarks[c_transported]:
                 continue
@@ -87,6 +262,8 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmarks, c
             c_transported_object = commodity_objects[c_transported]
             transportation_options = c_transported_object.get_transportation_options()
             c_transported_conversion_options = c_transported_object.get_conversion_options()
+            non_shipping_distances = distances[~shipping_required_mask]
+            non_shipping_used_shipping_mask = used_shipping_mask[~shipping_required_mask]
 
             for mean_of_transport in means_of_transport:
                 if not transportation_options[mean_of_transport]:
@@ -95,9 +272,9 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmarks, c
                 if mean_of_transport != 'Shipping':
                     transport_costs = (
                         c_transported_object.get_transportation_costs_specific_mean_of_transport(mean_of_transport) / 1000
-                    ) * distances
+                    ) * non_shipping_distances
                 else:
-                    distance_series = pd.Series(distances, copy=False)
+                    distance_series = pd.Series(non_shipping_distances, copy=False)
                     conversion_series = pd.Series(conversion_costs, copy=False)
                     duration_series = distance_series / 1000 / c_transported_object.get_shipping_speed()
                     _, new_costs = c_transported_object.get_distance_and_duration_based_costs_and_efficiency_shipping(
@@ -107,9 +284,9 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmarks, c
                     )
                     with np.errstate(invalid='ignore'):
                         transport_costs = new_costs.to_numpy(dtype=float, copy=False) - conversion_costs
-                    if used_shipping_mask.any():
+                    if non_shipping_used_shipping_mask.any():
                         transport_costs = np.asarray(transport_costs, dtype=float).copy()
-                        transport_costs[used_shipping_mask] = math.inf
+                        transport_costs[non_shipping_used_shipping_mask] = math.inf
 
                 for c_end in commodity_names:
                     if c_end not in final_commodities:
@@ -143,9 +320,9 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmarks, c
                     else:
                         candidate_values = conversion_costs + transport_costs
 
-                    update_mask = candidate_values < best_values[positions]
+                    update_mask = candidate_values < best_values[non_shipping_required_positions]
                     if np.any(update_mask):
-                        positions_to_update = positions[update_mask]
+                        positions_to_update = non_shipping_required_positions[update_mask]
                         best_values[positions_to_update] = candidate_values[update_mask]
                         best_commodities[positions_to_update] = c_end
 

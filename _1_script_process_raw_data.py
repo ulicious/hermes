@@ -18,6 +18,7 @@ from data_processing.calculate_inner_distances import get_distances_within_netwo
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure, calculate_conversion_costs_and_efficiencies_for_all_combinations
 from data_processing.process_mip_data import calculate_road_distances, calculate_efficiencies
 from data_processing.helpers_geometry import get_destination
+from data_processing.helpers_continent_connections import build_continent_connectivity, save_continent_connectivity
 
 from shapely.geometry import Point, MultiPolygon
 
@@ -212,14 +213,19 @@ if not update_only_conversion_costs_and_efficiency:
     if not (('minimal_distances.csv' in files_in_folder) & (not enforce_update_of_data)):
         get_distances_of_closest_infrastructure(config_file, options, path_processed_data, num_cores)
 
+    logging.info('Calculate continent connectivity')
+    if not (('continent_connections.json' in files_in_folder) & (not enforce_update_of_data)):
+        continent_connectivity = build_continent_connectivity(landmasses, gas_nodes, oil_nodes)
+        save_continent_connectivity(path_processed_data + 'continent_connections.json', continent_connectivity)
+
 else:
     ports = pd.read_csv(path_processed_data + 'ports.csv', index_col=0)
     gas_nodes = pd.read_csv(path_processed_data + 'gas_pipeline_node_locations.csv', index_col=0)
     oil_nodes = pd.read_csv(path_processed_data + 'oil_pipeline_node_locations.csv', index_col=0)
+    landmasses = pd.read_csv(path_processed_data + 'landmasses.csv')
+    landmasses = gpd.GeoDataFrame(geometry=landmasses['geometry'].apply(shapely.wkt.loads))
 
     options = pd.concat([gas_nodes, oil_nodes, ports])
-
-# get all distances between options and then calculate
 
 # calculate conversion costs at each location
 logging.info('Calculate conversion costs and efficiency')
