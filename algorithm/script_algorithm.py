@@ -10,7 +10,7 @@ from shapely.geometry import Point
 
 from algorithm.methods_benchmark import check_if_benchmark_possible
 from algorithm.methods_routing import process_out_tolerance_branches, process_in_tolerance_branches_high_memory,\
-    process_in_tolerance_branches_low_memory, get_complete_infrastructure
+    process_in_tolerance_branches_low_memory, get_complete_infrastructure, create_branches_from_in_tolerance_locations
 from algorithm.methods_algorithm import postprocessing_branches, create_branches_based_on_commodities_at_start,\
     check_for_inaccessibility_and_at_destination, prepare_commodities, assess_for_benchmark
 from algorithm.script_benchmark import calculate_benchmark
@@ -21,6 +21,148 @@ from data_processing.helpers_attach_costs import attach_conversion_costs_and_eff
 
 import logging
 logging.getLogger().setLevel(logging.INFO)
+
+
+def _finalize_routing_branches(branches, old_branches, local_benchmarks, branch_number, data, configuration,
+                               benchmark, benchmarks, benchmark_locations, final_commodities, final_solution,
+                               complete_infrastructure):
+
+    if branches.empty:
+        return branches, local_benchmarks, branch_number, final_solution, benchmark, benchmarks, benchmark_locations
+
+    branches = branches.copy()
+    branches['current_conversion_costs'] = 0
+    branches.sort_values(['current_total_costs'], inplace=True)
+    branches = branches.groupby('comparison_index').first().reset_index()
+    branches.reset_index(drop=True, inplace=True)
+
+    if not local_benchmarks.empty:
+        merged_df = pd.merge(branches, local_benchmarks, on='comparison_index',
+                             suffixes=('_branch', '_benchmark'))
+        filtered_df = merged_df[merged_df['current_total_costs_branch'] > merged_df['current_total_costs_benchmark']]
+        indices_to_remove = filtered_df['comparison_index']
+        branches = branches[~branches['comparison_index'].isin(indices_to_remove)]
+
+    if branches.empty:
+        return branches, local_benchmarks, branch_number, final_solution, benchmark, benchmarks, benchmark_locations
+
+    new_benchmarks = branches[['comparison_index', 'current_total_costs', 'current_commodity', 'current_node']]
+    local_benchmarks = pd.concat([local_benchmarks, new_benchmarks])
+    local_benchmarks.sort_values(['current_total_costs'], inplace=True)
+    local_benchmarks = local_benchmarks.drop_duplicates(subset=['comparison_index'], keep='first')
+
+    branches['branch_index'] = ['S' + str(branch_number + i) for i in range(len(branches.index))]
+    branches.index = branches['branch_index'].tolist()
+    branch_number += len(branches.index)
+
+    branches['conversion_costs'] = 0
+
+    branches['longitude_latitude'] = [(branches.at[i, 'longitude'], branches.at[i, 'latitude'])
+                                      for i in branches.index]
+    branches['current_continent'] = branches['longitude_latitude'].apply(get_continent_from_location, world=data['world'])
+
+    drop_columns = [c for c in ['minimal_total_costs', 'minimal_commodity', 'longitude_latitude'] if c in branches.columns]
+    if drop_columns:
+        branches.drop(drop_columns, axis=1, inplace=True)
+
+    branches = postprocessing_branches(branches, old_branches)
+
+    final_solution, benchmark, benchmarks, benchmark_locations, branches \
+        = assess_for_benchmark(data, configuration, benchmark, benchmarks, benchmark_locations, final_commodities, branches,
+                               final_solution, complete_infrastructure)
+
+    if not branches.empty:
+        branches['benchmark'] = branches['current_commodity'].map(benchmarks)
+        branches = branches[branches['current_total_costs'] <= branches['benchmark']]
+
+    return branches, local_benchmarks, branch_number, final_solution, benchmark, benchmarks, benchmark_locations
+
+
+def _prepare_infrastructure_branches_for_routing(infrastructure_branches, complete_infrastructure, configuration, data,
+                                                 benchmarks):
+
+    if infrastructure_branches.empty:
+        return pd.DataFrame()
+
+    prepared_branches = infrastructure_branches.copy()
+    if 'graph' not in prepared_branches.columns:
+        prepared_branches['graph'] = None
+    for mot in ['Road', 'Shipping', 'Pipeline_Gas', 'Pipeline_Liquid']:
+        column_name = mot + '_applicable'
+        if column_name not in prepared_branches.columns:
+            prepared_branches[column_name] \
+                = prepared_branches['current_commodity_object'].apply(
+                    lambda commodity_object: commodity_object.get_transportation_options_specific_mean_of_transport(mot)
+                )
+
+    pipeline_gas_infrastructure = [i for i in prepared_branches.index
+                                   if 'PG' in prepared_branches.at[i, 'current_node']]
+    prepared_branches.loc[pipeline_gas_infrastructure, 'current_transport_mean'] = 'Pipeline_Gas'
+    nodes = prepared_branches.loc[pipeline_gas_infrastructure, 'current_node'].values.tolist()
+
+    pipeline_liquid_infrastructure = [i for i in prepared_branches.index
+                                      if 'PL' in prepared_branches.at[i, 'current_node']]
+    prepared_branches.loc[pipeline_liquid_infrastructure, 'current_transport_mean'] = 'Pipeline_Liquid'
+    nodes += prepared_branches.loc[pipeline_liquid_infrastructure, 'current_node'].values.tolist()
+
+    combined_index = pipeline_gas_infrastructure + pipeline_liquid_infrastructure
+    if combined_index:
+        prepared_branches.loc[combined_index, 'graph'] \
+            = complete_infrastructure.loc[nodes, 'graph'].values.tolist()
+
+    shipping_infrastructure = [i for i in prepared_branches.index
+                               if 'H' in prepared_branches.at[i, 'current_node']]
+    prepared_branches.loc[shipping_infrastructure, 'current_transport_mean'] = 'Shipping'
+
+    prepared_branches \
+        = prepared_branches[(prepared_branches['current_transport_mean'] == 'Pipeline_Gas')
+                            & (prepared_branches['Pipeline_Gas_applicable']) |
+                            (prepared_branches['current_transport_mean'] == 'Pipeline_Liquid')
+                            & (prepared_branches['Pipeline_Liquid_applicable']) |
+                            (prepared_branches['current_transport_mean'] == 'Shipping')
+                            & (prepared_branches['Shipping_applicable'])]
+
+    if prepared_branches.empty:
+        return pd.DataFrame()
+
+    lowest_cost_branches = []
+    graphs = prepared_branches['graph'].dropna().unique()
+    for g in graphs:
+        if isinstance(g, str) and (('PG' in g) or ('PL' in g)):
+            g_branches = prepared_branches[prepared_branches['graph'] == g]
+            for c in g_branches['current_commodity'].unique():
+                lowest_cost_branches += g_branches[g_branches['current_commodity'] == c]['current_total_costs'].nsmallest(5).index.tolist()
+
+    preselection = prepared_branches.loc[lowest_cost_branches, :].copy() if lowest_cost_branches else pd.DataFrame()
+
+    if not preselection.empty:
+        if configuration['use_low_memory']:
+            preselection = process_in_tolerance_branches_low_memory(data, preselection,
+                                                                    complete_infrastructure,
+                                                                    benchmarks, configuration,
+                                                                    with_assessment=False)
+        else:
+            preselection = process_in_tolerance_branches_high_memory(data, preselection,
+                                                                     complete_infrastructure,
+                                                                     benchmarks, configuration,
+                                                                     with_assessment=False)
+
+        if not preselection.empty:
+            preselection['current_total_costs'] = preselection['current_total_costs'] * 1.00001
+            preselection.index = ['Z' + str(i) for i in range(len(preselection.index))]
+            preselection['comparison_index'] = [preselection.at[ind, 'current_node']
+                                                + '-' + preselection.at[ind, 'current_commodity']
+                                                for ind in preselection.index]
+
+            prepared_branches = pd.concat([prepared_branches, preselection])
+            prepared_branches.sort_values(['current_total_costs'], inplace=True)
+            prepared_branches = prepared_branches.drop_duplicates(subset=['comparison_index'], keep='first')
+
+            index_to_drop = [i for i in prepared_branches.index if 'Z' in str(i)]
+            if index_to_drop:
+                prepared_branches.drop(index_to_drop, inplace=True)
+
+    return prepared_branches
 
 
 def run_algorithm(args):
@@ -118,6 +260,7 @@ def run_algorithm(args):
 
     # create branches based on commodities
     branches, branch_number = create_branches_based_on_commodities_at_start(data)
+    new_approach_branches_created = 0
 
     if not check_for_inaccessibility_and_at_destination(data, configuration, complete_infrastructure, location_index, branches):
         return None
@@ -267,6 +410,7 @@ def run_algorithm(args):
 
         time_routing = time.time()
         old_branches = branches.copy()
+        new_approach_branches_current_iteration = 0
         if not branches.empty:
 
             # add information to branches
@@ -324,101 +468,85 @@ def run_algorithm(args):
                                               | out_infrastructure_branches['Pipeline_Gas_applicable']
                                               | out_infrastructure_branches['Pipeline_Liquid_applicable']]
 
-            # todo: check if code works properly and if not, check if this code is necessary. Else, remove
-            # # Some branches are actually within tolerance to infrastructure and could use the infrastructure at this
-            # # point. However, as it might not be the turn for in infrastructure transportation, we take these branches
-            # out_infrastructure_in_tolerance_branches = pd.DataFrame()
-            # if iteration > 0:
-            #     minimal_distances_for_branches = minimal_distances.loc[out_infrastructure_branches['current_node'].tolist(), 'minimal_distance']
-            #     minimal_distances_for_branches.index = out_infrastructure_branches.index
-            #     out_infrastructure_branches['minimal_distance'] = minimal_distances_for_branches
-            #
-            #     already_in_tolerance_branches = out_infrastructure_branches[out_infrastructure_branches['minimal_distance'] <= configuration['tolerance_distance']].index
-            #     not_in_tolerance_branches = out_infrastructure_branches[out_infrastructure_branches['minimal_distance'] > configuration['tolerance_distance']].index
-            #
-            #     out_infrastructure_branches = out_infrastructure_branches.loc[not_in_tolerance_branches, :]
-            #     out_infrastructure_in_tolerance_branches = out_infrastructure_branches.loc[already_in_tolerance_branches, :]
-
-            # there is a high chance that several branches are at the same infrastructure (pipeline or harbours).
-            # it might be useful to check the branch which is at the infrastructure and has the lowest cost because
-            # the chances that this branch will set the lowest local benchmark are high
+            new_approach_branches_current_iteration = 0
+            in_tolerance_options = pd.DataFrame()
             if not in_infrastructure_branches.empty:
-                pipeline_gas_infrastructure = [i for i in in_infrastructure_branches.index
-                                               if 'PG' in in_infrastructure_branches.at[i, 'current_node']]
-                in_infrastructure_branches.loc[pipeline_gas_infrastructure, 'current_transport_mean'] = 'Pipeline_Gas'
-                nodes = in_infrastructure_branches.loc[pipeline_gas_infrastructure, 'current_node'].values.tolist()
+                pending_in_branches = in_infrastructure_branches.copy()
+                collected_in_tolerance_options = []
 
-                pipeline_liquid_infrastructure = [i for i in in_infrastructure_branches.index
-                                                  if 'PL' in in_infrastructure_branches.at[i, 'current_node']]
-                in_infrastructure_branches.loc[pipeline_liquid_infrastructure, 'current_transport_mean'] = 'Pipeline_Liquid'
-                nodes += in_infrastructure_branches.loc[pipeline_liquid_infrastructure, 'current_node'].values.tolist()
+                while not pending_in_branches.empty:
+                    prepared_infrastructure_branches \
+                        = _prepare_infrastructure_branches_for_routing(pending_in_branches,
+                                                                      complete_infrastructure,
+                                                                      configuration,
+                                                                      data,
+                                                                      benchmarks)
 
-                combined_index = pipeline_gas_infrastructure + pipeline_liquid_infrastructure
-                in_infrastructure_branches.loc[combined_index, 'graph'] \
-                    = complete_infrastructure.loc[nodes, 'graph'].values.tolist()
+                    if prepared_infrastructure_branches.empty:
+                        break
 
-                shipping_infrastructure = [i for i in in_infrastructure_branches.index
-                                           if 'H' in in_infrastructure_branches.at[i, 'current_node']]
-                in_infrastructure_branches.loc[shipping_infrastructure, 'current_transport_mean'] = 'Shipping'
+                    if not configuration['use_low_memory']:
+                        current_in_tolerance_options \
+                            = process_in_tolerance_branches_high_memory(data, prepared_infrastructure_branches,
+                                                                        complete_infrastructure, benchmarks,
+                                                                        configuration)
+                    else:
+                        current_in_tolerance_options \
+                            = process_in_tolerance_branches_low_memory(data, prepared_infrastructure_branches,
+                                                                       complete_infrastructure,
+                                                                       benchmarks, configuration)
 
-                # based on the applicability and the necessary transport mean, we can already remove several branches
-                # --> e.g. if transport mean is Pipeline_Gas but branch is not Pipeline_Gas_Applicable
-                in_infrastructure_branches\
-                    = in_infrastructure_branches[(in_infrastructure_branches['current_transport_mean'] == 'Pipeline_Gas')
-                                             & (in_infrastructure_branches['Pipeline_Gas_applicable']) |
-                                             (in_infrastructure_branches['current_transport_mean'] == 'Pipeline_Liquid')
-                                             & (in_infrastructure_branches['Pipeline_Liquid_applicable']) |
-                                             (in_infrastructure_branches['current_transport_mean'] == 'Shipping')
-                                             & (in_infrastructure_branches['Shipping_applicable'])]
+                    current_in_tolerance_options, local_benchmarks, branch_number, final_solution, benchmark, \
+                        benchmarks, benchmark_locations \
+                        = _finalize_routing_branches(current_in_tolerance_options,
+                                                    prepared_infrastructure_branches,
+                                                    local_benchmarks,
+                                                    branch_number,
+                                                    data,
+                                                    configuration,
+                                                    benchmark,
+                                                    benchmarks,
+                                                    benchmark_locations,
+                                                    final_commodities,
+                                                    final_solution,
+                                                    complete_infrastructure)
 
-                lowest_cost_branches = []
-                graphs = in_infrastructure_branches['graph'].unique()
-                for g in graphs:
-                    if isinstance(g, str):
-                        if ('PG' in g) | ('PL' in g):  # todo: wenn nicht pipeline dann sollte graph None sein
-                            g_branches = in_infrastructure_branches[in_infrastructure_branches['graph'] == g]
-                            for c in g_branches['current_commodity'].unique():
-                                # append the 5 cheapest branches to graph
-                                lowest_cost_branches += g_branches[g_branches['current_commodity'] == c]['current_total_costs'].nsmallest(5).index.tolist()
+                    if current_in_tolerance_options.empty:
+                        break
 
-                preselection = in_infrastructure_branches.loc[lowest_cost_branches, :].copy()
+                    collected_in_tolerance_options.append(current_in_tolerance_options)
 
-                if configuration['use_low_memory']:
-                    preselection = process_in_tolerance_branches_low_memory(data, preselection,
-                                                                            complete_infrastructure,
-                                                                            benchmarks, configuration,
-                                                                            with_assessment=False)
-                else:
-                    preselection = process_in_tolerance_branches_high_memory(data, preselection,
-                                                                             complete_infrastructure,
-                                                                             benchmarks, configuration,
-                                                                             with_assessment=False)
+                    temporary_zero_distance_branches \
+                        = create_branches_from_in_tolerance_locations(data,
+                                                                      current_in_tolerance_options,
+                                                                      complete_infrastructure,
+                                                                      benchmarks,
+                                                                      configuration)
 
-                if not preselection.empty:
-                    # compare results of preselection with other branches. The idea about preselection is that
-                    # the branch which has the lowest cost to a pipeline network will set the price for the whole
-                    # pipeline network as transportation within networks are cheaper than between networks.
-                    # costs to node 1 (to network) + costs node 1 to node 2 (in network) < direct costs to node 2 (to network)
+                    temporary_zero_distance_branches, local_benchmarks, branch_number, final_solution, benchmark, \
+                        benchmarks, benchmark_locations \
+                        = _finalize_routing_branches(temporary_zero_distance_branches,
+                                                    current_in_tolerance_options,
+                                                    local_benchmarks,
+                                                    branch_number,
+                                                    data,
+                                                    configuration,
+                                                    benchmark,
+                                                    benchmarks,
+                                                    benchmark_locations,
+                                                    final_commodities,
+                                                    final_solution,
+                                                    complete_infrastructure)
 
-                    # increase current_total_costs minimally because it might lead to floating point problems
-                    preselection['current_total_costs'] = preselection['current_total_costs'] * 1.00001
+                    if temporary_zero_distance_branches.empty:
+                        break
 
-                    preselection.index = ['Z' + str(i) for i in range(len(preselection.index))]
+                    new_approach_branches_current_iteration += len(temporary_zero_distance_branches.index)
+                    new_approach_branches_created += len(temporary_zero_distance_branches.index)
+                    pending_in_branches = temporary_zero_distance_branches.copy()
 
-                    preselection['comparison_index'] = [preselection.at[ind, 'current_node']
-                                                        + '-' + preselection.at[ind, 'current_commodity']
-                                                        for ind in preselection.index]
-
-                    in_infrastructure_branches = pd.concat([in_infrastructure_branches, preselection])
-
-                    # remove duplicates and keep only cheapest
-                    in_infrastructure_branches.sort_values(['current_total_costs'], inplace=True)
-
-                    in_infrastructure_branches = \
-                        in_infrastructure_branches.drop_duplicates(subset=['comparison_index'], keep='first')
-
-                    index_to_drop = [i for i in in_infrastructure_branches.index if 'Z' in i]
-                    in_infrastructure_branches.drop(index_to_drop, inplace=True)
+                if collected_in_tolerance_options:
+                    in_tolerance_options = pd.concat(collected_in_tolerance_options, ignore_index=False)
 
             if not out_infrastructure_branches.empty:
 
@@ -570,28 +698,32 @@ def run_algorithm(args):
             else:
                 outside_options = pd.DataFrame()
 
-            if not in_infrastructure_branches.empty:
-                if not configuration['use_low_memory']:
-                    in_tolerance_options \
-                        = process_in_tolerance_branches_high_memory(data, in_infrastructure_branches,
-                                                                    complete_infrastructure, benchmarks, configuration)
-                else:
-                    in_tolerance_options \
-                        = process_in_tolerance_branches_low_memory(data, in_infrastructure_branches,
-                                                                   complete_infrastructure,
-                                                                   benchmarks, configuration)
+            processed_outside_options = pd.DataFrame()
+            if not outside_options.empty:
+                processed_outside_options, local_benchmarks, branch_number, final_solution, benchmark, benchmarks, \
+                    benchmark_locations \
+                    = _finalize_routing_branches(outside_options,
+                                                old_branches,
+                                                local_benchmarks,
+                                                branch_number,
+                                                data,
+                                                configuration,
+                                                benchmark,
+                                                benchmarks,
+                                                benchmark_locations,
+                                                final_commodities,
+                                                final_solution,
+                                                complete_infrastructure)
 
-                if not outside_options.empty:
-                    branches = pd.concat([in_tolerance_options, outside_options], ignore_index=True)
-                else:
-                    branches = in_tolerance_options
+            routing_results = [df for df in [in_tolerance_options, processed_outside_options] if not df.empty]
+            if routing_results:
+                branches = pd.concat(routing_results, ignore_index=False)
+                branches.sort_values(['current_total_costs'], inplace=True)
+                branches = branches.drop_duplicates(subset=['comparison_index'], keep='first')
             else:
-                if not outside_options.empty:
-                    branches = outside_options.reset_index()
-                else:
-                    branches = pd.DataFrame()
+                branches = pd.DataFrame()
 
-        if not branches.empty:
+        if False and not branches.empty:
 
             # if 'PG_Node_5176' in branches.index.tolist():
             #     print(branches.loc['PG_Node_5176'])
@@ -610,7 +742,7 @@ def run_algorithm(args):
             branches.reset_index(drop=True, inplace=True)
 
         # process all options
-        if not branches.empty:
+        if False and not branches.empty:
 
             # use local benchmark to remove branches
             # todo genau nachprüfen was hier passiert weil local benchmark und branches unterschiedlich groß sein können
@@ -649,7 +781,8 @@ def run_algorithm(args):
             branches['current_continent'] = branches['longitude_latitude'].apply(get_continent_from_location, world=data['world'])
             # todo: takes quite some time --> could be improved
 
-            branches.drop(['minimal_total_costs', 'minimal_commodity', 'longitude_latitude'], axis=1, inplace=True)
+            branches.drop(['minimal_total_costs', 'minimal_commodity', 'longitude_latitude'],
+                          axis=1, inplace=True, errors='ignore')
 
             branches = postprocessing_branches(branches, old_branches)
 
@@ -703,6 +836,9 @@ def run_algorithm(args):
                   ' (' + str(len_start_branches) + ')' +
                   ' | Time routing: ' + str(round(time_routing, 2)) + ' s' +
                   ' | Solutions after routing: ' + str(len(branches.index)) +
+                  ' | Total branches created: ' + str(branch_number) +
+                  ' | New approach branches: ' + str(new_approach_branches_created) +
+                  ' (' + str(new_approach_branches_current_iteration) + ' this iteration)' +
                   ' | Time iteration: ' + str(round(total_time, 2)) + ' s' +
                   ' | Time since start: ' + str(round(time_since_start / 60, 2)) + ' m')
 
@@ -724,7 +860,9 @@ def run_algorithm(args):
         benchmark = 'Not existing'  # todo adjust
 
     print(str(location_index) + ': finished in ' + str(math.ceil((time.time() - start_time) / 60)) + ' minutes. Benchmark was ' +
-          str(initial_benchmark_costs) + '. Solution is ' + str(benchmark))
+          str(initial_benchmark_costs) + '. Solution is ' + str(benchmark) +
+          '. Total branches created: ' + str(branch_number) +
+          '. New approach branches: ' + str(new_approach_branches_created))
 
     local_vars = list(locals().items())
     for var, obj in local_vars:

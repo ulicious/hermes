@@ -102,6 +102,131 @@ def get_complete_infrastructure(data, config_file):
     return complete_infrastructure
 
 
+def create_branches_from_in_tolerance_locations(data, branches, complete_infrastructure, benchmarks, configuration):
+
+    """
+    Create zero-distance follow-up branches for already assessed infrastructure branches based on
+    data['in_tolerance_locations'].
+
+    @param dict data: dictionary with common data
+    @param pandas.DataFrame branches: dataframe with already generated and assessed branches
+    @param pandas.DataFrame complete_infrastructure: DataFrame with all nodes, ports and destination
+    @param dict benchmarks: current benchmarks
+    @param dict configuration: dictionary with configuration
+
+    @return: pandas.DataFrame with new zero-distance branches
+    """
+
+    if branches.empty:
+        return pd.DataFrame()
+
+    in_tolerance_locations = data['in_tolerance_locations']
+
+    previous_branches = []
+    starting_points = []
+    current_nodes = []
+
+    for branch in branches.itertuples():
+        location_name = branch.current_node
+        next_locations = in_tolerance_locations.get(location_name, [])
+
+        if not next_locations:
+            continue
+
+        visited_infrastructure = set(branch.all_previous_infrastructure)
+
+        for next_location in next_locations:
+            if next_location == location_name:
+                continue
+
+            if next_location not in complete_infrastructure.index:
+                continue
+
+            target_graph = complete_infrastructure.at[next_location, 'graph']
+            if isinstance(target_graph, str):
+                if target_graph in visited_infrastructure:
+                    continue
+            elif next_location in visited_infrastructure:
+                continue
+
+            previous_branches.append(branch.Index)
+            starting_points.append(location_name)
+            current_nodes.append(next_location)
+
+    if not previous_branches:
+        return pd.DataFrame()
+
+    direct_branches = pd.DataFrame({
+        'previous_branch': previous_branches,
+        'current_node': current_nodes,
+        'current_distance': np.zeros(len(previous_branches), dtype=np.float32),
+        'starting_point': starting_points,
+        'current_transport_mean': 'Road',
+        'current_infrastructure': None,
+        'specific_transportation_costs': np.zeros(len(previous_branches), dtype=np.float32),
+        'current_transportation_costs': np.zeros(len(previous_branches), dtype=np.float32),
+        'current_total_costs': branches.loc[previous_branches, 'current_total_costs'].to_numpy(),
+        'total_efficiency': branches.loc[previous_branches, 'total_efficiency'].to_numpy(),
+        'current_commodity': branches.loc[previous_branches, 'current_commodity'].tolist(),
+        'current_commodity_object': branches.loc[previous_branches, 'current_commodity_object'].tolist(),
+    })
+
+    direct_branches['comparison_index'] \
+        = direct_branches['current_node'] + '-' + direct_branches['current_commodity']
+    direct_branches['taken_route'] \
+        = list(zip(direct_branches['starting_point'],
+                   ['Road'] * len(direct_branches.index),
+                   direct_branches['current_distance'],
+                   direct_branches['current_node'],
+                   [1] * len(direct_branches.index)))
+
+    direct_branches['benchmark'] = direct_branches['current_commodity'].map(benchmarks)
+    direct_branches = direct_branches[direct_branches['current_total_costs'] <= direct_branches['benchmark']]
+
+    if direct_branches.empty:
+        return pd.DataFrame()
+
+    nodes_list = direct_branches['current_node'].tolist()
+    direct_branches['latitude'] = complete_infrastructure.loc[nodes_list, 'latitude'].tolist()
+    direct_branches['longitude'] = complete_infrastructure.loc[nodes_list, 'longitude'].tolist()
+
+    direct_branches.sort_values(['current_total_costs'], inplace=True)
+    direct_branches = direct_branches.drop_duplicates(subset=['comparison_index'], keep='first')
+
+    final_destination = data['destination']['location']
+
+    if configuration['destination_type'] == 'location':
+        direct_branches['distance_to_final_destination'] \
+            = calc_distance_list_to_single(direct_branches['latitude'], direct_branches['longitude'],
+                                           final_destination.y, final_destination.x)
+    else:
+        infrastructure_in_destination = data['destination']['infrastructure']
+        distances = calc_distance_list_to_list(direct_branches['latitude'], direct_branches['longitude'],
+                                               infrastructure_in_destination['latitude'],
+                                               infrastructure_in_destination['longitude'])
+        direct_branches['distance_to_final_destination'] = np.asarray(distances).min(axis=0)
+
+    in_destination_tolerance \
+        = direct_branches[direct_branches['distance_to_final_destination']
+                          <= configuration['to_final_destination_tolerance']].index
+    direct_branches.loc[in_destination_tolerance, 'distance_to_final_destination'] = 0
+
+    min_values, min_commodities \
+        = calculate_cheapest_option_to_closest_infrastructure(data, direct_branches, configuration,
+                                                              benchmarks, 'current_total_costs')
+
+    direct_branches['minimal_total_costs'] = min_values
+    direct_branches['minimal_commodity'] = min_commodities
+
+    direct_branches['benchmark'] = direct_branches['minimal_commodity'].map(benchmarks)
+    direct_branches = direct_branches[direct_branches['minimal_total_costs'] <= direct_branches['benchmark']]
+
+    if direct_branches.empty:
+        return pd.DataFrame()
+
+    return direct_branches
+
+
 def process_out_tolerance_branches(complete_infrastructure, branches, configuration, iteration, data, benchmarks,
                                    use_minimal_distance=False, limitation=None):
 

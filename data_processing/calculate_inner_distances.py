@@ -1,6 +1,7 @@
 import itertools
 import math
 import os
+import json
 
 import pandas as pd
 import searoute as sr
@@ -253,7 +254,7 @@ def get_distances_within_networks(network_graph_data, nodes, path_processed_data
             Parallel(n_jobs=num_workers)(delayed(save_distances_per_node)(i) for i in inputs)
 
 
-def get_distances_of_closest_infrastructure(options, path_processed_data, number_workers):
+def get_distances_of_closest_infrastructure(config, options, path_processed_data, number_workers):
 
     """
     Finds the distances to the closest infrastructure nodes for each option.
@@ -287,19 +288,32 @@ def get_distances_of_closest_infrastructure(options, path_processed_data, number
 
         distances_df = pd.Series(direct_distances, index=other_options.index)
 
-        return distances_df.min(), distances_df.idxmin()
+        in_tolerance_distances_df = distances_df[distances_df <= config['tolerance_distance']].index.tolist()
+
+        return distances_df.min(), distances_df.idxmin(), in_tolerance_distances_df
 
     inputs = tqdm(options.index)
     results = Parallel(n_jobs=number_workers)(delayed(calculate_distance)(i) for i in inputs)
 
     min_distances = []
     min_nodes = []
+    in_tolerance_nodes = []
 
     for r in results:
         min_distances.append(r[0])
         min_nodes.append(r[1])
+        in_tolerance_nodes.append(r[2])
 
     distances = pd.DataFrame({'minimal_distance': min_distances,
                               'closest_node': min_nodes},
                              index=options.index)
     distances.to_csv(path_processed_data + 'minimal_distances.csv')
+
+    # JSON dict: {location_name: [location_1, location_2, ...]}
+    within_tolerance_dict = {
+        str(idx): [str(node) for node in nodes]
+        for idx, nodes in zip(options.index, in_tolerance_nodes)
+    }
+
+    with open(path_processed_data + 'within_tolerance.json', 'w', encoding='utf-8') as f:
+        json.dump(within_tolerance_dict, f, indent=2)

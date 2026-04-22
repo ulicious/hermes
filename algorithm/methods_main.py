@@ -1,6 +1,7 @@
 import math
 import yaml
 import shapely
+import json
 
 import pandas as pd
 import numpy as np
@@ -87,6 +88,10 @@ def prepare_data_and_configuration_dictionary(config_file):
     ports = pd.read_csv(path_processed_data + 'ports.csv', index_col=0)
     coastlines = pd.read_csv(path_processed_data + 'landmasses.csv', index_col=0)
     minimal_distances = pd.read_csv(path_processed_data + 'minimal_distances.csv', index_col=0)
+
+    with open(path_processed_data + 'within_tolerance.json', 'r', encoding='utf-8') as f:
+        in_tolerance_dict = json.load(f)
+
     conversion_costs_and_efficiencies = pd.read_csv(path_processed_data + 'conversion_costs_and_efficiency.csv', index_col=0)
 
     yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
@@ -197,6 +202,7 @@ def prepare_data_and_configuration_dictionary(config_file):
     # The data dictionary holds common information/data/parameter which apply for all following branches.
     data = {'Shipping': {'ports': ports},
             'minimal_distances': minimal_distances,
+            'in_tolerance_locations': in_tolerance_dict,
             'transport_means': transport_means,
             'commodities': {'final_commodities': final_commodities,
                             'commodity_objects': {},

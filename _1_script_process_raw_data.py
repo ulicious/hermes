@@ -210,7 +210,7 @@ if not update_only_conversion_costs_and_efficiency:
     logging.info('Calculate closest infrastructure')
     options = pd.concat([gas_nodes, oil_nodes, ports])
     if not (('minimal_distances.csv' in files_in_folder) & (not enforce_update_of_data)):
-        get_distances_of_closest_infrastructure(options, path_processed_data, num_cores)
+        get_distances_of_closest_infrastructure(config_file, options, path_processed_data, num_cores)
 
 else:
     ports = pd.read_csv(path_processed_data + 'ports.csv', index_col=0)
@@ -218,6 +218,8 @@ else:
     oil_nodes = pd.read_csv(path_processed_data + 'oil_pipeline_node_locations.csv', index_col=0)
 
     options = pd.concat([gas_nodes, oil_nodes, ports])
+
+# get all distances between options and then calculate
 
 # calculate conversion costs at each location
 logging.info('Calculate conversion costs and efficiency')
