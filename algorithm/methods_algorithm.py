@@ -8,7 +8,7 @@ import numpy as np
 from shapely.geometry import Point
 from shapely.ops import nearest_points
 
-from algorithm.methods_geographic import calc_distance_single_to_single, calc_distance_list_to_single
+from algorithm.methods_geographic import calc_distance_single_to_single, calc_distance_list_to_single, get_continent_from_location
 from algorithm.object_commodity import create_commodity_objects
 
 
@@ -758,5 +758,47 @@ def assess_for_benchmark(data, configuration, benchmark, benchmarks, benchmark_l
     branches = branches[branches['current_total_costs'] <= branches['benchmark']]
 
     return final_solution, benchmark, benchmarks, benchmark_locations, branches
+
+def compare_to_local_benchmark(data, branch_number, branches, local_benchmarks):
+    # use local benchmark to remove branches
+    # todo genau nachprüfen was hier passiert weil local benchmark und branches unterschiedlich groß sein können
+    #  und deshalb die frage ist was mit merge passiert
+    merged_df = pd.merge(branches, local_benchmarks, on='comparison_index',
+                         suffixes=('_branch', '_benchmark'))
+
+    # Filter rows where the costs in branches are not higher than local_benchmarks
+    filtered_df \
+        = merged_df[merged_df['current_total_costs_branch'] > merged_df['current_total_costs_benchmark']]
+
+    # Get the indices of the rows to be removed from df1
+    indices_to_remove = filtered_df['comparison_index']
+
+    # Remove rows from df1
+    branches = branches[~branches['comparison_index'].isin(indices_to_remove)]
+
+    # add remaining branches to local benchmark
+    new_benchmarks = branches[['comparison_index', 'current_total_costs', 'current_commodity', 'current_node']]
+
+    # remove duplicates and keep only cheapest
+    local_benchmarks = pd.concat([local_benchmarks, new_benchmarks])
+    local_benchmarks.sort_values(['current_total_costs'], inplace=True)
+    local_benchmarks = local_benchmarks.drop_duplicates(subset=['comparison_index'], keep='first')
+
+    # adjust index
+    branches['branch_index'] = ['S' + str(branch_number + i) for i in range(len(branches.index))]
+    branches.index = branches['branch_index'].tolist()
+    branch_number += len(branches.index)
+
+    # update information in dataframe
+    branches['conversion_costs'] = 0
+
+    branches['longitude_latitude'] = [(branches.at[i, 'longitude'], branches.at[i, 'latitude'])
+                                      for i in branches.index]
+    branches['current_continent'] = branches['longitude_latitude'].apply(get_continent_from_location, world=data['world'])
+    # todo: takes quite some time --> could be improved
+
+    branches.drop(['minimal_total_costs', 'minimal_commodity', 'longitude_latitude'], axis=1, inplace=True)
+
+    return branches, branch_number, local_benchmarks
 
 

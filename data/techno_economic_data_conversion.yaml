@@ -39,7 +39,7 @@ Hydrogen_Gas:
    potential_conversions: ['Hydrogen_Liquid', 'Ammonia', 'Methanol', 'Methane_Gas', 'DBT', 'MCH', 'FTF']
    Hydrogen_Liquid:
       specific_investment: 1497967  # € / kWH2
-      fixed_maintenance: 0.08
+      fixed_maintenance: 0.08 # % of yealry investment per a / 100
       lifetime: 20
       electricity_demand: 0.2034
       co2_demand: 0
@@ -51,7 +51,7 @@ Hydrogen_Gas:
       efficiency_external_heat: 0.9835
    Ammonia:
       specific_investment: 513871  # € / kW NH3
-      fixed_maintenance: 0.03
+      fixed_maintenance: 0.03 # % of yealry investment per a / 100
       lifetime: 20
       electricity_demand: 0.0514
       co2_demand: 0

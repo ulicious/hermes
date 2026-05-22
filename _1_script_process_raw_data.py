@@ -111,10 +111,16 @@ if not update_only_conversion_costs_and_efficiency:
 
     # process coastlines
     logging.info('Processing coastlines and landmasses')
-    if not (('landmasses.csv' in files_in_folder) & ('coastlines.csv' in files_in_folder) & (not enforce_update_of_data)):
-        landmasses, coastlines = get_landmass_polygons_and_coastlines(use_minimal_example=use_minimal_example)
+    if not (('landmasses.csv' in files_in_folder) & ('coastlines.csv' in files_in_folder) & ('ptx_water_available_polygon.gpkg' in files_in_folder) & (not enforce_update_of_data)):
+        landmasses, coastlines, water_availability = get_landmass_polygons_and_coastlines(path_raw_data, use_minimal_example=use_minimal_example)
         landmasses.to_csv(path_processed_data + 'landmasses.csv')
         coastlines.to_csv(path_processed_data + 'coastlines.csv')
+
+        water_availability.to_file(
+            path_processed_data + "water_availability.gpkg",
+            layer="ptx_water_available",
+            driver="GPKG"
+        )
 
     else:
         coastlines = pd.read_csv(path_processed_data + 'coastlines.csv')
@@ -122,6 +128,11 @@ if not update_only_conversion_costs_and_efficiency:
 
         landmasses = pd.read_csv(path_processed_data + 'landmasses.csv')
         landmasses = gpd.GeoDataFrame(geometry=landmasses['geometry'].apply(shapely.wkt.loads))
+
+        water_availability = gpd.read_file(
+            path_processed_data + "ptx_water_available_polygon.gpkg",
+            layer="ptx_water_available"
+        )
 
     # process raw network data and place all connected lines into network folders
     logging.info('Processing raw pipeline data')

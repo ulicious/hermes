@@ -444,30 +444,32 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 else:
                     flattened_list.append(element)
             return flattened_list
-        all_previous_infrastructure = list(set(flatten_list(branches['all_previous_infrastructure'].tolist())))
 
-        # for each already visited node or port, get all branches which have been there already
-        branches_to_remove_based_on_visited_infrastructure = {}
-        for branch_index in all_previous_infrastructure:
-            if branch_index is not None:
+        if not use_minimal_distance:
+            all_previous_infrastructure = list(set(flatten_list(branches['all_previous_infrastructure'].tolist())))
 
-                # check which branch has the visited infrastructure in all_previous_infrastructure
-                affected_branches = branches[branches['all_previous_infrastructure'].apply(lambda x: branch_index in x)].index
+            # for each already visited node or port, get all branches which have been there already
+            branches_to_remove_based_on_visited_infrastructure = {}
+            for branch_index in all_previous_infrastructure:
+                if branch_index is not None:
 
-                if 'PG' in branch_index:
-                    branches_to_remove_based_on_visited_infrastructure[branch_index] \
-                        = {'nodes': data['Pipeline_Gas'][branch_index]['NodeLocations'].index.tolist(),
-                           'branches': affected_branches}
+                    # check which branch has the visited infrastructure in all_previous_infrastructure
+                    affected_branches = branches[branches['all_previous_infrastructure'].apply(lambda x: branch_index in x)].index
 
-                elif 'PL' in branch_index:
-                    branches_to_remove_based_on_visited_infrastructure[branch_index] \
-                        = {'nodes': data['Pipeline_Liquid'][branch_index]['NodeLocations'].index.tolist(),
-                           'branches': affected_branches}
+                    if 'PG' in branch_index:
+                        branches_to_remove_based_on_visited_infrastructure[branch_index] \
+                            = {'nodes': data['Pipeline_Gas'][branch_index]['NodeLocations'].index.tolist(),
+                               'branches': affected_branches}
 
-                else:
-                    branches_to_remove_based_on_visited_infrastructure[branch_index] \
-                        = {'nodes': [branch_index],
-                           'branches': affected_branches}
+                    elif 'PL' in branch_index:
+                        branches_to_remove_based_on_visited_infrastructure[branch_index] \
+                            = {'nodes': data['Pipeline_Liquid'][branch_index]['NodeLocations'].index.tolist(),
+                               'branches': affected_branches}
+
+                    else:
+                        branches_to_remove_based_on_visited_infrastructure[branch_index] \
+                            = {'nodes': [branch_index],
+                               'branches': affected_branches}
 
         # iterate over all commodities. Necessary to look at each commodity to check if applicable for road or
         # new pipeline and to get costs of transport
@@ -510,8 +512,9 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 road_mask = (distance_values <= max_length_road_array[None, :]) & road_applicable[None, :]
 
                 # remove options based on previous used infrastructure
-                _remove_visited_options_from_mask(road_mask, row_index, column_index,
-                                                  branches_to_remove_based_on_visited_infrastructure)
+                if not use_minimal_distance:
+                    _remove_visited_options_from_mask(road_mask, row_index, column_index,
+                                                      branches_to_remove_based_on_visited_infrastructure)
 
                 road_distances = _build_options_from_mask(distance_values, row_index, column_index, road_mask)
 
@@ -535,8 +538,9 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 new_mask = (distance_values <= max_length_new_segment / no_road_multiplier) & new_branch_mask[None, :]
 
                 # remove used infrastructure
-                _remove_visited_options_from_mask(new_mask, row_index, column_index,
-                                                  branches_to_remove_based_on_visited_infrastructure)
+                if not use_minimal_distance:
+                    _remove_visited_options_from_mask(new_mask, row_index, column_index,
+                                                      branches_to_remove_based_on_visited_infrastructure)
 
                 new_distances = _build_options_from_mask(distance_values, row_index, column_index, new_mask)
                 if not new_distances.empty:
@@ -620,7 +624,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         new_infrastructure_options['current_commodity'] = branches.loc[branch_list, 'current_commodity'].tolist()
         new_infrastructure_options['current_commodity_object'] = branches.loc[branch_list, 'current_commodity_object'].tolist()
         new_infrastructure_options['previous_total_costs'] = branches.loc[branch_list, 'current_total_costs'].tolist()
-        new_infrastructure_options['current_continent'] = branches.loc[branch_list, 'current_commodity'].tolist()
+        new_infrastructure_options['current_continent'] = branches.loc[branch_list, 'current_continent'].tolist()
 
         new_infrastructure_options['specific_transportation_costs'] = new_transportation_costs.loc[branch_list].tolist()
 

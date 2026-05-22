@@ -36,7 +36,7 @@ if __name__ == '__main__':
 
     location_data.drop(processed_locations, inplace=True)
 
-    # location_data = location_data.loc[[7386], :]
+    # location_data = location_data.loc[[5869], :]
 
     print_information = True
 

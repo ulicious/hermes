@@ -16,10 +16,10 @@ create_mip_data: False
 # parameters and assumptions for start - destination - combination file
 destination_type: 'country'  # defines the destination type: 'location' (single point) or 'country' (polygon / multipolygon)
 destination_location: [9.993682, 53.551086]  # [Longitude, Latitude]  # todo: check with single location
-destination_polygon: {"United States of America": []}  # dictionary with country: list of states. If complete country, leave list empty
+destination_polygon: {"Germany": []}  # dictionary with country: list of states. If complete country, leave list empty
 use_biggest_landmass: True  # True/False; some countries have several not connected shapes (USA: mainland, Alaska, hawaii, ...) --> choose biggest
-destination_country: "United States of America"  # todo: get country and continent from destination
-destination_continent: 'North America'
+destination_country: "Germany"  # todo: get country and continent from destination
+destination_continent: 'Europe'
 origin_continents: []  # [] if all continents are possible, else define continents like ['Europe']  # todo: auch bei Voronoi Zellen implementieren
 low_temp_heat_available_at_start: False
 mid_temp_heat_available_at_start: False
@@ -54,10 +54,10 @@ max_length_new_segment: 100000  # [m] max distance for new pipelines
 max_length_road: math.inf  # [m] max distance for road transportation
 no_road_multiplier: 1.5  # distance * no_road_multiplier
 build_new_infrastructure: True
-H2_ready_infrastructure: True
-low_temp_heat_available_at_destination: True
-mid_temp_heat_available_at_destination: True
-high_temp_heat_available_at_destination: True
-consider_commodity_prices: False
+H2_ready_infrastructure: False
+low_temp_heat_available_at_destination: False
+mid_temp_heat_available_at_destination: False
+high_temp_heat_available_at_destination: False
+consider_commodity_prices: True
 print_runtime_information: True
 print_benchmark_info: False

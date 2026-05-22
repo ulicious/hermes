@@ -214,7 +214,7 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
             for idx in shipping_distances.index[bad_mask]:
                 print(f"Index: {idx}, Column: {col}, Value: {repr(shipping_distances.at[idx, col])}")
 
-        print(bla)
+        raise
 
     if shipping_options.empty:
         return None

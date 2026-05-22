@@ -12,7 +12,7 @@ from algorithm.methods_benchmark import check_if_benchmark_possible
 from algorithm.methods_routing import process_out_tolerance_branches, process_in_tolerance_branches_high_memory,\
     process_in_tolerance_branches_low_memory, get_complete_infrastructure, create_branches_from_in_tolerance_locations
 from algorithm.methods_algorithm import postprocessing_branches, create_branches_based_on_commodities_at_start,\
-    check_for_inaccessibility_and_at_destination, prepare_commodities, assess_for_benchmark
+    check_for_inaccessibility_and_at_destination, prepare_commodities, assess_for_benchmark, compare_to_local_benchmark
 from algorithm.script_benchmark import calculate_benchmark
 from algorithm.methods_geographic import get_continent_from_location
 from algorithm.methods_conversion import apply_conversion
@@ -296,7 +296,7 @@ def run_algorithm(args):
     while not branches.empty:  # while loop runs as long as branches to process exist
 
         len_start_branches = len(branches.index)
-        total_time = time.time()
+        time_iteration = time.time()
 
         benchmark_old = benchmark
 
@@ -326,44 +326,68 @@ def run_algorithm(args):
             if potential_final_solution is not None:
                 final_solution = potential_final_solution
 
+            # branches, branch_number, local_benchmarks = compare_to_local_benchmark(data, branch_number, branches,
+            #                                                                        local_benchmarks)
+
             # Conversion is applied twice as we always go the route of conversion
             # from commodity X to H2 and from H2 to commodity Y
             # todo (for further increase of speed): comparison to local benchmarks
 
-            if not branches.empty:
-                branches, potential_final_solution, branch_number, benchmark, benchmarks, benchmark_locations, local_benchmarks = \
-                    apply_conversion(branches, configuration, data, branch_number,
-                                     benchmark, benchmarks, benchmark_locations, local_benchmarks, iteration,
-                                     complete_infrastructure)
+            # if not branches.empty:
+            #     branches, potential_final_solution, branch_number, benchmark, benchmarks, benchmark_locations, local_benchmarks = \
+            #         apply_conversion(branches, configuration, data, branch_number,
+            #                          benchmark, benchmarks, benchmark_locations, local_benchmarks, iteration,
+            #                          complete_infrastructure)
 
-            if potential_final_solution is not None:
-                final_solution = potential_final_solution
+            # if potential_final_solution is not None:
+            #     final_solution = potential_final_solution
 
             # merge all processed and not processed branches
             branches = pd.concat([branches, no_conversion_possible_branches])
 
         # check if benchmark solution is still in branches
-        if configuration['print_benchmark_info']:
-            print('Conversion')
-            commodities = benchmark_info[0]
-            locations = benchmark_info[2]
+        if not branches.empty:
+            if configuration['print_benchmark_info']:
+                print('Conversion')
+                commodities = benchmark_info[0]
+                locations = benchmark_info[2]
 
-            combinations = [(c, l) for c in commodities for l in locations]
-            benchmark_branches = []
+                combinations = [(c, l) for c in commodities for l in locations]
+                benchmark_branches = []
 
-            for com in set(combinations):
-                branch = branches[(branches['current_commodity'] == com[0]) & (branches['current_node'] == com[1])]
+                for com in set(combinations):
+                    branch = branches[(branches['current_commodity'] == com[0]) & (branches['current_node'] == com[1])]
 
-                if not branch.empty:
-                    benchmark_branches.append(branch)
+                    if not branch.empty:
+                        benchmark_branches.append(branch)
 
-            if benchmark_branches:
-                benchmark_branches = pd.concat(benchmark_branches, ignore_index=True)
-                print(cumulative_benchmark_costs)
-                print(benchmark_branches[['current_commodity', 'current_node', 'current_total_costs']])
+                if benchmark_branches:
+                    benchmark_branches = pd.concat(benchmark_branches)
+                    print(cumulative_benchmark_costs)
+                    print(benchmark_branches[['current_commodity', 'current_node', 'current_total_costs']])
+                else:
+                    print('benchmark is not part of solution anymore')
 
         time_conversion = time.time() - time_conversion
+        time_since_start = time.time() - start_time
+        time_iteration_start = time.time() - time_iteration
         len_conversion_branches = len(branches.index)
+
+        if print_information:
+
+            if final_solution is not None:
+                found = ' (found)'
+            else:
+                found = ' (not found)'
+
+            print(str(location_index) + '-' + str(iteration) + ': Benchmark: ' + str(round(benchmark, 2)) + found +
+                  ' | Time conversion: ' + str(round(time_conversion, 2)) + ' s' +
+                  ' | Solutions after conversion: ' + str(len_conversion_branches) +
+                  ' (' + str(len_start_branches) + ')' +
+                  ' | Time iteration: ' + str(round(time_iteration_start, 2)) + ' s' +
+                  ' | Time since start: ' + str(round(time_since_start / 60, 2)) + ' m')
+
+            len_routing_solutions_before = len(branches.index)
 
         """ Handle memory issues """
         # n = 0
@@ -796,32 +820,35 @@ def run_algorithm(args):
                 branches['benchmark'] = branches['current_commodity'].map(benchmarks)
                 branches = branches[branches['current_total_costs'] <= branches['benchmark']]
 
-        if configuration['print_benchmark_info']:
-            print('Routing')
-            commodities = benchmark_info[0]
-            locations = benchmark_info[2]
+        if not branches.empty:
+            if configuration['print_benchmark_info']:
+                print('Routing')
+                commodities = benchmark_info[0]
+                locations = benchmark_info[2]
 
-            combinations = [(c, l) for c in commodities for l in locations]
-            benchmark_branches = []
+                combinations = [(c, l) for c in commodities for l in locations]
+                benchmark_branches = []
 
-            for com in set(combinations):
-                branch = branches[(branches['current_commodity'] == com[0]) & (branches['current_node'] == com[1])]
+                for com in set(combinations):
+                    branch = branches[(branches['current_commodity'] == com[0]) & (branches['current_node'] == com[1])]
 
-                if not branch.empty:
-                    benchmark_branches.append(branch)
+                    if not branch.empty:
+                        benchmark_branches.append(branch)
 
-            if benchmark_branches:
-                benchmark_branches = pd.concat(benchmark_branches, ignore_index=True)
-                print(cumulative_benchmark_costs)
-                print(benchmark_branches[['current_commodity', 'current_node', 'current_total_costs']])
+                if benchmark_branches:
+                    benchmark_branches = pd.concat(benchmark_branches)
+                    print(cumulative_benchmark_costs)
+                    print(benchmark_branches[['current_commodity', 'current_node', 'current_total_costs']])
+                else:
+                    print('benchmark is not part of solution anymore')
 
-        time_routing = time.time() - time_routing
-        total_time = time.time() - total_time
+        time_routing_start = time.time() - time_routing
+        time_iteration_start = time.time() - time_iteration
         time_since_start = time.time() - start_time
 
         # save branches
-        # branches.to_csv(
-        #     configuration['path_results'] + 'assessment_current_run/' + str(location_index) + '_' + str(iteration) + '.csv')
+        branches.to_csv(
+            configuration['path_results'] + 'assessment_current_run/' + str(location_index) + '_' + str(iteration) + '.csv')
 
         if print_information:
 
@@ -834,12 +861,12 @@ def run_algorithm(args):
                   ' | Time conversion: ' + str(round(time_conversion, 2)) + ' s' +
                   ' | Solutions after conversion: ' + str(len_conversion_branches) +
                   ' (' + str(len_start_branches) + ')' +
-                  ' | Time routing: ' + str(round(time_routing, 2)) + ' s' +
+                  ' | Time routing: ' + str(round(time_routing_start, 2)) + ' s' +
                   ' | Solutions after routing: ' + str(len(branches.index)) +
                   ' | Total branches created: ' + str(branch_number) +
                   ' | New approach branches: ' + str(new_approach_branches_created) +
                   ' (' + str(new_approach_branches_current_iteration) + ' this iteration)' +
-                  ' | Time iteration: ' + str(round(total_time, 2)) + ' s' +
+                  ' | Time iteration: ' + str(round(time_iteration_start, 2)) + ' s' +
                   ' | Time since start: ' + str(round(time_since_start / 60, 2)) + ' m')
 
             len_routing_solutions_before = len(branches.index)
