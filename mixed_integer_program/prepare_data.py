@@ -14,6 +14,14 @@ import cartopy.io.shapereader as shpreader
 from itertools import combinations
 
 
+def create_bidirectional_distances(distances):
+    """Add the reverse arc for undirected infrastructure distance pairs."""
+    reverse_distances = distances.copy()
+    reverse_distances[['pointA', 'pointB']] = distances[['pointB', 'pointA']].to_numpy()
+
+    return pd.concat([distances, reverse_distances], ignore_index=True)
+
+
 def prepare_data(start_location, end_node=None, create_results=False):
 
     path_config = os.getcwd()
@@ -75,10 +83,6 @@ def prepare_data(start_location, end_node=None, create_results=False):
                 continue
 
             for node_2 in all_nodes:
-
-                if ('PG' in node_1) | ('PG' in node_2) | ('PL' in node_1) | ('PL' in node_2):
-                    continue
-
                 if 'origin' in node_2:
                     continue
 
@@ -112,6 +116,11 @@ def prepare_data(start_location, end_node=None, create_results=False):
 
     new_pipeline_distances = pd.read_csv(path_overall_data + 'processed_data/mip_data/new_pipeline_distances.csv', index_col=0)
     start_new_pipeline_distances = pd.read_csv(path_overall_data + 'processed_data/mip_data/' + str(start_location) + '_start_new_pipeline_distances.csv', index_col=0)
+
+    # These data sets are generated from combinations of locations, so each row
+    # represents a physical connection that can be used in either direction.
+    road_distances = create_bidirectional_distances(road_distances)
+    new_pipeline_distances = create_bidirectional_distances(new_pipeline_distances)
 
     port_distances = pd.read_csv(path_overall_data + 'processed_data/mip_data/port_distances.csv', index_col=0)
     port_distances = port_distances.stack().reset_index()
@@ -157,13 +166,15 @@ def prepare_data(start_location, end_node=None, create_results=False):
 
     oil_pipelines_distances = pd.concat(oil_pipelines_distances, ignore_index=True)
 
-    options = {'Road': [road_distances, start_road_distances],
-               'New_Pipeline': [new_pipeline_distances, start_new_pipeline_distances],
-               'Shipping': [port_distances],
-               'Pipeline_Gas': [gas_pipelines_distances],
-               'Pipeline_Oil': [oil_pipelines_distances]}
-
-    # todo: sind hier beide Richtungen in den Distanzen drin --> checken
+    available_options = {'Road': [road_distances, start_road_distances],
+                         'New_Pipeline_Gas': [new_pipeline_distances, start_new_pipeline_distances],
+                         'New_Pipeline_Liquid': [new_pipeline_distances, start_new_pipeline_distances],
+                         'Shipping': [port_distances],
+                         'Pipeline_Gas': [gas_pipelines_distances],
+                         'Pipeline_Liquid': [oil_pipelines_distances]}
+    options = {transport_mean: available_options[transport_mean]
+               for transport_mean in transport_means
+               if transport_mean in available_options}
 
     max_costs = 0
     if True:
