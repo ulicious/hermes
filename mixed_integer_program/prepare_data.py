@@ -88,8 +88,8 @@ def prepare_data(start_location, end_node=None, create_results=False):
                 for com_1 in all_commodities:
                     for com_2 in all_commodities:
                         if com_2 in techno_economic_data_conversion[com_1]['potential_conversions']:
-                            conversion_costs = conversion_costs_and_efficiencies.loc[node_1, com_1 + '_' + com_2 + '_conversion_costs']
-                            conversion_efficiency = 1 - conversion_costs_and_efficiencies.loc[node_1, com_1 + '_' + com_2 + '_conversion_efficiency']
+                            conversion_costs = conversion_costs_and_efficiencies.loc[node_1, com_1 + '-' + com_2 + '-conversion_costs']
+                            conversion_efficiency = 1 - conversion_costs_and_efficiencies.loc[node_1, com_1 + '-' + com_2 + '-conversion_efficiency']
 
                             edges[node_1 + '_' + com_1 + '-' + node_2 + '_' + com_2] = \
                                 ('conversion', node_1 + '_' + com_1, node_2 + '_' + com_2, conversion_costs,
@@ -116,9 +116,6 @@ def prepare_data(start_location, end_node=None, create_results=False):
     port_distances = pd.read_csv(path_overall_data + 'processed_data/mip_data/port_distances.csv', index_col=0)
     port_distances = port_distances.stack().reset_index()
     port_distances.columns = ['pointA', 'pointB', 'distance']
-    port_durations = pd.read_csv(path_overall_data + 'processed_data/mip_data/ports_durations.csv', index_col=0)
-    port_durations = port_durations.stack().reset_index()
-    port_durations.columns = ['pointA', 'pointB', 'duration']
 
     if False:  # removes road transport to pipelines --> remove in final version
 
@@ -184,9 +181,6 @@ def prepare_data(start_location, end_node=None, create_results=False):
                 if start == end:
                     continue
 
-                if transport_mean == 'Shipping':
-                    duration = port_durations.loc[i, 'duration']
-
                 for com in all_commodities:
 
                     if ('start' == start) & (com not in start_commodities):
@@ -201,12 +195,18 @@ def prepare_data(start_location, end_node=None, create_results=False):
                             max_costs = transport_costs
 
                         if transport_mean == 'Shipping':
-                            boil_off = duration / 24 * techno_economic_data_transport[com]['Boil_Off']
 
-                            self_consumption = 0
+                            if techno_economic_data_transport[com]['Boil_Off'] > 0:
+                                duration = distance / 1000 / techno_economic_data_transport[com]['Shipping_Speed']
+                                boil_off = duration / 24 * techno_economic_data_transport[com]['Boil_Off']
+                            else:
+                                boil_off = 0
+
                             if techno_economic_data_transport[com]['Uses_Commodity_as_Shipping_Fuel']:
                                 self_consumption = distance / 1000 * techno_economic_data_transport[com]['Self_Consumption']
                                 transport_costs = 0
+                            else:
+                                self_consumption = 0
 
                             transport_losses = max(boil_off, self_consumption)
 

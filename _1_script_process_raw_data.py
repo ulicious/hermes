@@ -92,7 +92,7 @@ files_in_folder = os.listdir(path_processed_data)
 enforce_update_of_data = config_file['enforce_update_of_data']
 create_mip_data = config_file['create_mip_data']
 
-destination = get_destination(config_file)
+destination = get_destination(config_file)  # todo: possible to load the natural earth data instead of using old packagaes
 
 # todo: separate more clearly: Creation of basic infrastructure data and case sensitive data
 
@@ -111,7 +111,7 @@ if not update_only_conversion_costs_and_efficiency:
 
     # process coastlines
     logging.info('Processing coastlines and landmasses')
-    if not (('landmasses.csv' in files_in_folder) & ('coastlines.csv' in files_in_folder) & ('ptx_water_available_polygon.gpkg' in files_in_folder) & (not enforce_update_of_data)):
+    if not (('landmasses.csv' in files_in_folder) & ('coastlines.csv' in files_in_folder) & ('water_availability.gpkg' in files_in_folder) & (not enforce_update_of_data)):
         landmasses, coastlines, water_availability = get_landmass_polygons_and_coastlines(path_raw_data, use_minimal_example=use_minimal_example)
         landmasses.to_csv(path_processed_data + 'landmasses.csv')
         coastlines.to_csv(path_processed_data + 'coastlines.csv')
@@ -130,7 +130,7 @@ if not update_only_conversion_costs_and_efficiency:
         landmasses = gpd.GeoDataFrame(geometry=landmasses['geometry'].apply(shapely.wkt.loads))
 
         water_availability = gpd.read_file(
-            path_processed_data + "ptx_water_available_polygon.gpkg",
+            path_processed_data + "water_availability.gpkg",
             layer="ptx_water_available"
         )
 
@@ -289,13 +289,15 @@ if create_mip_data:  # todo: distances to the destination + conversion cost at d
 
     # transport efficiencies: depend on distance and duration
     ports_distances = pd.read_csv(path_processed_data + 'mip_data/' + 'port_distances.csv', index_col=0)
-    ports_durations = pd.read_csv(path_processed_data + 'mip_data/' + 'ports_durations.csv', index_col=0)
+    # ports_durations = pd.read_csv(path_processed_data + 'mip_data/' + 'ports_durations.csv', index_col=0)
 
     for commodity in config_file['available_commodity']:
         if 'Shipping' in techno_economic_data_transport[commodity]['potential_transportation']:
             uses_commodity_as_shipping_fuel = techno_economic_data_transport[commodity]['Uses_Commodity_as_Shipping_Fuel']
             boil_off = techno_economic_data_transport[commodity]['Boil_Off']
             self_consumption = techno_economic_data_transport[commodity]['Self_Consumption']
+
+            ports_durations = ports_distances / techno_economic_data_transport[commodity]['Shipping_Speed'] / 1000
 
             efficiency = calculate_efficiencies(ports_distances, ports_durations, boil_off, uses_commodity_as_shipping_fuel, self_consumption)
             efficiency.to_csv(path_processed_data + 'mip_data/' + commodity + '_efficiencies.csv', encoding='utf-8', index=True)

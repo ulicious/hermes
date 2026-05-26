@@ -104,6 +104,11 @@ def randlatlon1(min_latitude, max_latitude, min_longitude, max_longitude):
 
 def get_destination(config_file):
     # create shapely object of destination
+
+    import logging
+    logging.getLogger("fiona").setLevel(logging.ERROR)
+    logging.getLogger("fiona._env").setLevel(logging.ERROR)
+
     if config_file['destination_type'] == 'location':
         destination_location = Point(config_file['destination_location'])
     else:
