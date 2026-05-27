@@ -1,6 +1,8 @@
 import itertools
 import yaml
 import os
+import logging
+import time
 
 import pandas as pd
 import gurobipy as gp
@@ -20,18 +22,22 @@ from data_processing.process_mip_data import (
 from data_processing.helpers_geometry import get_destination
 
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
+
 # noinspection PyTypeChecker
 class OptimizationGurobiModel:
 
     def attach_edges(self):
+        logger.info('Create Gurobi variables for %s nodes and %s edges',
+                    len(self.all_nodes_adjusted), len(self.edges))
 
         self.costs = self.model.addVars(self.all_nodes_adjusted, name=self.all_nodes_adjusted)
 
         self.capacity_at_node = self.model.addVars(self.all_nodes_adjusted, vtype='I', name=self.all_nodes_adjusted)
 
         self.edge_binaries = self.model.addVars([*self.edges], vtype='B', name=[*self.edges.keys()])
-
-        import time
 
         now = time.time()
         # for row in self.conversion_edges.itertuples():
@@ -105,7 +111,7 @@ class OptimizationGurobiModel:
             #                          <= (1 - self.edge_binaries[edge]) * (self.production_costs[commodity] + costs) * 1.1 / (1 - efficiency),
             #                          name=name)
 
-        print(time.time() - now)
+        logger.info('Attached edge cost propagation constraints in %.2f s', time.time() - now)
 
         # for node in self.all_nodes_adjusted:
         #     name = 'max_costs_' + node
@@ -122,7 +128,7 @@ class OptimizationGurobiModel:
                              == 1,
                              name='out_of_origin')
 
-        print(time.time() - now)
+        logger.info('Attached origin flow constraint in %.2f s', time.time() - now)
 
         # ensure that the final node is reached by setting that transport to destination or conversion at destination is correct
         # self.model.addConstr(sum(self.edge_binaries[key]
@@ -148,7 +154,7 @@ class OptimizationGurobiModel:
                                  if ((self.edges[key][0] == 'transport') & (self.edges[key][1] == 'end'))) == 0,
                              name='no_out_destination')
 
-        print(time.time() - now)
+        logger.info('Attached destination flow constraints in %.2f s', time.time() - now)
 
         from collections import defaultdict
 
@@ -213,7 +219,7 @@ class OptimizationGurobiModel:
         #                                  if self.edges[key][2] == node),
         #                              name='balance')
 
-        print(time.time() - now)
+        logger.info('Finished graph balance constraints in %.2f s', time.time() - now)
 
         self.model.setObjective(sum(self.costs[node] for node in self.target_nodes), gp.GRB.MINIMIZE)
 
@@ -276,17 +282,17 @@ class OptimizationGurobiModel:
         self.model.setObjective(sum(self.costs[edge] for edge in self.edges), gp.GRB.MINIMIZE)
 
     def optimize(self):
-
+        logger.info('Build optimization constraints')
         self.attach_edges()
 
-        print('Constraints attached')
+        logger.info('All constraints attached')
 
         # Optional MIP start: selected route edges start at 1; every other
         # generated edge starts at 0. Gurobi receives these values below when
         # `self.model.optimize(...)` is called.
         if self.solution_route is not None:
-            print('Applying warm-start route:')
-            print(self.solution_route)
+            logger.info('Apply warm-start route with %s active edges', len(self.solution_route))
+            logger.debug('Warm-start route: %s', self.solution_route)
             self.model.update()
 
             for edge in self.edge_binaries.keys():
@@ -316,6 +322,7 @@ class OptimizationGurobiModel:
         self.model.Params.PoolSearchMode = 0  # don’t look for additional solutions
 
         self.model.Params.Threads = 1
+        logger.info('Solver parameters set; start optimization')
 
         binaries = [v for v in self.model.getVars() if v.VType == gp.GRB.BINARY]
         self.model._binaries = binaries
@@ -411,10 +418,12 @@ class OptimizationGurobiModel:
         self.instance = self
 
         self.status = self.model.status
+        logger.info('Optimization finished with Gurobi status %s', self.status)
 
         if self.status == 2:
 
             self.objective_function_value = self.model.objVal
+            logger.info('Optimal objective value: %.6f', self.objective_function_value)
 
     def __init__(self, static_graph, start_location_data, start_road_distances,
                  start_new_pipeline_distances, end_location, config_file,
@@ -437,6 +446,7 @@ class OptimizationGurobiModel:
         self.BigM = 200
         self.eps = 0.001
 
+        logger.info('Add origin- and destination-specific graph data')
         self.all_nodes_adjusted, self.target_nodes, self.edges, self.production_costs, self.transport_means, \
             self.solution_route, self.cost_route, self.max_costs, self.conversion_edges, self.transport_edges = \
             prepare_data(start_location_data, static_graph, start_road_distances,
@@ -444,7 +454,9 @@ class OptimizationGurobiModel:
                          self.techno_economic_data_transport,
                          create_results=create_results, warm_start_route=warm_start_route)
 
-        print('The problem consists of ' + str(len(self.edges)) + ' edges and ' + str(len(self.all_nodes_adjusted)) + ' nodes.')
+        logger.info('Optimization graph contains %s nodes and %s edges (%s conversion, %s transport)',
+                    len(self.all_nodes_adjusted), len(self.edges),
+                    len(self.conversion_edges), len(self.transport_edges))
 
         six = []
         seven = []
@@ -460,6 +472,7 @@ class OptimizationGurobiModel:
 
         pd.DataFrame(subset_six).transpose().to_csv(path_overall_data + 'conversion_edges.csv')
         pd.DataFrame(subset_seven).transpose().to_csv(path_overall_data + 'transport_edges.csv')
+        logger.info('Exported current conversion and transport edge tables')
 
         if False:
             start_distance = calculate_road_distances(config_file['tolerance_distance'], options, start_point, start_name)
@@ -468,6 +481,7 @@ class OptimizationGurobiModel:
                                                                techno_economic_data_transport, all_commodities, start_commodities)
 
         self.model = gp.Model()
+        logger.info('Created Gurobi model instance')
         self.optimize()
 
         if False:
@@ -652,6 +666,7 @@ minimal_warm_start_route = [
 ]
 
 if USE_MINIMAL_INFRASTRUCTURE:
+    logger.info('Run optimization with hardcoded minimal infrastructure')
     # Fixed origin costs keep the minimal example independent from prepared
     # location files; graph expansion still uses the normal technology YAMLs.
     minimal_start_location = {
@@ -671,13 +686,17 @@ if USE_MINIMAL_INFRASTRUCTURE:
         techno_economic_data_transport=techno_economic_data_transport,
         warm_start_route=minimal_warm_start_route)
 else:
+    logger.info('Load origin-independent graph for real-data optimization runs')
     static_graph = load_static_mip_graph(path_processed_data + 'mip_data/')
     options = pd.read_csv(path_processed_data + 'mip_data/options.csv', index_col=0)
     start_locations = pd.read_csv(path_overall_data + '/' + 'start_destination_combinations.csv', index_col=0)
     destination = get_destination(config_file)
     end_location = prepare_destination_mip_data(options, destination)['destination_infrastructure'].tolist()
+    logger.info('Loaded %s global nodes, %s global edges and %s destination infrastructure nodes',
+                len(static_graph['nodes']), len(static_graph['edges']), len(end_location))
 
     for i in start_locations.index:
+        logger.info('Prepare optimization run for origin %s', i)
         start_point = Point([start_locations.loc[i, 'longitude'], start_locations.loc[i, 'latitude']])
         start_name = 'start'
         start_road_distances = pd.read_csv(
