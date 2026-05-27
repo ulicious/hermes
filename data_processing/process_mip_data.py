@@ -276,13 +276,17 @@ def build_static_mip_graph(infrastructure_data, config_file, techno_economic_dat
 
 
 def save_static_mip_graph(static_graph, path_mip_data):
-    """Persist global graph components for reuse by each origin/destination run."""
-    logger.info('Save static MIP graph artifacts to %s', path_mip_data)
-    pd.DataFrame(index=static_graph['nodes']).to_csv(path_mip_data + 'static_nodes.csv')
-    static_graph['conversion_edges'].to_csv(path_mip_data + 'static_conversion_edges.csv')
-    static_graph['transport_edges'].to_csv(path_mip_data + 'static_transport_edges.csv')
-    pd.to_pickle(static_graph, path_mip_data + 'static_graph.pkl')
-    logger.info('Saved binary static graph cache for fast optimization startup')
+    """
+    Persist all origin-independent nodes and edges in one binary graph file.
+
+    CSV was useful while inspecting the initial graph expansion, but loading
+    it requires parsing large text tables and rebuilding every edge tuple.
+    The pickle contains the exact in-memory representation needed by the MIP.
+    """
+    graph_file = path_mip_data + 'static_graph.pkl'
+    logger.info('Save static MIP graph with %s nodes and %s edges to %s',
+                len(static_graph['nodes']), len(static_graph['edges']), graph_file)
+    pd.to_pickle(static_graph, graph_file)
 
 
 def load_static_mip_graph_legacy(path_mip_data):
@@ -319,28 +323,19 @@ def load_static_mip_graph(path_mip_data):
     """
     Load static MIP graph data efficiently.
 
-    Newly processed input contains a binary cache of the complete static
-    graph. For existing CSV-only preprocessing output, reconstruction uses
-    column arrays instead of `iterrows()` and writes that cache for later
-    optimization runs.
+    Newly processed input contains one binary file holding all global nodes
+    and edges. For existing CSV-only preprocessing output, reconstruction
+    uses column arrays instead of `iterrows()` and migrates it to that file.
     """
-    cache_file = path_mip_data + 'static_graph.pkl'
-    csv_files = [
-        path_mip_data + 'static_nodes.csv',
-        path_mip_data + 'static_conversion_edges.csv',
-        path_mip_data + 'static_transport_edges.csv',
-    ]
-    cache_is_current = os.path.exists(cache_file) and all(
-        not os.path.exists(file) or os.path.getmtime(cache_file) >= os.path.getmtime(file)
-        for file in csv_files)
-    if cache_is_current:
-        logger.info('Load static MIP graph from binary cache %s', cache_file)
-        static_graph = pd.read_pickle(cache_file)
+    graph_file = path_mip_data + 'static_graph.pkl'
+    if os.path.exists(graph_file):
+        logger.info('Load static MIP graph from %s', graph_file)
+        static_graph = pd.read_pickle(graph_file)
         logger.info('Loaded %s nodes and %s static edges from cache',
                     len(static_graph['nodes']), len(static_graph['edges']))
         return static_graph
 
-    logger.info('Binary static graph cache absent or outdated; load CSV artifacts and create cache')
+    logger.info('Binary graph file absent; migrate existing CSV artifacts to %s', graph_file)
     nodes = pd.read_csv(path_mip_data + 'static_nodes.csv', index_col=0).index.tolist()
     conversion_data = pd.read_csv(path_mip_data + 'static_conversion_edges.csv', index_col=0)
     transport_data = pd.read_csv(path_mip_data + 'static_transport_edges.csv', index_col=0)
@@ -362,8 +357,8 @@ def load_static_mip_graph(path_mip_data):
         'transport_edges': transport_data,
         'max_costs': transport_data['costs'].max() if not transport_data.empty else 0,
     }
-    pd.to_pickle(static_graph, cache_file)
-    logger.info('Reconstructed %s conversion and %s transport edges; saved binary cache',
+    pd.to_pickle(static_graph, graph_file)
+    logger.info('Reconstructed %s conversion and %s transport edges; saved binary graph file',
                 len(conversion_edges), len(transport_edges))
     return static_graph
 
@@ -446,3 +441,96 @@ def prepare_destination_mip_data(options, destination, path_processed_data=None)
         result.to_csv(path_processed_data + 'mip_data/destination_infrastructure.csv',
                       encoding='utf-8', index=True)
     return result
+
+
+def prepare_minimal_mip_case(config_file, techno_economic_data_conversion,
+                             techno_economic_data_transport, path_processed_data):
+    """
+    Persist the hardcoded MIP test case before optimization.
+
+    The case file contains the already expanded static graph plus only the
+    start/end-specific inputs that `prepare_data` must add at run time.
+    """
+    logger.info('Prepare hardcoded minimal MIP case')
+    minimal_nodes = ['s_0', 's_1', 's_2', 's_3',
+                     'PG_0', 'PG_1', 'PG_2',
+                     'PL_0', 'PL_1']
+    minimal_infrastructure = {
+        'options': pd.DataFrame(index=minimal_nodes),
+        'road_distances': pd.DataFrame([
+            ('PG_1', 's_0', 1000),
+            ('PG_2', 's_0', 30_000_000),
+            ('PG_2', 's_2', 25_000_000),
+            ('s_3', 'PL_0', 30_000_000),
+        ], columns=['pointA', 'pointB', 'distance']),
+        'start_road_distances': pd.DataFrame([
+            ('start', 's_0', 100_000_000_000),
+            ('start', 's_2', 50_000_000),
+        ], columns=['pointA', 'pointB', 'distance']),
+        'new_pipeline_distances': pd.DataFrame([
+            ('s_1', 'PL_0', 1000),
+            ('s_1', 'PL_1', 1_000_000_000),
+            ('s_3', 'PL_0', 1_000_000_000),
+        ], columns=['pointA', 'pointB', 'distance']),
+        'start_new_pipeline_distances': pd.DataFrame([
+            ('start', 'PG_0', 1000),
+            ('start', 'PG_1', 100_000_000_000),
+            ('start', 'PL_0', 100_000_000_000),
+            ('start', 'PG_2', 50_000_000),
+        ], columns=['pointA', 'pointB', 'distance']),
+        'port_distances': pd.DataFrame([
+            [0, 1000, 2_000_000, 3_000_000],
+            [1000, 0, 2_000_000, 2_500_000],
+            [2_000_000, 2_000_000, 0, 1_500_000],
+            [3_000_000, 2_500_000, 1_500_000, 0],
+        ], index=['s_0', 's_1', 's_2', 's_3'],
+           columns=['s_0', 's_1', 's_2', 's_3']),
+        'gas_pipeline_matrices': [pd.DataFrame([
+            [0, 1000, 40_000_000],
+            [1000, 0, 20_000_000],
+            [40_000_000, 20_000_000, 0],
+        ], index=['PG_0', 'PG_1', 'PG_2'],
+           columns=['PG_0', 'PG_1', 'PG_2'])],
+        'oil_pipeline_matrices': [pd.DataFrame([
+            [0, 1000],
+            [1000, 0],
+        ], index=['PL_0', 'PL_1'], columns=['PL_0', 'PL_1'])],
+    }
+    static_graph = build_static_mip_graph(
+        minimal_infrastructure, config_file, techno_economic_data_conversion,
+        techno_economic_data_transport)
+    minimal_path = path_processed_data + 'mip_data/minimal/'
+    os.makedirs(minimal_path, exist_ok=True)
+    save_static_mip_graph(static_graph, minimal_path)
+
+    minimal_case = {
+        'static_graph': static_graph,
+        'start_location_data': pd.Series({
+            'Hydrogen_Gas': 0, 'Ammonia': 10, 'Methane_Gas': 5,
+            'Methane_Liquid': 10, 'Methanol': 12, 'FTF': 15,
+        }),
+        'start_road_distances': minimal_infrastructure['start_road_distances'],
+        'start_new_pipeline_distances': minimal_infrastructure['start_new_pipeline_distances'],
+        'end_location': ['PL_0'],
+        'warm_start_route': [
+            'start+Hydrogen_Gas-PG_0+Hydrogen_Gas-New_Pipeline_Gas',
+            'PG_0+Hydrogen_Gas-PG_1+Hydrogen_Gas-Pipeline_Gas',
+            'PG_1+Hydrogen_Gas-s_0+Hydrogen_Gas-Road',
+            's_0+Hydrogen_Gas-s_0+FTF',
+            's_0+FTF-s_1+FTF-Shipping',
+            's_1+FTF-PL_0+FTF-New_Pipeline_Liquid',
+            'PL_0+FTF-end',
+        ],
+    }
+    case_file = path_processed_data + 'mip_data/minimal_case.pkl'
+    pd.to_pickle(minimal_case, case_file)
+    logger.info('Saved minimal MIP case with %s static nodes and %s static edges to %s',
+                len(minimal_case['static_graph']['nodes']),
+                len(minimal_case['static_graph']['edges']), case_file)
+
+
+def load_minimal_mip_case(path_processed_data):
+    """Load the preprocessed hardcoded MIP test case."""
+    case_file = path_processed_data + 'mip_data/minimal_case.pkl'
+    logger.info('Load preprocessed minimal MIP case from %s', case_file)
+    return pd.read_pickle(case_file)
