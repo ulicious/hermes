@@ -788,7 +788,9 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
 
             shipping_distances = pd.read_csv(configuration['path_processed_data']
                                              + 'inner_infrastructure_distances/port_distances.csv',
-                                             index_col=0)
+                                             index_col=0, header=0, dtype=str, sep=None, engine='python',
+                                             keep_default_na=False)
+            shipping_distances = np.ceil(shipping_distances.apply(pd.to_numeric, errors='raise'))
 
             # create one big target_infrastructure dataframe for all shipping options
             for s in options_m.index:
@@ -1034,7 +1036,9 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
 
             shipping_distances = pd.read_csv(configuration['path_processed_data']
                                              + 'inner_infrastructure_distances/port_distances.csv',
-                                             index_col=0)
+                                             index_col=0, header=0, dtype=str, sep=None, engine='python',
+                                             keep_default_na=False)
+            shipping_distances = np.ceil(shipping_distances.apply(pd.to_numeric, errors='raise'))
 
             # Only use ports which are on the same continent as the final destination
             if destination_continent in ['Europe', 'Asia', 'Africa']:

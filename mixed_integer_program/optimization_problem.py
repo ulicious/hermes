@@ -10,7 +10,7 @@ from gurobipy import GRB
 
 from shapely.geometry import Point
 
-from prepare_data import prepare_data, create_edges_from_distance_only, prepare_dummy_data, create_graph
+from prepare_data import prepare_data, create_edges_from_distance_only, create_graph
 from data_processing.process_mip_data import calculate_road_distances
 
 
@@ -350,30 +350,6 @@ class OptimizationGurobiModel:
 
             df = pd.DataFrame(subset_seven).transpose()
             df.to_excel(path_overall_data + 'transport_full_edges.xlsx')
-
-        else:
-            self.all_nodes_adjusted, self.target_nodes, self.edges, self.production_costs, self.transport_means = \
-                prepare_dummy_data()
-
-            self.solution_route = None
-
-            six = []
-            seven = []
-
-            for e in self.edges:
-                if len(self.edges[e]) == 6:
-                    six.append(e)
-                else:
-                    seven.append(e)
-
-            subset_six = {k: self.edges[k] for k in six}
-            subset_seven = {k: self.edges[k] for k in seven}
-
-            df = pd.DataFrame(subset_six).transpose()
-            df.to_excel(path_overall_data + 'conversion_dummy_edges.xlsx')
-
-            df = pd.DataFrame(subset_seven).transpose()
-            df.to_excel(path_overall_data + 'transport_dummy_edges.xlsx')
 
         if False:
             start_distance = calculate_road_distances(config_file['tolerance_distance'], options, start_point, start_name)
