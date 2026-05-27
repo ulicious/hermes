@@ -248,10 +248,12 @@ conversion_costs_and_efficiency.to_csv(path_processed_data + 'conversion_costs_a
 # Build reusable MIP graph input once. Only the origin links and selected
 # destination sink remain run-specific and are added later in `prepare_data`.
 if create_mip_data:
+    logging.info('Prepare origin-independent MIP infrastructure graph')
     prepare_global_mip_data(
         options, ports, config_file, techno_economic_data_conversion,
         techno_economic_data_transport, conversion_costs_and_efficiency,
         path_processed_data)
+    logging.info('Finished origin-independent MIP infrastructure graph')
 
 
 if time.time() - time_start < 60:

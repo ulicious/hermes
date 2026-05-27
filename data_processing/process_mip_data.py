@@ -1,4 +1,5 @@
 import os
+import logging
 
 from algorithm.methods_geographic import calc_distance_list_to_list_no_matrix
 
@@ -10,6 +11,10 @@ import geopandas as gpd
 import cartopy.io.shapereader as shpreader
 
 from itertools import combinations
+from tqdm import tqdm
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_bidirectional_distances(distances):
@@ -134,10 +139,11 @@ def calculate_uniform_conversion_data(nodes, commodities, techno_economic_data_c
     return conversion_data
 
 
-def _stack_distance_matrices(distance_matrices):
+def _stack_distance_matrices(distance_matrices, show_progress=False, description='Stack pipeline matrices'):
     """Convert square distance matrices into directed physical segments."""
     distances = []
-    for distance_matrix in distance_matrices:
+    iterator = tqdm(distance_matrices, desc=description, disable=not show_progress)
+    for distance_matrix in iterator:
         directed = distance_matrix.stack().reset_index()
         directed.columns = ['pointA', 'pointB', 'distance']
         directed = directed[directed['pointA'] != directed['pointB']]
@@ -148,15 +154,21 @@ def _stack_distance_matrices(distance_matrices):
     return pd.concat(distances, ignore_index=True)
 
 
-def create_transport_edges(distance_options, commodities, techno_economic_data_transport):
+def create_transport_edges(distance_options, commodities, techno_economic_data_transport,
+                           show_progress=False):
     """Attach permitted commodities and techno-economic values to directed segments."""
     edges = {}
     max_costs = 0
 
-    for transport_mean, distances in distance_options.items():
+    mean_iterator = tqdm(distance_options.items(), desc='Create transport means',
+                         disable=not show_progress)
+    for transport_mean, distances in mean_iterator:
         if distances.empty:
             continue
-        for row in distances.itertuples():
+        row_iterator = tqdm(distances.itertuples(), total=len(distances),
+                            desc='Create ' + transport_mean + ' edges',
+                            disable=not show_progress, leave=False)
+        for row in row_iterator:
             if row.pointA == row.pointB:
                 continue
             for commodity in commodities:
@@ -190,7 +202,8 @@ def create_transport_edges(distance_options, commodities, techno_economic_data_t
 
 
 def build_static_mip_graph(infrastructure_data, config_file, techno_economic_data_conversion,
-                           techno_economic_data_transport, conversion_costs_and_efficiencies=None):
+                           techno_economic_data_transport, conversion_costs_and_efficiencies=None,
+                           show_progress=False):
     """
     Build all MIP nodes and edges that do not depend on a chosen origin or destination.
 
@@ -199,14 +212,18 @@ def build_static_mip_graph(infrastructure_data, config_file, techno_economic_dat
     """
     all_nodes = infrastructure_data['options'].index.tolist()
     all_commodities = config_file['available_commodity']
+    logger.info('Build static MIP graph for %s infrastructure nodes and %s commodities',
+                len(all_nodes), len(all_commodities))
 
     if conversion_costs_and_efficiencies is None:
+        logger.info('Calculate uniform conversion inputs for in-memory infrastructure')
         conversion_costs_and_efficiencies = calculate_uniform_conversion_data(
             all_nodes, all_commodities, techno_economic_data_conversion)
 
     edges = {}
     conversion_edges = {}
-    for node in all_nodes:
+    node_iterator = tqdm(all_nodes, desc='Create conversion edges', disable=not show_progress)
+    for node in node_iterator:
         if not conversion_costs_and_efficiencies.loc[node, 'conversion_possible']:
             continue
         for commodity_start in all_commodities:
@@ -222,6 +239,7 @@ def build_static_mip_graph(infrastructure_data, config_file, techno_economic_dat
                                          conversion_costs, conversion_loss, commodity_end)
                 edges[key] = ('conversion',) + conversion_edges[key]
 
+    logger.info('Prepare directed infrastructure distances for static transport edges')
     port_distances = infrastructure_data['port_distances'].stack().reset_index()
     port_distances.columns = ['pointA', 'pointB', 'distance']
     distance_options = {
@@ -229,14 +247,18 @@ def build_static_mip_graph(infrastructure_data, config_file, techno_economic_dat
         'New_Pipeline_Gas': create_bidirectional_distances(infrastructure_data['new_pipeline_distances']),
         'New_Pipeline_Liquid': create_bidirectional_distances(infrastructure_data['new_pipeline_distances']),
         'Shipping': port_distances,
-        'Pipeline_Gas': _stack_distance_matrices(infrastructure_data['gas_pipeline_matrices']),
-        'Pipeline_Liquid': _stack_distance_matrices(infrastructure_data['oil_pipeline_matrices']),
+        'Pipeline_Gas': _stack_distance_matrices(
+            infrastructure_data['gas_pipeline_matrices'], show_progress, 'Stack gas pipeline matrices'),
+        'Pipeline_Liquid': _stack_distance_matrices(
+            infrastructure_data['oil_pipeline_matrices'], show_progress, 'Stack liquid pipeline matrices'),
     }
     distance_options = {mean: distance_options[mean] for mean in config_file['available_transport_means']
                         if mean in distance_options}
     transport_edges, max_costs = create_transport_edges(
-        distance_options, all_commodities, techno_economic_data_transport)
+        distance_options, all_commodities, techno_economic_data_transport, show_progress=show_progress)
     edges.update(transport_edges)
+    logger.info('Static MIP graph contains %s conversion edges and %s transport edges',
+                len(conversion_edges), len(transport_edges))
 
     columns_conversion = ['start', 'end', 'costs', 'efficiency', 'end_commodity']
     columns_transport = ['start', 'end', 'costs', 'efficiency', 'commodity', 'mean']
@@ -255,6 +277,7 @@ def build_static_mip_graph(infrastructure_data, config_file, techno_economic_dat
 
 def save_static_mip_graph(static_graph, path_mip_data):
     """Persist global graph components for reuse by each origin/destination run."""
+    logger.info('Save static MIP graph artifacts to %s', path_mip_data)
     pd.DataFrame(index=static_graph['nodes']).to_csv(path_mip_data + 'static_nodes.csv')
     static_graph['conversion_edges'].to_csv(path_mip_data + 'static_conversion_edges.csv')
     static_graph['transport_edges'].to_csv(path_mip_data + 'static_transport_edges.csv')
@@ -262,6 +285,7 @@ def save_static_mip_graph(static_graph, path_mip_data):
 
 def load_static_mip_graph(path_mip_data):
     """Load previously processed global nodes and reconstruct edge tuples."""
+    logger.info('Load static MIP graph artifacts from %s', path_mip_data)
     nodes = pd.read_csv(path_mip_data + 'static_nodes.csv', index_col=0).index.tolist()
     conversion_data = pd.read_csv(path_mip_data + 'static_conversion_edges.csv', index_col=0)
     transport_data = pd.read_csv(path_mip_data + 'static_transport_edges.csv', index_col=0)
@@ -290,13 +314,16 @@ def prepare_global_mip_data(options, ports, config_file, techno_economic_data_co
                             path_processed_data):
     """Calculate and persist all MIP input that is common to every optimization location."""
     path_mip_data = path_processed_data + 'mip_data/'
+    logger.info('Prepare global MIP data independent from origin and destination')
     mip_options = options.copy()
     mip_options.loc[ports.index, 'longitude'] = mip_options.loc[ports.index, 'longitude_on_coastline']
     mip_options.loc[ports.index, 'latitude'] = mip_options.loc[ports.index, 'latitude_on_coastline']
     columns_to_drop = ['name', 'country', 'continent', 'longitude_on_coastline', 'latitude_on_coastline']
     mip_options.drop(columns=[column for column in columns_to_drop if column in mip_options.columns], inplace=True)
     mip_options.to_csv(path_mip_data + 'options.csv', encoding='utf-8', index=True)
+    logger.info('Saved %s global infrastructure options', len(mip_options))
 
+    logger.info('Calculate global road and new-pipeline distances')
     road_distances = calculate_road_distances(config_file['tolerance_distance'], mip_options)
     new_pipeline_distances = road_distances[
         road_distances['distance'] <= config_file['max_length_new_segment']].copy()
@@ -305,9 +332,13 @@ def prepare_global_mip_data(options, ports, config_file, techno_economic_data_co
     new_pipeline_distances['distance'] *= config_file['no_road_multiplier']
     road_distances.to_csv(path_mip_data + 'road_distances.csv', encoding='utf-8', index=True)
     new_pipeline_distances.to_csv(path_mip_data + 'new_pipeline_distances.csv', encoding='utf-8', index=True)
+    logger.info('Saved %s road and %s new-pipeline physical connections',
+                len(road_distances), len(new_pipeline_distances))
 
+    logger.info('Calculate shipping efficiencies per commodity')
     port_distances = pd.read_csv(path_mip_data + 'port_distances.csv', index_col=0)
-    for commodity in config_file['available_commodity']:
+    commodity_iterator = tqdm(config_file['available_commodity'], desc='Shipping efficiencies')
+    for commodity in commodity_iterator:
         technology = techno_economic_data_transport[commodity]
         if 'Shipping' not in technology['potential_transportation']:
             continue
@@ -317,12 +348,15 @@ def prepare_global_mip_data(options, ports, config_file, techno_economic_data_co
             technology['Uses_Commodity_as_Shipping_Fuel'], technology['Self_Consumption'])
         efficiency.to_csv(path_mip_data + commodity + '_efficiencies.csv', encoding='utf-8', index=True)
 
+    logger.info('Save global conversion costs and read existing pipeline distance matrices')
     conversion_costs_and_efficiencies.to_csv(
         path_mip_data + 'conversion_costs_and_efficiency.csv', encoding='utf-8', index=True)
+    gas_files = [file for file in os.listdir(path_mip_data) if file.startswith('PG')]
+    oil_files = [file for file in os.listdir(path_mip_data) if file.startswith('PL')]
     gas_matrices = [pd.read_csv(path_mip_data + file, index_col=0)
-                    for file in os.listdir(path_mip_data) if file.startswith('PG')]
+                    for file in tqdm(gas_files, desc='Load gas pipeline matrices')]
     oil_matrices = [pd.read_csv(path_mip_data + file, index_col=0)
-                    for file in os.listdir(path_mip_data) if file.startswith('PL')]
+                    for file in tqdm(oil_files, desc='Load liquid pipeline matrices')]
     infrastructure_data = {
         'options': mip_options,
         'road_distances': road_distances,
@@ -333,8 +367,9 @@ def prepare_global_mip_data(options, ports, config_file, techno_economic_data_co
     }
     static_graph = build_static_mip_graph(
         infrastructure_data, config_file, techno_economic_data_conversion,
-        techno_economic_data_transport, conversion_costs_and_efficiencies)
+        techno_economic_data_transport, conversion_costs_and_efficiencies, show_progress=True)
     save_static_mip_graph(static_graph, path_mip_data)
+    logger.info('Finished global MIP preparation')
     return mip_options
 
 
