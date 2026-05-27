@@ -281,11 +281,13 @@ def save_static_mip_graph(static_graph, path_mip_data):
     pd.DataFrame(index=static_graph['nodes']).to_csv(path_mip_data + 'static_nodes.csv')
     static_graph['conversion_edges'].to_csv(path_mip_data + 'static_conversion_edges.csv')
     static_graph['transport_edges'].to_csv(path_mip_data + 'static_transport_edges.csv')
+    pd.to_pickle(static_graph, path_mip_data + 'static_graph.pkl')
+    logger.info('Saved binary static graph cache for fast optimization startup')
 
 
-def load_static_mip_graph(path_mip_data):
-    """Load previously processed global nodes and reconstruct edge tuples."""
-    logger.info('Load static MIP graph artifacts from %s', path_mip_data)
+def load_static_mip_graph_legacy(path_mip_data):
+    """Legacy CSV loader retained for comparison and backwards-compatible diagnostics."""
+    logger.info('Load static MIP graph artifacts from CSV using legacy reconstruction')
     nodes = pd.read_csv(path_mip_data + 'static_nodes.csv', index_col=0).index.tolist()
     conversion_data = pd.read_csv(path_mip_data + 'static_conversion_edges.csv', index_col=0)
     transport_data = pd.read_csv(path_mip_data + 'static_transport_edges.csv', index_col=0)
@@ -311,6 +313,59 @@ def load_static_mip_graph(path_mip_data):
         'transport_edges': transport_data,
         'max_costs': max_costs,
     }
+
+
+def load_static_mip_graph(path_mip_data):
+    """
+    Load static MIP graph data efficiently.
+
+    Newly processed input contains a binary cache of the complete static
+    graph. For existing CSV-only preprocessing output, reconstruction uses
+    column arrays instead of `iterrows()` and writes that cache for later
+    optimization runs.
+    """
+    cache_file = path_mip_data + 'static_graph.pkl'
+    csv_files = [
+        path_mip_data + 'static_nodes.csv',
+        path_mip_data + 'static_conversion_edges.csv',
+        path_mip_data + 'static_transport_edges.csv',
+    ]
+    cache_is_current = os.path.exists(cache_file) and all(
+        not os.path.exists(file) or os.path.getmtime(cache_file) >= os.path.getmtime(file)
+        for file in csv_files)
+    if cache_is_current:
+        logger.info('Load static MIP graph from binary cache %s', cache_file)
+        static_graph = pd.read_pickle(cache_file)
+        logger.info('Loaded %s nodes and %s static edges from cache',
+                    len(static_graph['nodes']), len(static_graph['edges']))
+        return static_graph
+
+    logger.info('Binary static graph cache absent or outdated; load CSV artifacts and create cache')
+    nodes = pd.read_csv(path_mip_data + 'static_nodes.csv', index_col=0).index.tolist()
+    conversion_data = pd.read_csv(path_mip_data + 'static_conversion_edges.csv', index_col=0)
+    transport_data = pd.read_csv(path_mip_data + 'static_transport_edges.csv', index_col=0)
+
+    conversion_values = zip(
+        conversion_data['start'], conversion_data['end'], conversion_data['costs'],
+        conversion_data['efficiency'], conversion_data['end_commodity'])
+    conversion_edges = dict(zip(conversion_data.index, conversion_values))
+    transport_values = zip(
+        transport_data['start'], transport_data['end'], transport_data['costs'],
+        transport_data['efficiency'], transport_data['commodity'], transport_data['mean'])
+    transport_edges = dict(zip(transport_data.index, transport_values))
+    edges = {key: ('conversion',) + value for key, value in conversion_edges.items()}
+    edges.update({key: ('transport',) + value for key, value in transport_edges.items()})
+    static_graph = {
+        'nodes': nodes,
+        'edges': edges,
+        'conversion_edges': conversion_data,
+        'transport_edges': transport_data,
+        'max_costs': transport_data['costs'].max() if not transport_data.empty else 0,
+    }
+    pd.to_pickle(static_graph, cache_file)
+    logger.info('Reconstructed %s conversion and %s transport edges; saved binary cache',
+                len(conversion_edges), len(transport_edges))
+    return static_graph
 
 
 def prepare_global_mip_data(options, ports, config_file, techno_economic_data_conversion,
