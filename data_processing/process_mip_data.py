@@ -291,12 +291,16 @@ def load_static_mip_graph(path_mip_data):
     transport_data = pd.read_csv(path_mip_data + 'static_transport_edges.csv', index_col=0)
     conversion_edges = {
         key: (row.start, row.end, row.costs, row.efficiency, row.end_commodity)
-        for key, row in conversion_data.iterrows()
+        for key, row in tqdm(conversion_data.iterrows(), total=len(conversion_data),
+                             desc='Load static conversion edges')
     }
     transport_edges = {
         key: (row.start, row.end, row.costs, row.efficiency, row.commodity, row['mean'])
-        for key, row in transport_data.iterrows()
+        for key, row in tqdm(transport_data.iterrows(), total=len(transport_data),
+                             desc='Load static transport edges')
     }
+    logger.info('Reconstructed %s conversion and %s transport edges',
+                len(conversion_edges), len(transport_edges))
     edges = {key: ('conversion',) + value for key, value in conversion_edges.items()}
     edges.update({key: ('transport',) + value for key, value in transport_edges.items()})
     max_costs = transport_data['costs'].max() if not transport_data.empty else 0
