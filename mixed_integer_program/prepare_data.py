@@ -39,9 +39,8 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
        infrastructure nodes to it. The selected destination nodes are supplied
        by the caller and can be reused for every origin with the same target.
 
-    Static completeness can therefore be inspected once in the generated
-    `static_conversion_edges.csv` and `static_transport_edges.csv`; repeated
-    calls here do not rebuild or reload those edges.
+    Static completeness is stored once in the generated `static_graph.pkl`;
+    repeated calls here do not rebuild or reload those nodes and edges.
 
     Warm starts are optional and independent from graph construction:
     - `warm_start_route` supplies an already known list of generated edge

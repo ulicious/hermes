@@ -16,7 +16,7 @@ from data_processing.process_network_data_to_network_objects import \
 from data_processing.process_ports import process_ports
 from data_processing.calculate_inner_distances import get_distances_within_networks, get_distances_of_closest_infrastructure, calculate_searoute_distances
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure, calculate_conversion_costs_and_efficiencies_for_all_combinations
-from data_processing.process_mip_data import prepare_global_mip_data
+from data_processing.process_mip_data import prepare_global_mip_data, prepare_minimal_mip_case
 from data_processing.helpers_geometry import get_destination
 from data_processing.helpers_continent_connections import build_continent_connectivity, save_continent_connectivity
 
@@ -253,6 +253,9 @@ if create_mip_data:
         options, ports, config_file, techno_economic_data_conversion,
         techno_economic_data_transport, conversion_costs_and_efficiency,
         path_processed_data)
+    prepare_minimal_mip_case(
+        config_file, techno_economic_data_conversion,
+        techno_economic_data_transport, path_processed_data)
     logging.info('Finished origin-independent MIP infrastructure graph')
 
 

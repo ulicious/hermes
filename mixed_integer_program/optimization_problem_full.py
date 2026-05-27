@@ -15,8 +15,8 @@ from shapely.geometry import Point
 from prepare_data import prepare_data, create_edges_from_distance_only, create_graph
 from data_processing.process_mip_data import (
     calculate_road_distances,
-    build_static_mip_graph,
     load_static_mip_graph,
+    load_minimal_mip_case,
     prepare_destination_mip_data,
 )
 from data_processing.helpers_geometry import get_destination
@@ -565,126 +565,24 @@ path_raw_data = path_overall_data + 'raw_data/'
 path_processed_data = path_overall_data + 'processed_data/'
 techno_economic_path = path_config + '/data/'
 
-# This switch changes only the physical infrastructure input. Model nodes and
-# edges are always constructed by `prepare_data`, using the same technology
-# data files configured above.
+# This switch selects which preprocessed static graph file is loaded.
+# `prepare_data` adds only the current start and destination edges.
 USE_MINIMAL_INFRASTRUCTURE = True
 
-# Hardcoded minimal infrastructure in the same forms read by `prepare_data`:
-# options.csv, road/new-pipeline edge tables, and square shipping/pipeline
-# distance matrices. No expanded commodity nodes or MIP edges are defined here.
-# Intended cheapest path:
-# start -(New_Pipeline_Gas/Hydrogen_Gas)-> PG_0
-#       -(Pipeline_Gas/Hydrogen_Gas)-> PG_1
-#       -(Road/Hydrogen_Gas)-> s_0
-#       -(conversion: Hydrogen_Gas -> FTF)-> s_0
-#       -(Shipping/FTF)-> s_1
-#       -(New_Pipeline_Liquid/FTF)-> PL_0 -(sink)-> end
-# Existing liquid/oil pipeline edges are still generated below, but they are
-# intentionally not forced into the cheap route because only FTF can use them.
-# The route therefore exercises every transport mean except Pipeline_Liquid.
-# Longer branches give the optimizer feasible alternatives without making a
-# route that skips the intended sequence competitive.
-minimal_nodes = ['s_0', 's_1', 's_2', 's_3',
-                 'PG_0', 'PG_1', 'PG_2',
-                 'PL_0', 'PL_1']
-minimal_infrastructure = {
-    'options': pd.DataFrame(index=minimal_nodes),
-    'road_distances': pd.DataFrame([
-        # Cheap required connector before changing Hydrogen_Gas into FTF.
-        ('PG_1', 's_0', 1000),
-        # Alternative connections from the longer gas branch to ports.
-        ('PG_2', 's_0', 30_000_000),
-        ('PG_2', 's_2', 25_000_000),
-        # Alternative final approach for road-capable liquid commodities.
-        ('s_3', 'PL_0', 30_000_000),
-    ], columns=['pointA', 'pointB', 'distance']),
-    'start_road_distances': pd.DataFrame([
-        # Complete but expensive shortcut that avoids both gas pipeline means.
-        ('start', 's_0', 100_000_000_000),
-        # Less extreme port entry for testing an alternate road/shipping path.
-        ('start', 's_2', 50_000_000),
-    ], columns=['pointA', 'pointB', 'distance']),
-    'new_pipeline_distances': pd.DataFrame([
-        # Cheap required liquid/oil connection after shipping FTF.
-        ('s_1', 'PL_0', 1000),
-        # Liquid detour that may continue through the existing oil pipeline.
-        ('s_1', 'PL_1', 1_000_000_000),
-        # Additional terminal approach from a secondary port.
-        ('s_3', 'PL_0', 1_000_000_000),
-    ], columns=['pointA', 'pointB', 'distance']),
-    'start_new_pipeline_distances': pd.DataFrame([
-        # Only short entry into the cheap corridor; Hydrogen_Gas uses New_Pipeline_Gas.
-        ('start', 'PG_0', 1000),
-        # Complete but expensive shortcuts that skip required corridor steps.
-        ('start', 'PG_1', 100_000_000_000),
-        ('start', 'PL_0', 100_000_000_000),
-        # Alternative gas branch: feasible but more expensive than PG_0.
-        ('start', 'PG_2', 50_000_000),
-    ], columns=['pointA', 'pointB', 'distance']),
-    'port_distances': pd.DataFrame([
-        # s_0 -> s_1 is the cheap shipping step; secondary ports add detours.
-        [0, 1000, 2_000_000, 3_000_000],
-        [1000, 0, 2_000_000, 2_500_000],
-        [2_000_000, 2_000_000, 0, 1_500_000],
-        [3_000_000, 2_500_000, 1_500_000, 0],
-    ], index=['s_0', 's_1', 's_2', 's_3'],
-       columns=['s_0', 's_1', 's_2', 's_3']),
-    'gas_pipeline_matrices': [pd.DataFrame([
-        # PG_0 -> PG_1 is cheap; PG_2 supplies a longer pipeline alternative.
-        [0, 1000, 40_000_000],
-        [1000, 0, 20_000_000],
-        [40_000_000, 20_000_000, 0],
-    ], index=['PG_0', 'PG_1', 'PG_2'],
-       columns=['PG_0', 'PG_1', 'PG_2'])],
-    'oil_pipeline_matrices': [pd.DataFrame([
-        # Oil/liquid pipelines remain available for edge-generation checks,
-        # but PL_0 is already the minimal-example destination.
-        [0, 1000],
-        [1000, 0],
-    ], index=['PL_0', 'PL_1'], columns=['PL_0', 'PL_1'])],
-}
-
-minimal_destination_infrastructure = ['PL_0']
-
-# The minimal network has no preprocessing CSVs. Run the same global builder
-# used by `_1_script_process_raw_data` once before adding start/end edges.
-minimal_static_graph = build_static_mip_graph(
-    minimal_infrastructure, config_file, techno_economic_data_conversion,
-    techno_economic_data_transport)
-
-# Optional MIP start for the minimal infrastructure. These are edge keys
-# generated by `prepare_data`, not separately created optimization edges.
-minimal_warm_start_route = [
-    'start+Hydrogen_Gas-PG_0+Hydrogen_Gas-New_Pipeline_Gas',
-    'PG_0+Hydrogen_Gas-PG_1+Hydrogen_Gas-Pipeline_Gas',
-    'PG_1+Hydrogen_Gas-s_0+Hydrogen_Gas-Road',
-    's_0+Hydrogen_Gas-s_0+FTF',
-    's_0+FTF-s_1+FTF-Shipping',
-    's_1+FTF-PL_0+FTF-New_Pipeline_Liquid',
-    'PL_0+FTF-end',
-]
-
 if USE_MINIMAL_INFRASTRUCTURE:
-    logger.info('Run optimization with hardcoded minimal infrastructure')
-    # Fixed origin costs keep the minimal example independent from prepared
-    # location files; graph expansion still uses the normal technology YAMLs.
-    minimal_start_location = {
-        'Hydrogen_Gas': 0, 'Ammonia': 10, 'Methane_Gas': 5,
-        'Methane_Liquid': 10, 'Methanol': 12, 'FTF': 15
-    }
-    minimal_start_location = pd.Series(minimal_start_location)
+    logger.info('Load preprocessed minimal infrastructure case')
+    minimal_case = load_minimal_mip_case(path_processed_data)
 
     problem = OptimizationGurobiModel(
-        static_graph=minimal_static_graph,
-        start_location_data=minimal_start_location,
-        start_road_distances=minimal_infrastructure['start_road_distances'],
-        start_new_pipeline_distances=minimal_infrastructure['start_new_pipeline_distances'],
-        end_location=minimal_destination_infrastructure,
+        static_graph=minimal_case['static_graph'],
+        start_location_data=minimal_case['start_location_data'],
+        start_road_distances=minimal_case['start_road_distances'],
+        start_new_pipeline_distances=minimal_case['start_new_pipeline_distances'],
+        end_location=minimal_case['end_location'],
         config_file=config_file,
         techno_economic_data_conversion=techno_economic_data_conversion,
         techno_economic_data_transport=techno_economic_data_transport,
-        warm_start_route=minimal_warm_start_route)
+        warm_start_route=minimal_case['warm_start_route'])
 else:
     logger.info('Load origin-independent graph for real-data optimization runs')
     static_graph = load_static_mip_graph(path_processed_data + 'mip_data/')
