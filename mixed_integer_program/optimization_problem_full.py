@@ -24,6 +24,8 @@ from data_processing.helpers_geometry import get_destination
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+# Gurobi prints its optimization log itself; do not duplicate it via Python logging.
+logging.getLogger('gurobipy').setLevel(logging.WARNING)
 
 
 # noinspection PyTypeChecker

@@ -1,0 +1,156 @@
+import argparse
+import logging
+import os
+import time
+
+import pandas as pd
+import yaml
+
+from data_processing.helpers_geometry import get_destination
+from data_processing.process_mip_data import (
+    load_minimal_mip_case,
+    load_static_mip_graph,
+    prepare_destination_mip_data,
+)
+from mixed_integer_program.optimization_problem_full_fast import FastOptimizationGurobiModel
+
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+logging.getLogger('gurobipy').setLevel(logging.WARNING)
+
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+
+def load_configuration_and_technology_data():
+    """Load settings and techno-economic assumptions used by every MIP run."""
+    with open(os.path.join(PROJECT_ROOT, 'algorithm_configuration.yaml')) as yaml_file:
+        config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
+    with open(os.path.join(PROJECT_ROOT, 'data', 'techno_economic_data_transportation.yaml')) as yaml_file:
+        transport_data = yaml.load(yaml_file, Loader=yaml.FullLoader)
+    with open(os.path.join(PROJECT_ROOT, 'data', 'techno_economic_data_conversion.yaml')) as yaml_file:
+        conversion_data = yaml.load(yaml_file, Loader=yaml.FullLoader)
+    return config_file, conversion_data, transport_data
+
+
+def create_model(static_graph, start_location_data, start_road_distances,
+                 start_new_pipeline_distances, end_location, config_file,
+                 conversion_data, transport_data, solve, warm_start_route=None):
+    """Build one Gurobi MIP instance and optionally start its optimization."""
+    return FastOptimizationGurobiModel(
+        static_graph=static_graph,
+        start_location_data=start_location_data,
+        start_road_distances=start_road_distances,
+        start_new_pipeline_distances=start_new_pipeline_distances,
+        end_location=end_location,
+        config_file=config_file,
+        techno_economic_data_conversion=conversion_data,
+        techno_economic_data_transport=transport_data,
+        warm_start_route=warm_start_route,
+        solve=solve)
+
+
+def run_minimal_case(config_file, conversion_data, transport_data, solve):
+    """Build or solve the preprocessed diagnostic example."""
+    processed_path = os.path.join(config_file['project_folder_path'], 'processed_data') + os.sep
+    logger.info('Run preprocessed minimal MIP infrastructure case')
+    case = load_minimal_mip_case(processed_path)
+    return create_model(
+        static_graph=case['static_graph'],
+        start_location_data=case['start_location_data'],
+        start_road_distances=case['start_road_distances'],
+        start_new_pipeline_distances=case['start_new_pipeline_distances'],
+        end_location=case['end_location'],
+        config_file=config_file,
+        conversion_data=conversion_data,
+        transport_data=transport_data,
+        solve=solve,
+        warm_start_route=case['warm_start_route'])
+
+
+def run_real_locations(config_file, conversion_data, transport_data, solve):
+    """
+    Build or solve one MIP per real origin.
+
+    The origin-independent graph and destination infrastructure are loaded
+    once. Within the loop only origin-specific connections are added.
+    """
+    project_path = config_file['project_folder_path']
+    processed_path = os.path.join(project_path, 'processed_data')
+    mip_path = os.path.join(processed_path, 'mip_data')
+    logger.info('Load preprocessed static MIP graph for real locations')
+    static_graph = load_static_mip_graph(mip_path + os.sep)
+    options = pd.read_csv(os.path.join(mip_path, 'options.csv'), index_col=0)
+    start_locations = pd.read_csv(
+        os.path.join(project_path, 'start_destination_combinations.csv'), index_col=0)
+    destination = get_destination(config_file)
+    end_location = prepare_destination_mip_data(
+        options, destination)['destination_infrastructure'].tolist()
+    logger.info('Loaded %s static nodes, %s static edges, %s destinations and %s origins',
+                len(static_graph['nodes']), len(static_graph['edges']),
+                len(end_location), len(start_locations))
+
+    results = []
+    for location in start_locations.index:
+        logger.info('Build MIP for origin %s', location)
+        model = create_model(
+            static_graph=static_graph,
+            start_location_data=start_locations.loc[location, :],
+            start_road_distances=pd.read_csv(
+                os.path.join(mip_path, str(location) + '_start_road_distances.csv'),
+                index_col=0),
+            start_new_pipeline_distances=pd.read_csv(
+                os.path.join(mip_path, str(location) + '_start_new_pipeline_distances.csv'),
+                index_col=0),
+            end_location=end_location,
+            config_file=config_file,
+            conversion_data=conversion_data,
+            transport_data=transport_data,
+            solve=solve)
+        if solve:
+            results.append({
+                'location': location,
+                'status': model.status,
+                'objective': model.objective_function_value,
+                'chosen_edges': model.chosen_edges,
+            })
+            model.model.dispose()
+        else:
+            results.append(model)
+    return results
+
+
+def run_mip_optimization(use_minimal_example=None, solve=True):
+    """Central entry point for both the diagnostic example and real MIP runs."""
+    config_file, conversion_data, transport_data = load_configuration_and_technology_data()
+    if use_minimal_example is None:
+        use_minimal_example = config_file.get('use_minimal_example', False)
+    start = time.time()
+    if use_minimal_example:
+        result = run_minimal_case(config_file, conversion_data, transport_data, solve)
+    else:
+        result = run_real_locations(config_file, conversion_data, transport_data, solve)
+    logger.info('MIP run completed in %.2f s', time.time() - start)
+    return result
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Build and run the Gurobi transport MIP.')
+    parser.add_argument(
+        '--minimal', action='store_true',
+        help='Use the preprocessed minimal infrastructure, independent of the YAML setting.')
+    parser.add_argument(
+        '--real-data', action='store_true',
+        help='Use prepared real locations, independent of the YAML setting.')
+    parser.add_argument(
+        '--build-only', action='store_true',
+        help='Build Gurobi models but do not start optimization.')
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    args = parse_arguments()
+    if args.minimal and args.real_data:
+        raise ValueError('Choose either --minimal or --real-data, not both.')
+    force_minimal = True if args.minimal else False if args.real_data else None
+    run_mip_optimization(use_minimal_example=force_minimal, solve=not args.build_only)

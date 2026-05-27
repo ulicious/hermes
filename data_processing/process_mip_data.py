@@ -160,14 +160,14 @@ def create_transport_edges(distance_options, commodities, techno_economic_data_t
     edges = {}
     max_costs = 0
 
-    mean_iterator = tqdm(distance_options.items(), desc='Create transport means',
-                         disable=not show_progress)
-    for transport_mean, distances in mean_iterator:
+    for transport_mean, distances in distance_options.items():
         if distances.empty:
             continue
+        logger.info('Create %s transport edges from %s directed distances',
+                    transport_mean, len(distances))
         row_iterator = tqdm(distances.itertuples(), total=len(distances),
                             desc='Create ' + transport_mean + ' edges',
-                            disable=not show_progress, leave=False)
+                            disable=not show_progress)
         for row in row_iterator:
             if row.pointA == row.pointB:
                 continue
