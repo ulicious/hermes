@@ -16,12 +16,9 @@ from data_processing.process_network_data_to_network_objects import \
 from data_processing.process_ports import process_ports
 from data_processing.calculate_inner_distances import get_distances_within_networks, get_distances_of_closest_infrastructure, calculate_searoute_distances
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure, calculate_conversion_costs_and_efficiencies_for_all_combinations
-from data_processing.process_mip_data import calculate_road_distances, calculate_efficiencies
+from data_processing.process_mip_data import prepare_global_mip_data
 from data_processing.helpers_geometry import get_destination
 from data_processing.helpers_continent_connections import build_continent_connectivity, save_continent_connectivity
-
-from shapely.geometry import Point, MultiPolygon
-
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -248,62 +245,13 @@ conversion_costs_and_efficiency \
 
 conversion_costs_and_efficiency.to_csv(path_processed_data + 'conversion_costs_and_efficiency.csv', encoding='utf-8', index=True)
 
-# missing data not yet processed: road and new pipeline distances; efficiencies; costs
-if create_mip_data:  # todo: distances to the destination + conversion cost at destination
-
-    # make uniform latitude and longitude
-    options.loc[ports.index, 'longitude'] = options.loc[ports.index, 'longitude_on_coastline']
-    options.loc[ports.index, 'latitude'] = options.loc[ports.index, 'latitude_on_coastline']
-
-    # remove unnecessary columns
-    options.drop(columns=['name', 'country', 'continent', 'longitude_on_coastline', 'latitude_on_coastline'], inplace=True)
-
-    # get destination infrastructure
-    destination_infrastructure = []
-    if isinstance(destination, MultiPolygon):
-        for op in options.index:
-            op_point = Point([options.loc[op, 'longitude'], options.loc[op, 'latitude']])
-
-            if destination.contains(op_point):
-                destination_infrastructure.append(op)
-    else:
-        print('')
-        # todo: if destination is single point --> adjust
-
-    destination_infrastructure = pd.DataFrame(destination_infrastructure, columns=['destination_infrastructure'])
-    destination_infrastructure.to_csv(path_processed_data + 'mip_data/' + 'destination_infrastructure.csv', encoding='utf-8', index=True)
-
-    # save overall options data
-    options.to_csv(path_processed_data + 'mip_data/' + 'options.csv', encoding='utf-8', index=True)
-
-    # distances
-    road_distances = calculate_road_distances(config_file['tolerance_distance'], options)
-    new_pipeline_distances = road_distances.copy()
-    new_pipeline_distances = new_pipeline_distances[new_pipeline_distances['distance'] <= config_file['max_length_new_segment']]
-
-    road_distances['distance'] *= config_file['no_road_multiplier']
-    new_pipeline_distances['distance'] *= config_file['no_road_multiplier']
-
-    road_distances.to_csv(path_processed_data + 'mip_data/' + 'road_distances.csv', encoding='utf-8', index=True)
-    new_pipeline_distances.to_csv(path_processed_data + 'mip_data/' + 'new_pipeline_distances.csv', encoding='utf-8', index=True)
-
-    # transport efficiencies: depend on distance and duration
-    ports_distances = pd.read_csv(path_processed_data + 'mip_data/' + 'port_distances.csv', index_col=0)
-    # ports_durations = pd.read_csv(path_processed_data + 'mip_data/' + 'ports_durations.csv', index_col=0)
-
-    for commodity in config_file['available_commodity']:
-        if 'Shipping' in techno_economic_data_transport[commodity]['potential_transportation']:
-            uses_commodity_as_shipping_fuel = techno_economic_data_transport[commodity]['Uses_Commodity_as_Shipping_Fuel']
-            boil_off = techno_economic_data_transport[commodity]['Boil_Off']
-            self_consumption = techno_economic_data_transport[commodity]['Self_Consumption']
-
-            ports_durations = ports_distances / techno_economic_data_transport[commodity]['Shipping_Speed'] / 1000
-
-            efficiency = calculate_efficiencies(ports_distances, ports_durations, boil_off, uses_commodity_as_shipping_fuel, self_consumption)
-            efficiency.to_csv(path_processed_data + 'mip_data/' + commodity + '_efficiencies.csv', encoding='utf-8', index=True)
-
-    # conversion costs and efficiencies at nodes
-    conversion_costs_and_efficiency.to_csv(path_processed_data + 'mip_data/' + 'conversion_costs_and_efficiency.csv', encoding='utf-8', index=True)
+# Build reusable MIP graph input once. Only the origin links and selected
+# destination sink remain run-specific and are added later in `prepare_data`.
+if create_mip_data:
+    prepare_global_mip_data(
+        options, ports, config_file, techno_economic_data_conversion,
+        techno_economic_data_transport, conversion_costs_and_efficiency,
+        path_processed_data)
 
 
 if time.time() - time_start < 60:
