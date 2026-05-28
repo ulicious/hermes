@@ -16,7 +16,7 @@ import matplotlib as mpl
 
 from math import sqrt
 from tqdm import tqdm
-from shapely.geometry import LineString, Point, Polygon, MultiLineString, MultiPolygon
+from shapely.geometry import LineString, Point, Polygon, MultiLineString, MultiPolygon, box
 from shapely.ops import linemerge
 from joblib import Parallel, delayed
 import plotly.graph_objects as go
@@ -29,14 +29,35 @@ import searoute as sr
 
 import math
 
-from data_processing.natural_earth_data import load_world_lowres
+from data_processing.natural_earth_data import load_world, load_world_lowres
 
 
 # from plotting.helpers_plotting import get_geometry_segments
 
 
-def _load_plot_world():
-    return load_world_lowres()
+def _load_plot_world(high_resolution=False):
+    if high_resolution:
+        world = load_world()
+    else:
+        world = load_world_lowres()
+
+    rename_columns = {}
+    if 'CONTINENT' in world.columns and 'continent' not in world.columns:
+        rename_columns['CONTINENT'] = 'continent'
+    if 'NAME_EN' in world.columns and 'name' not in world.columns:
+        rename_columns['NAME_EN'] = 'name'
+    elif 'NAME' in world.columns and 'name' not in world.columns:
+        rename_columns['NAME'] = 'name'
+    if rename_columns:
+        world = world.rename(columns=rename_columns)
+
+    return world
+
+
+def _filter_world_to_boundaries(world, boundaries):
+    boundary_box = box(boundaries['min_longitude'], boundaries['min_latitude'],
+                       boundaries['max_longitude'], boundaries['max_latitude'])
+    return world[world.geometry.intersects(boundary_box)].copy()
 
 
 def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_name_dictionary,
@@ -1660,8 +1681,8 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
 
 
 def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_title='', width=15.69, height=9,
-                              return_fig=False, save=False, plot_legend=True, path_saving='',
-                              country_edgecolor=None, country_linewidth=0.2):
+                               return_fig=False, save=False, plot_legend=True, path_saving='',
+                               country_edgecolor=None, country_linewidth=0.2, high_resolution_map=False):
     plt.rcParams.update({'font.size': 11,
                          'font.family': 'Times New Roman'})
     centimeter_to_inch = 1 / 2.54
@@ -1688,9 +1709,10 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
     data_pipeline_oil = data_pipeline_oil.set_geometry('line')
 
     # plot map on axis
-    countries = _load_plot_world()
-    antarctica = countries[countries['continent'] == 'Antarctica'].index[0]
-    countries.drop([antarctica], inplace=True)
+    countries = _load_plot_world(high_resolution=high_resolution_map)
+    countries = _filter_world_to_boundaries(countries, boundaries)
+    antarctica = countries[countries['continent'] == 'Antarctica'].index
+    countries.drop(antarctica, inplace=True)
     countries.plot(color="lightgrey", edgecolor=country_edgecolor, linewidth=country_linewidth, ax=ax)
 
     data_ports.plot(color="blue", ax=ax, markersize=1, label='Port')
@@ -1797,7 +1819,8 @@ def get_start_locations_infrastructure_destination_figure(start_locations, bound
         fig, ax = plt.subplots(figsize=(width * centimeter_to_inch, height * centimeter_to_inch))
 
     get_infrastructure_figure(boundaries, path_data, ax=ax, fig=fig, fig_title='', return_fig=True,
-                              plot_legend=False, country_edgecolor='darkgrey', country_linewidth=0.25)
+                              plot_legend=False, country_edgecolor='darkgrey', country_linewidth=0.25,
+                              high_resolution_map=True)
 
     if 'geometry' not in start_locations.columns:
         raise ValueError("Missing column 'geometry' in start locations. Voronoi cells are required for this plot.")
