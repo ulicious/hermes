@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import time
+import ast
 
 import pandas as pd
 import yaml
@@ -50,6 +51,44 @@ def create_model(static_graph, start_location_data, start_road_distances,
         solve=solve)
 
 
+def create_warm_start_solution(result):
+    result = result[result.columns[0]]
+    route = ast.literal_eval(result.loc['taken_routes'])
+
+    commodity = None
+    start = None
+    end = None
+    solution_route = []  # same commodity conversion required?
+    for n, segment in enumerate(route):
+        if n > 0:
+            if len(segment) == 5:  # transport
+
+                start = segment[0]
+                end = segment[3]
+
+                if start == 'Start':
+                    start = 'start'
+
+                transport_mean = segment[1]
+
+                solution_route.append(start + '+' + commodity + '-' + end + '+' + commodity + '-' + transport_mean)
+                start = end
+            elif len(segment) == 3:  # conversion
+
+                if commodity == segment[1]:
+                    continue
+
+                solution_route.append(start + '+' + commodity + '-' + end + '+' + segment[1])
+                commodity = segment[1]
+        else:
+            commodity = segment[0]
+            start = 'start'
+
+    solution_route += [end + '+' + commodity + '-end']
+
+    return solution_route
+
+
 def run_minimal_case(config_file, conversion_data, transport_data, solve):
     """Build or solve the preprocessed diagnostic example."""
     processed_path = os.path.join(config_file['project_folder_path'], 'processed_data') + os.sep
@@ -93,6 +132,14 @@ def run_real_locations(config_file, conversion_data, transport_data, solve):
     results = []
     for location in start_locations.index:
         logger.info('Build MIP for origin %s', location)
+
+        use_warm_start = True
+        if use_warm_start:
+            solution  = pd.read_csv(project_path + 'results/location_results/' + str(location) + '_final_solution.csv', index_col=0)
+            solution_route = create_warm_start_solution(solution)
+        else:
+            solution_route = None
+
         model = create_model(
             static_graph=static_graph,
             start_location_data=start_locations.loc[location, :],
@@ -106,7 +153,9 @@ def run_real_locations(config_file, conversion_data, transport_data, solve):
             config_file=config_file,
             conversion_data=conversion_data,
             transport_data=transport_data,
-            solve=solve)
+            solve=solve,
+            warm_start_route=solution_route)
+
         if solve:
             results.append({
                 'location': location,
@@ -134,23 +183,8 @@ def run_mip_optimization(use_minimal_example=None, solve=True):
     return result
 
 
-def parse_arguments():
-    parser = argparse.ArgumentParser(description='Build and run the Gurobi transport MIP.')
-    parser.add_argument(
-        '--minimal', action='store_true',
-        help='Use the preprocessed minimal infrastructure, independent of the YAML setting.')
-    parser.add_argument(
-        '--real-data', action='store_true',
-        help='Use prepared real locations, independent of the YAML setting.')
-    parser.add_argument(
-        '--build-only', action='store_true',
-        help='Build Gurobi models but do not start optimization.')
-    return parser.parse_args()
-
-
 if __name__ == '__main__':
-    args = parse_arguments()
-    if args.minimal and args.real_data:
-        raise ValueError('Choose either --minimal or --real-data, not both.')
-    force_minimal = True if args.minimal else False if args.real_data else None
-    run_mip_optimization(use_minimal_example=force_minimal, solve=not args.build_only)
+    use_minimal_example = False
+    solve = True
+
+    run_mip_optimization(use_minimal_example=use_minimal_example, solve=solve)

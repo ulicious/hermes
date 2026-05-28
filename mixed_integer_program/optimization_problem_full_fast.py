@@ -44,20 +44,20 @@ class FastOptimizationGurobiModel:
     def __init__(self, static_graph, start_location_data, start_road_distances,
                  start_new_pipeline_distances, end_location, config_file,
                  techno_economic_data_conversion, techno_economic_data_transport,
-                 warm_start_route=None, create_results=False, export_edges=False,
+                 warm_start_route=None, export_edges=False,
                  solve=False):
         self.config_file = config_file
         self.techno_economic_data_conversion = techno_economic_data_conversion
         self.techno_economic_data_transport = techno_economic_data_transport
+        self.solution_route = warm_start_route
 
         logger.info('Add origin- and destination-specific graph data')
         self.all_nodes_adjusted, self.target_nodes, self.edges, self.production_costs, \
-            self.transport_means, self.solution_route, self.cost_route, self.max_costs, \
+            self.transport_means, self.max_costs, \
             self.conversion_edges, self.transport_edges = prepare_data(
                 start_location_data, static_graph, start_road_distances,
                 start_new_pipeline_distances, end_location, config_file,
-                techno_economic_data_transport, create_results=create_results,
-                warm_start_route=warm_start_route)
+                techno_economic_data_transport)
 
         logger.info('Optimization graph contains %s nodes and %s edges (%s conversion, %s transport)',
                     len(self.all_nodes_adjusted), len(self.edges),

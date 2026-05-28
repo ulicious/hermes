@@ -327,7 +327,7 @@ class OptimizationGurobiModel:
         if True:
 
             self.all_nodes_adjusted, self.target_nodes, self.edges, self.production_costs, self.transport_means, \
-                self.solution_route, self.cost_route, self.max_costs, self.conversion_edges, self.transport_edges = prepare_data(0, end_location, create_results=True)
+                self.max_costs, self.conversion_edges, self.transport_edges = prepare_data(0, end_location, create_results=True)
 
             print('The problem consists of ' + str(len(self.edges)) + ' edges and ' + str(len(self.all_nodes_adjusted)) + ' nodes.')
 

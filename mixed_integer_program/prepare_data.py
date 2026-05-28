@@ -7,8 +7,7 @@ from data_processing.process_mip_data import create_transport_edges
 
 
 def prepare_data(start_location_data, static_graph, start_road_distances, start_new_pipeline_distances,
-                 end_node, config_file, techno_economic_data_transport, create_results=False,
-                 warm_start_route=None):
+                 end_node, config_file, techno_economic_data_transport):
     """
     Complete the commodity-expanded graph for one optimization location.
 
@@ -48,8 +47,6 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
     - `create_results=True` retains the legacy option of rebuilding a route
       from an existing result file for a real start location.
     """
-
-    path_overall_data = config_file['project_folder_path']
 
     all_commodities = config_file['available_commodity']
     start_commodities = [commodity for commodity in all_commodities if commodity in start_location_data.index]
@@ -95,68 +92,7 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
         {key: value[1:] for key, value in sink_edges.items()}, orient='index', columns=columns)
     transport_edges = pd.concat([transport_edges, sink_edges_df], axis=0)
 
-    # A warm-start route, when requested, merely selects edge keys created
-    # above. It does not create additional graph nodes or edges. A directly
-    # supplied route avoids any dependency on an external results file.
-    if (warm_start_route is not None) and create_results:
-        raise ValueError('Pass either warm_start_route or create_results=True, not both.')
-
-    if warm_start_route is not None:
-        missing_edges = [edge for edge in warm_start_route if edge not in edges]
-        if missing_edges:
-            raise ValueError('Warm-start route contains edges absent from generated graph: ' +
-                             ', '.join(missing_edges))
-        solution_route = list(warm_start_route)
-        cost_route = None
-    elif create_results:
-        result = pd.read_csv(path_overall_data + '/results/location_results/' +
-                             str(start_location_data.name) + '_final_solution.csv', index_col=0)
-        result = result[result.columns[0]]
-        route = ast.literal_eval(result.loc['taken_routes'])
-        total_costs = result.loc['current_total_costs']
-
-        cost_route = ast.literal_eval(result.loc['all_previous_total_costs'])
-        cost_route = list(set(cost_route))
-
-        commodity = None
-        transport_mean = None
-        start = None
-        end = None
-        solution_route = []  # same commodity conversion required?
-        for n, segment in enumerate(route):
-            if n > 0:
-                if len(segment) == 5:  # transport
-
-                    start = segment[0]
-                    end = segment[3]
-
-                    if start == 'Start':
-                        start = 'start'
-
-                    transport_mean = segment[1]
-
-                    solution_route.append(start + '+' + commodity + '-' + end + '+' + commodity + '-' + transport_mean)
-                    start = end
-                elif len(segment) == 3:  # conversion
-
-                    if commodity == segment[1]:
-                        continue
-
-                    solution_route.append(start + '+' + commodity + '-' + end + '+' + segment[1])
-                    commodity = segment[1]
-            else:
-                commodity = segment[0]
-                start = 'start'
-
-        solution_route += [end + '+' + commodity + '-end']
-
-        print(total_costs)
-        print(solution_route)
-    else:
-        solution_route = None
-        cost_route = None
-
-    return all_nodes_adjusted, target_nodes, edges, production_costs, transport_means, solution_route, cost_route, max_costs, conversion_edges, transport_edges
+    return all_nodes_adjusted, target_nodes, edges, production_costs, transport_means, max_costs, conversion_edges, transport_edges
 
 
 def create_edges_from_distance_only(df_list, transport_means, techno_economic_data_transport,
