@@ -27,7 +27,8 @@ def create_bidirectional_distances(distances):
     return pd.concat([distances, reverse_distances], ignore_index=True)
 
 
-def calculate_road_distances(tolerance, infrastructure, single_point=None, single_point_name=''):
+def calculate_road_distances(tolerance, infrastructure, single_point=None, single_point_name='',
+                             use_landmass_filter=False):
 
     # todo: road distances between ports if they are not on same landmass --> should not exist
 
@@ -75,7 +76,12 @@ def calculate_road_distances(tolerance, infrastructure, single_point=None, singl
         results.append({'pointA': a, 'pointB': b, 'same_landmass': same})
 
     results_df = pd.DataFrame(results)
-    results_df_true = results_df[results_df['same_landmass']]
+    # Legacy behavior: keep only pairs on the same landmass. Disabled by default
+    # so MIP road/new-pipeline options match the heuristic's direct-distance logic.
+    if use_landmass_filter:
+        results_df_true = results_df[results_df['same_landmass']]
+    else:
+        results_df_true = results_df.copy()
 
     if single_point is None:
         list_longitude_1 = infrastructure.loc[results_df_true['pointA'], 'longitude']
