@@ -1,89 +1,88 @@
-# all costs in € / MWh / 1000 km
-# boil-off in # % / 100 / d
-# Self_Consumption in % / km / 100
-# in kmh
+# Transport cost values: [EUR/MWh_commodity/1000 km]
+# Boil_Off: [1/d], represented as a daily fraction of transported energy.
+# Self_Consumption: [1/km], represented as a fraction of transported energy per km.
+# Shipping_Speed: [km/h].
 
 Hydrogen_Gas:
-   potential_transportation: ['Pipeline_Gas', 'New_Pipeline_Gas', 'Road']
-   Pipeline_Gas: 4.88
-   New_Pipeline_Gas: 3.11
-   Road: 126.62
-   Boil_Off: 0
-   Uses_Commodity_as_Shipping_Fuel: False
-   Self_Consumption: 0
-   Shipping_Speed: 0
+   potential_transportation: ['Pipeline_Gas', 'New_Pipeline_Gas', 'Road']  # [-]
+   Pipeline_Gas: 4.88  # [EUR/MWh_commodity/1000 km]
+   New_Pipeline_Gas: 3.11  # [EUR/MWh_commodity/1000 km]
+   Road: 126.62  # [EUR/MWh_commodity/1000 km]
+   Boil_Off: 0  # [1/d]
+   Uses_Commodity_as_Shipping_Fuel: False  # [-] boolean
+   Self_Consumption: 0  # [1/km]
+   Shipping_Speed: 0  # [km/h] not applicable
 
 Hydrogen_Liquid:
-   potential_transportation: ['Shipping', 'Road']
-   Shipping: 0.6
-   Road: 23
-   Boil_Off: 0.002
-   Uses_Commodity_as_Shipping_Fuel: True
-   Self_Consumption: 0.0000036
-   Shipping_Speed: 31
+   potential_transportation: ['Shipping', 'Road']  # [-]
+   Shipping: 0.6  # [EUR/MWh_commodity/1000 km]
+   Road: 23  # [EUR/MWh_commodity/1000 km]
+   Boil_Off: 0.002  # [1/d]
+   Uses_Commodity_as_Shipping_Fuel: True  # [-] boolean
+   Self_Consumption: 0.0000036  # [1/km]
+   Shipping_Speed: 31  # [km/h]
 
 Ammonia:
-   potential_transportation: [ 'Shipping', 'Road' ]
-   Shipping: 0.31
-   Road: 33.57
-   Boil_Off: 0.0001
-   Uses_Commodity_as_Shipping_Fuel: True
-   Self_Consumption: 0.0000017
-   Shipping_Speed: 26
+   potential_transportation: ['Shipping', 'Road']  # [-]
+   Shipping: 0.31  # [EUR/MWh_commodity/1000 km]
+   Road: 33.57  # [EUR/MWh_commodity/1000 km]
+   Boil_Off: 0.0001  # [1/d]
+   Uses_Commodity_as_Shipping_Fuel: True  # [-] boolean
+   Self_Consumption: 0.0000017  # [1/km]
+   Shipping_Speed: 26  # [km/h]
 
 Methanol:
-   potential_transportation: [ 'Shipping', 'Road' ]
-   Shipping: 0.21
-   Road: 10.29
-   Boil_Off: 0
-   Uses_Commodity_as_Shipping_Fuel: True
-   Self_Consumption: 0.0000012
-   Shipping_Speed: 26
+   potential_transportation: ['Shipping', 'Road']  # [-]
+   Shipping: 0.21  # [EUR/MWh_commodity/1000 km]
+   Road: 10.29  # [EUR/MWh_commodity/1000 km]
+   Boil_Off: 0  # [1/d]
+   Uses_Commodity_as_Shipping_Fuel: True  # [-] boolean
+   Self_Consumption: 0.0000012  # [1/km]
+   Shipping_Speed: 26  # [km/h]
 
 Methane_Gas:
-   potential_transportation: ['Pipeline_Gas', 'New_Pipeline_Gas']
-   Pipeline_Gas: 1.43
-   New_Pipeline_Gas: 0.88
-   Boil_Off: 0
-   Uses_Commodity_as_Shipping_Fuel: False
-   Self_Consumption: 0
-   Shipping_Speed: 0
+   potential_transportation: ['Pipeline_Gas', 'New_Pipeline_Gas']  # [-]
+   Pipeline_Gas: 1.43  # [EUR/MWh_commodity/1000 km]
+   New_Pipeline_Gas: 0.88  # [EUR/MWh_commodity/1000 km]
+   Boil_Off: 0  # [1/d]
+   Uses_Commodity_as_Shipping_Fuel: False  # [-] boolean
+   Self_Consumption: 0  # [1/km]
+   Shipping_Speed: 0  # [km/h] not applicable
 
 Methane_Liquid:
-   potential_transportation: [ 'Shipping', 'Road' ]
-   Shipping: 0.23
-   Road: 16.69
-   Boil_Off: 0.001
-   Uses_Commodity_as_Shipping_Fuel: True
-   Self_Consumption: 0.0000014
-   Shipping_Speed: 31
+   potential_transportation: ['Shipping', 'Road']  # [-]
+   Shipping: 0.23  # [EUR/MWh_commodity/1000 km]
+   Road: 16.69  # [EUR/MWh_commodity/1000 km]
+   Boil_Off: 0.001  # [1/d]
+   Uses_Commodity_as_Shipping_Fuel: True  # [-] boolean
+   Self_Consumption: 0.0000014  # [1/km]
+   Shipping_Speed: 31  # [km/h]
 
 DBT:
-   potential_transportation: [ 'Shipping', 'Road' ]
-   Shipping: 0.28
-   Road: 42.58
-   Boil_Off: 0
-   Uses_Commodity_as_Shipping_Fuel: False
-   Self_Consumption: 0.0000018
-   Shipping_Speed: 17
+   potential_transportation: ['Shipping', 'Road']  # [-]
+   Shipping: 0.28  # [EUR/MWh_commodity/1000 km]
+   Road: 42.58  # [EUR/MWh_commodity/1000 km]
+   Boil_Off: 0  # [1/d]
+   Uses_Commodity_as_Shipping_Fuel: False  # [-] boolean
+   Self_Consumption: 0.0000018  # [1/km]
+   Shipping_Speed: 17  # [km/h]
 
 MCH:
-   potential_transportation: [ 'Shipping', 'Road' ]
-   Shipping: 0.33
-   Road: 43.28
-   Boil_Off: 0
-   Uses_Commodity_as_Shipping_Fuel: False
-   Self_Consumption: 0.0000015
-   Shipping_Speed: 17
+   potential_transportation: ['Shipping', 'Road']  # [-]
+   Shipping: 0.33  # [EUR/MWh_commodity/1000 km]
+   Road: 43.28  # [EUR/MWh_commodity/1000 km]
+   Boil_Off: 0  # [1/d]
+   Uses_Commodity_as_Shipping_Fuel: False  # [-] boolean
+   Self_Consumption: 0.0000015  # [1/km]
+   Shipping_Speed: 17  # [km/h]
 
 FTF:
-   potential_transportation: ['Pipeline_Liquid', 'New_Pipeline_Liquid', 'Shipping', 'Road']
-   Pipeline_Liquid: 0.06
-   New_Pipeline_Liquid: 0.24
-   Shipping: 0.14
-   Road: 5.11
-   Boil_Off: 0
-   Uses_Commodity_as_Shipping_Fuel: True
-   Self_Consumption: 0.0000003
-   Shipping_Speed: 17
-
+   potential_transportation: ['Pipeline_Liquid', 'New_Pipeline_Liquid', 'Shipping', 'Road']  # [-]
+   Pipeline_Liquid: 0.06  # [EUR/MWh_commodity/1000 km]
+   New_Pipeline_Liquid: 0.24  # [EUR/MWh_commodity/1000 km]
+   Shipping: 0.14  # [EUR/MWh_commodity/1000 km]
+   Road: 5.11  # [EUR/MWh_commodity/1000 km]
+   Boil_Off: 0  # [1/d]
+   Uses_Commodity_as_Shipping_Fuel: True  # [-] boolean
+   Self_Consumption: 0.0000003  # [1/km]
+   Shipping_Speed: 17  # [km/h]

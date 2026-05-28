@@ -192,9 +192,6 @@ def run_algorithm(args):
     starting_location = Point([location_data.at['Start', 'longitude'], location_data.at['Start', 'latitude']])
     starting_continent = location_data.at['Start', 'continent_start']
 
-    destination_location = data['destination']['location']
-    destination_continent = data['destination']['continent']
-
     data['k'] = location_index
 
     # adjust data with new information

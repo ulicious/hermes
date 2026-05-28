@@ -5,7 +5,9 @@ import geopandas as gpd
 import networkx as nx
 import numpy as np
 
-from shapely.geometry import MultiLineString, Point
+from shapely.geometry import MultiLineString
+
+from data_processing.helpers_geometry import get_destination_information
 
 
 def load_data(path_data, config_file):
@@ -23,7 +25,7 @@ def load_data(path_data, config_file):
 
     data = process_network_data(data, 'Pipeline_Liquid', pipeline_liquid_node_locations, pipeline_liquid_graphs)
 
-    destination = Point(config_file['destination_location'])
+    destination = get_destination_information(config_file)['location']
 
     return data, destination
 

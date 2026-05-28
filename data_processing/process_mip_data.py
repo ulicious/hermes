@@ -1,5 +1,6 @@
 import os
 import logging
+import math
 
 from algorithm.methods_geographic import calc_distance_list_to_list_no_matrix
 
@@ -232,6 +233,8 @@ def build_static_mip_graph(infrastructure_data, config_file, techno_economic_dat
                     continue
                 conversion_costs = conversion_costs_and_efficiencies.loc[
                     node, commodity_start + '-' + commodity_end + '-conversion_costs']
+                if conversion_costs == math.inf:
+                    continue
                 conversion_loss = 1 - conversion_costs_and_efficiencies.loc[
                     node, commodity_start + '-' + commodity_end + '-conversion_efficiency']
                 key = node + '+' + commodity_start + '-' + node + '+' + commodity_end

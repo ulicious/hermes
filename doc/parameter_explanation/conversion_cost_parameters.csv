@@ -1,9 +1,9 @@
-Assumption / Setting;type;Explanation
-Hydrogen_Gas;float;EURO / MWh
-Electricity;float;EURO / MWh
-CO2;float;EURO / t CO2
-Low_Temperature_Heat;float;EURO / MWh
-Mid_Temperature_Heat;float;EURO / MWh
-High_Temperature_Heat;float;EURO / MWh
-Nitrogen;float;EURO / t N2
-interest_rate;float;
+Assumption / Setting;type;Unit;Explanation
+Hydrogen_Gas;float;EUR/MWh_H2;Hydrogen cost
+Electricity;float;EUR/MWh_el;Electricity cost
+CO2;float;EUR/t_CO2;CO2 cost
+Low_Temperature_Heat;float;EUR/MWh_th;Low-temperature heat cost
+Mid_Temperature_Heat;float;EUR/MWh_th;Mid-temperature heat cost
+High_Temperature_Heat;float;EUR/MWh_th;High-temperature heat cost
+Nitrogen;float;EUR/t_N2;Nitrogen cost
+interest_rate;float;-;Annual interest rate as a fraction

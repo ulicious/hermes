@@ -122,7 +122,21 @@ Uniform costs can be adjusted as well.
    :header-rows: 1
    :file: parameter_explanation/conversion_cost_parameters.csv
    :width: 100
-   :widths: 30, 10, 60
+   :widths: 25, 15, 20, 40
+   :delim: ;
+
+Strike Prices
+=============
+
+Strike prices are defined per commodity in
+``techno_economic_data_conversion.yaml``. They are used when
+``consider_commodity_prices`` is enabled in ``algorithm_configuration.yaml``.
+
+.. csv-table::
+   :header-rows: 1
+   :file: parameter_explanation/strike_price_parameters.csv
+   :width: 100
+   :widths: 25, 15, 20, 40
    :delim: ;
 
 Conversion Specific Assumptions
@@ -147,7 +161,7 @@ And following parameters are necessary.
    :header-rows: 1
    :file: parameter_explanation/target_commodity.csv
    :width: 100
-   :widths: 20, 20, 60
+   :widths: 25, 20, 20, 35
    :delim: ;
 
 .. _parameter_explanation_transport:
@@ -160,14 +174,25 @@ Transport assumptions and setting decide on availability of different transport 
 .. code-block:: none
 
     commodity:
-        available transport means: list of transport means usable by commodity
-        transport mean 1: costs
-        transport mean 2: costs
+        potential_transportation: list of transport means usable by commodity
+        transport mean 1: transport costs
+        transport mean 2: transport costs
         ...
+        Boil_Off: loss fraction per day
+        Uses_Commodity_as_Shipping_Fuel: boolean
+        Self_Consumption: loss fraction per km
+        Shipping_Speed: km/h
 
 The transport input data is stored in ``techno_economic_data_transportation.yaml``.
 For each commodity, the file defines the admissible transport means together with
 the corresponding cost and loss assumptions.
+
+.. csv-table::
+   :header-rows: 1
+   :file: parameter_explanation/transport_parameters.csv
+   :width: 100
+   :widths: 25, 20, 25, 30
+   :delim: ;
 
 .. _parameter_explanation_plotting:
 
@@ -215,23 +240,9 @@ Comparison plotting options:
 
 Styling parameters in the current plotting configuration:
 
-.. code-block:: none
-
-    commodity_colors:  # adjust commodity colors
-        commodity_1: color_1
-        commodity_2: color_2
-        ...
-
-    nice_name_dictionary:  # to define nice names of results. If result not in dictionary, then nice name is result name
-        result_1: nice_name_result_1
-        result_2: nice_name_result_2
-        ...
-
-    transport_mean_styles:  # set line styles of transport routes based on transport means
-        ...
-
-    line_widths: # sets line widths of transport routes based on transport means
-        ...
-
-    infrastructure_colors:  # defines colors in infrastructure plot
-        ...
+.. csv-table::
+   :header-rows: 1
+   :file: parameter_explanation/plotting_style_parameters.csv
+   :width: 100
+   :widths: 25, 20, 55
+   :delim: ;

@@ -8,11 +8,8 @@ import shapely
 import numpy as np
 import matplotlib as mpl
 import matplotlib.lines as mlines
-import geopandas as gpd
-import cartopy.io.shapereader as shpreader
 
-from shapely.geometry import Point, MultiPolygon
-
+from data_processing.helpers_geometry import get_destination_information
 from plotting.helpers_plotting import load_data, get_complete_infrastructure
 from plotting.get_figures import get_routes_figure, get_cost_figure, get_production_costs_figure, get_infrastructure_figure, \
     get_energy_carrier_figure, get_cost_and_quantity_figure, get_supply_curves
@@ -37,48 +34,7 @@ if config_file['use_voronoi_cells']:
 path_processed_data = config_file['project_folder_path'] + 'processed_data/'
 
 use_voronoi = config_file['use_voronoi_cells']
-# create shapely object of destination
-if config_file['destination_type'] == 'location':
-    destination_location = Point(config_file['destination_location'])
-else:
-    destination_continent = config_file['destination_continent']
-
-    country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
-    world = gpd.read_file(country_shapefile)
-
-    state_shapefile = shpreader.natural_earth(resolution='10m', category='cultural',
-                                              name='admin_1_states_provinces')
-    states = gpd.read_file(state_shapefile)
-
-    country_states = config_file['destination_polygon']
-
-    first = True
-    for c in [*country_states.keys()]:
-        if country_states[c]:
-            for s in country_states[c]:
-                if first:
-                    destination_location = states[states['name'] == s]['geometry'].values[0]
-                    first = False
-                else:
-                    destination_location.union(states[states['name'] == s]['geometry'].values[0])
-        else:
-            if first:
-                destination_location = world[world['NAME_EN'] == c]['geometry'].values[0]
-                first = False
-            else:
-                destination_location.union(world[world['NAME_EN'] == c]['geometry'].values[0])
-
-    if config_file['use_biggest_landmass']:  # use only biggest land area
-        if len([*country_states.keys()]) == 1:
-            if isinstance(destination_location, MultiPolygon):
-                largest_area = 0
-                chosen_geom = None
-                for geom in destination_location.geoms:
-                    if geom.area > largest_area:
-                        largest_area = geom.area
-                        chosen_geom = geom
-
-                destination_location = chosen_geom
+destination_location = get_destination_information(config_file)['location']
 
 infrastructure_data, destination = load_data(path_processed_data, config_file)
 complete_infrastructure = get_complete_infrastructure(infrastructure_data, destination)

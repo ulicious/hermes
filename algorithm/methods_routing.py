@@ -28,6 +28,26 @@ def _build_options_from_mask(values, row_index, column_index, mask):
     })
 
 
+def _as_list(value):
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, set):
+        return list(value)
+    return [value]
+
+
+def _filter_shipping_infrastructure_by_destination_continents(shipping_infrastructure, destination_continents):
+    destination_continents = _as_list(destination_continents)
+    target_continents = set(destination_continents)
+
+    if target_continents.intersection({'Europe', 'Asia', 'Africa'}):
+        target_continents.update(['Europe', 'Asia', 'Africa'])
+
+    return shipping_infrastructure[shipping_infrastructure['continent'].isin(target_continents)]
+
+
 def _remove_visited_options_from_mask(mask, row_index, column_index, visited_infrastructure):
     row_lookup = pd.Index(row_index)
     column_lookup = {branch: position for position, branch in enumerate(column_index)}
@@ -71,7 +91,7 @@ def get_complete_infrastructure(data, config_file):
                 complete_infrastructure.loc['Destination', 'longitude'] = final_destination.x
                 complete_infrastructure.loc['Destination', 'current_transport_mean'] = m
                 complete_infrastructure.loc['Destination', 'graph'] = None
-                complete_infrastructure.loc['Destination', 'continent'] = data['destination']['continent']
+                complete_infrastructure.loc['Destination', 'continent'] = _as_list(data['destination']['continent'])[0]
 
             continue
 
@@ -763,7 +783,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
     @return: pandas.DataFrame with new branches
     """
 
-    destination_continent = data['destination']['continent']
+    destination_continents = data['destination']['continent']
 
     infrastructure_chunks = []
 
@@ -778,13 +798,8 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
             shipping_infrastructure = data['Shipping']['ports']
 
             # Only use ports which are on the same continent as the final destination
-            if destination_continent in ['Europe', 'Asia', 'Africa']:
-                shipping_infrastructure = shipping_infrastructure[shipping_infrastructure['continent'].isin(['Europe',
-                                                                                                             'Asia',
-                                                                                                             'Africa'])]
-            else:
-                shipping_infrastructure = shipping_infrastructure[
-                    shipping_infrastructure['continent'].isin([destination_continent])]
+            shipping_infrastructure = _filter_shipping_infrastructure_by_destination_continents(
+                shipping_infrastructure, destination_continents)
 
             shipping_distances = pd.read_csv(configuration['path_processed_data']
                                              + 'inner_infrastructure_distances/port_distances.csv',
@@ -1024,7 +1039,7 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
     @return: pandas.DataFrame with new branches
     """
 
-    destination_continent = data['destination']['continent']
+    destination_continents = data['destination']['continent']
     infrastructure_chunks = []
 
     for o in branches.index:
@@ -1041,13 +1056,8 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
             shipping_distances = np.ceil(shipping_distances.apply(pd.to_numeric, errors='raise'))
 
             # Only use ports which are on the same continent as the final destination
-            if destination_continent in ['Europe', 'Asia', 'Africa']:
-                shipping_infrastructure = shipping_infrastructure[shipping_infrastructure['continent'].isin(['Europe',
-                                                                                                             'Asia',
-                                                                                                             'Africa'])]
-            else:
-                shipping_infrastructure = shipping_infrastructure[
-                    shipping_infrastructure['continent'].isin([destination_continent])]
+            shipping_infrastructure = _filter_shipping_infrastructure_by_destination_continents(
+                shipping_infrastructure, destination_continents)
 
             shipping_distances_columns = [c for c in shipping_distances.columns if c in shipping_infrastructure.index]
             shipping_distances = shipping_distances[shipping_distances_columns]

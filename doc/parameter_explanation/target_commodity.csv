@@ -1,12 +1,13 @@
-Assumption / Setting;type;Explanation
-specific_investment;float;Specific investment into equipment
-fixed_maintenance;float;Yearly fixed maintenance of equipment
-lifetime;integer;Lifetime of facility
-electricity_demand;float;Electricity demand per MWh product in EURO / MWh
-co2_demand;float;CO2 demand per MWh product in EURO / t CO2
-nitrogen_demand;float;N2 demand per MWh product in EURO / t N2
-heat_demand;float;Heat demand per MWh product in EURO / MWh
-heat_demand_niveau;low', 'medium', 'high', None;Heat niveau of conversion process
-operating_hours;integer;Yearly operating hour of facility
-efficiency_autothermal;float;Efficiency if educt is burned to supply heat demand
-efficiency_external_heat;float;Efficiency if heat demand is covered by external source
+Assumption / Setting;type;Unit;Explanation
+potential_conversions;list;-;Target commodities into which the initial commodity can be converted
+specific_investment;float;EUR/MW_output;Specific investment according to the current cost formula (source capacity basis should be verified)
+fixed_maintenance;float;1/a;Yearly fixed maintenance as fraction of investment per year
+lifetime;integer;a;Lifetime of facility
+electricity_demand;float;MWh_el/MWh_output;Electricity demand
+co2_demand;float;t_CO2/MWh_output;CO2 demand
+nitrogen_demand;float;t_N2/MWh_output;N2 demand
+heat_demand;float;MWh_th/MWh_output;Heat demand
+heat_demand_niveau;'low_temperature', 'mid_temperature', 'high_temperature', None;-;Heat grade of conversion process
+operating_hours;integer;h/a;Yearly operating hours
+efficiency_autothermal;float;-;Conversion efficiency as fraction if educt is burned to supply heat demand
+efficiency_external_heat;float;-;Conversion efficiency as fraction if heat demand is covered by external source

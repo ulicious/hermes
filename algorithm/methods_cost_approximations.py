@@ -6,6 +6,16 @@ import numpy as np
 from collections import defaultdict
 
 
+def _as_list(value):
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, set):
+        return list(value)
+    return [value]
+
+
 def _get_global_conversion_lower_bound(
         commodity_object,
         source_commodity,
@@ -186,7 +196,7 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmarks, c
     destination_conversion_cache = {}
     continent_connections = data.get('continent_connections', {})
     reachable_continents = continent_connections.get('reachable_continents', {})
-    destination_continent = data['destination'].get('continent')
+    destination_continents = _as_list(data['destination'].get('continent'))
     convertible_locations = all_locations.index[conversion_possible].tolist()
     conversion_lower_bound_cache = {}
 
@@ -205,7 +215,8 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmarks, c
         used_shipping_mask = current_transport_means[positions] == 'Shipping'
         current_continents = current_continents_all[positions]
         shipping_required_mask = np.array([
-            destination_continent not in reachable_continents.get(current_continent, [current_continent])
+            not any(destination_continent in reachable_continents.get(current_continent, [current_continent])
+                    for destination_continent in destination_continents)
             for current_continent in current_continents
         ], dtype=bool)
 

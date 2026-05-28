@@ -10,8 +10,9 @@ import networkx as nx
 import cartopy.io.shapereader as shpreader
 
 from shapely.wkt import loads
-from shapely.geometry import Point, MultiLineString, MultiPolygon
+from shapely.geometry import MultiLineString, Point
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure
+from data_processing.helpers_geometry import get_destination_information
 
 
 def process_network_data(data, name, node_locations, graph_data):
@@ -122,10 +123,12 @@ def prepare_data_and_configuration_dictionary(config_file):
             strike_prices_commodity[c] = 0
 
     # create shapely object of destination
-    if config_file['destination_type'] == 'location':
-        destination_location = Point(config_file['destination_location'])
-        destination_continent = config_file['destination_continent']
+    destination_information = get_destination_information(config_file, world=world)
+    destination_location = destination_information['location']
+    destination_countries = destination_information['countries']
+    destination_continents = destination_information['continents']
 
+    if config_file['destination_type'] == 'location':
         # attach conversion costs and efficiencies to destination
         destination = pd.DataFrame(config_file['destination_location'], index=['longitude', 'latitude'],
                                    columns=['Destination']).transpose()
@@ -136,45 +139,6 @@ def prepare_data_and_configuration_dictionary(config_file):
 
         infrastructure_in_destination = None  # todo: we have to add some infrastructure here, otherweise there's not gonna be anything around
     else:
-        destination_continent = config_file['destination_continent']
-
-        state_shapefile = shpreader.natural_earth(resolution='10m', category='cultural',
-                                                  name='admin_1_states_provinces')
-        states = gpd.read_file(state_shapefile)
-
-        country_states = config_file['destination_polygon']
-
-        first = True
-        destination_location = None
-        for c in sorted(country_states.keys()):
-            if country_states[c]:
-                for s in sorted(country_states[c]):
-                    if first:
-                        destination_location = states[states['name'] == s]['geometry'].values[0]
-                        first = False
-                    else:
-                        destination_location = destination_location.union(states[states['name'] == s]['geometry'].values[0])
-            else:
-                if first:
-                    destination_location = world[world['NAME_EN'] == c]['geometry'].values[0]
-                    first = False
-                else:
-                    destination_location = destination_location.union(world[world['NAME_EN'] == c]['geometry'].values[0])
-
-        destination_location = destination_location.buffer(0)
-
-        if config_file['use_biggest_landmass']:  # use only biggest land area
-            if len([*country_states.keys()]) == 1:
-                if isinstance(destination_location, MultiPolygon):
-                    largest_area = 0
-                    chosen_geom = None
-                    for geom in destination_location.geoms:
-                        if geom.area > largest_area:
-                            largest_area = geom.area
-                            chosen_geom = geom
-
-                    destination_location = chosen_geom
-
         infrastructure_in_destination = []
         for i in conversion_costs_and_efficiencies.index:
             if 'PG' in i:
@@ -212,7 +176,8 @@ def prepare_data_and_configuration_dictionary(config_file):
                             'commodity_objects': {},
                             'strike_prices': strike_prices_commodity},
             'destination': {'location': destination_location,
-                            'continent': destination_continent,
+                            'countries': destination_countries,
+                            'continent': destination_continents,
                             'infrastructure': infrastructure_in_destination},
             'coastlines': coastlines,
             'conversion_costs_and_efficiencies': conversion_costs_and_efficiencies,

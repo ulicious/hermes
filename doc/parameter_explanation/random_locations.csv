@@ -1,10 +1,8 @@
 Assumption / Setting;Values;Explanation;Comment
-destination_type; 'location' or 'country'; defines destination type (single point location or country)
+destination_type; 'location' or 'country'; defines destination type (single point location or country);
 destination_location;[longitude, latitude];Coordinates of destination;
-destination_polygon; {country_name: [state_name_1, state_name_2, ...]}; dictionary with country names as keys and list with country states as values; keep state name list empty if complete country
-use_biggest_landmass;True / False;If True and the destination polygon contains one country with multiple landmasses, only the largest polygon is used;
-destination_country;string;Country name of the destination;Metadata for the scenario definition
-destination_continent;string;Continent of destination;Required for routing and plotting
+destination_countries; {country_name: [state_name_1, state_name_2, ...]}; dictionary with country names as keys and list with country states as values; keep state name list empty if complete country
+use_biggest_landmass;True / False;If True and the destination countries contain one country with multiple landmasses, only the largest polygon is used;
 origin_continents;list;If not empty, random locations will only be created on indicated continents. Empty if all continents;
 low_temp_heat_available_at_start;True / False;Indicates if low-temperature heat is available at start;"Affects conversion costs; value defined in cost_type"
 mid_temp_heat_available_at_start;True / False;Indicates if medium-temperature heat is available at start;"Affects conversion costs; value defined in cost_type"
