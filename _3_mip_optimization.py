@@ -36,7 +36,7 @@ def load_configuration_and_technology_data():
 def create_model(static_graph, start_location_data, start_road_distances,
                  start_new_pipeline_distances, end_location, config_file,
                  conversion_data, transport_data, solve, warm_start_route=None,
-                 warm_start_objective_lower_bound=None):
+                 use_warm_start_as_lower_bound=False):
     """Build one Gurobi MIP instance and optionally start its optimization."""
     return FastOptimizationGurobiModel(
         static_graph=static_graph,
@@ -48,15 +48,14 @@ def create_model(static_graph, start_location_data, start_road_distances,
         techno_economic_data_conversion=conversion_data,
         techno_economic_data_transport=transport_data,
         warm_start_route=warm_start_route,
-        warm_start_objective_lower_bound=warm_start_objective_lower_bound,
+        use_warm_start_as_lower_bound=use_warm_start_as_lower_bound,
         solve=solve)
 
 
 def create_warm_start_solution(result):
-    """Convert a stored heuristic result row into MIP edge keys and its objective value."""
+    """Convert a stored heuristic result row into ordered MIP edge keys."""
     result = result[result.columns[0]]
     route = ast.literal_eval(result.loc['taken_routes'])
-    objective_value = float(result.loc['current_total_costs'])
 
     commodity = None
     start = None
@@ -84,28 +83,23 @@ def create_warm_start_solution(result):
             commodity = segment[1]
 
     solution_route += [end + '+' + commodity + '-end']
-    return solution_route, objective_value
+    return solution_route
 
 
 def load_warm_start_from_result_file(project_path, location):
-    """Load one optional warm-start route from the heuristic result folder."""
+    """Load one warm-start route from the heuristic result folder."""
     result_file = os.path.join(
         project_path, 'results', 'location_results', str(location) + '_final_solution.csv')
-    if not os.path.exists(result_file):
-        logger.warning('Warm-start result file not found for origin %s: %s', location, result_file)
-        return None, None
     result = pd.read_csv(result_file, index_col=0)
     return create_warm_start_solution(result)
 
 
 def run_minimal_case(config_file, conversion_data, transport_data, solve,
-                     warm_start_objective_lower_bound=None):
+                     use_warm_start_as_lower_bound=False):
     """Build or solve the preprocessed diagnostic example."""
     processed_path = os.path.join(config_file['project_folder_path'], 'processed_data') + os.sep
     logger.info('Run preprocessed minimal MIP infrastructure case')
     case = load_minimal_mip_case(processed_path)
-    if warm_start_objective_lower_bound is None:
-        warm_start_objective_lower_bound = case.get('warm_start_objective_lower_bound')
     return create_model(
         static_graph=case['static_graph'],
         start_location_data=case['start_location_data'],
@@ -117,12 +111,12 @@ def run_minimal_case(config_file, conversion_data, transport_data, solve,
         transport_data=transport_data,
         solve=solve,
         warm_start_route=case['warm_start_route'],
-        warm_start_objective_lower_bound=warm_start_objective_lower_bound)
+        use_warm_start_as_lower_bound=use_warm_start_as_lower_bound)
 
 
 def run_real_locations(config_file, conversion_data, transport_data, solve,
-                       warm_start_routes=None, warm_start_objective_lower_bounds=None,
-                       use_warm_start_from_results=False):
+                       use_warm_start=False,
+                       use_warm_start_as_lower_bound=False):
     """
     Build or solve one MIP per real origin.
 
@@ -130,6 +124,11 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
     once. Within the loop only origin-specific connections are added.
     """
     project_path = config_file['project_folder_path']
+    if use_warm_start_as_lower_bound and not use_warm_start:
+        raise ValueError(
+            'use_warm_start_as_lower_bound=True requires use_warm_start=True '
+            'so the bound can be calculated from a route.')
+
     processed_path = os.path.join(project_path, 'processed_data')
     mip_path = os.path.join(processed_path, 'mip_data')
     logger.info('Load preprocessed static MIP graph for real locations')
@@ -148,24 +147,8 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
     for location in start_locations.index:
         logger.info('Build MIP for origin %s', location)
         warm_start_route = None
-        if isinstance(warm_start_routes, dict):
-            warm_start_route = warm_start_routes.get(location)
-        elif warm_start_routes is not None:
-            warm_start_route = warm_start_routes
-
-        result_objective = None
-        if use_warm_start_from_results:
-            result_route, result_objective = load_warm_start_from_result_file(project_path, location)
-            if warm_start_route is None:
-                warm_start_route = result_route
-
-        warm_start_objective_lower_bound = None
-        if isinstance(warm_start_objective_lower_bounds, dict):
-            warm_start_objective_lower_bound = warm_start_objective_lower_bounds.get(location)
-        else:
-            warm_start_objective_lower_bound = warm_start_objective_lower_bounds
-        if warm_start_objective_lower_bound is None:
-            warm_start_objective_lower_bound = result_objective
+        if use_warm_start:
+            warm_start_route = load_warm_start_from_result_file(project_path, location)
 
         model = create_model(
             static_graph=static_graph,
@@ -182,7 +165,7 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
             transport_data=transport_data,
             solve=solve,
             warm_start_route=warm_start_route,
-            warm_start_objective_lower_bound=warm_start_objective_lower_bound)
+            use_warm_start_as_lower_bound=use_warm_start_as_lower_bound)
         if solve:
             results.append({
                 'location': location,
@@ -197,9 +180,8 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
 
 
 def run_mip_optimization(use_minimal_example=None, solve=True,
-                         warm_start_routes=None,
-                         warm_start_objective_lower_bounds=None,
-                         use_warm_start_from_results=False):
+                         use_warm_start=False,
+                         use_warm_start_as_lower_bound=False):
     """Central entry point for both the diagnostic example and real MIP runs."""
     config_file, conversion_data, transport_data = load_configuration_and_technology_data()
     if use_minimal_example is None:
@@ -208,12 +190,11 @@ def run_mip_optimization(use_minimal_example=None, solve=True,
     if use_minimal_example:
         result = run_minimal_case(
             config_file, conversion_data, transport_data, solve,
-            warm_start_objective_lower_bounds)
+            use_warm_start_as_lower_bound)
     else:
         result = run_real_locations(
             config_file, conversion_data, transport_data, solve,
-            warm_start_routes, warm_start_objective_lower_bounds,
-            use_warm_start_from_results)
+            use_warm_start, use_warm_start_as_lower_bound)
     logger.info('MIP run completed in %.2f s', time.time() - start)
     return result
 
@@ -223,11 +204,11 @@ if __name__ == '__main__':
     # algorithm_configuration.yaml. Otherwise force True/False here.
     USE_MINIMAL_EXAMPLE = None
     SOLVE = True
-    USE_WARM_START_FROM_RESULTS = False
-    WARM_START_OBJECTIVE_LOWER_BOUND = None
+    USE_WARM_START = False
+    USE_WARM_START_AS_LOWER_BOUND = False
 
     run_mip_optimization(
         use_minimal_example=USE_MINIMAL_EXAMPLE,
         solve=SOLVE,
-        warm_start_objective_lower_bounds=WARM_START_OBJECTIVE_LOWER_BOUND,
-        use_warm_start_from_results=USE_WARM_START_FROM_RESULTS)
+        use_warm_start=USE_WARM_START,
+        use_warm_start_as_lower_bound=USE_WARM_START_AS_LOWER_BOUND)
