@@ -1,29 +1,16 @@
 import logging
 import os
-import sys
 import time
 
 import gurobipy as gp
 import numpy as np
-import pandas as pd
-import yaml
 from gurobipy import GRB
 from scipy import sparse
-
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
 
 try:
     from .prepare_data import prepare_data
 except ImportError:
     from prepare_data import prepare_data
-from data_processing.helpers_geometry import get_destination
-from data_processing.process_mip_data import (
-    load_minimal_mip_case,
-    load_static_mip_graph,
-    prepare_destination_mip_data,
-)
 
 
 logger = logging.getLogger(__name__)
@@ -45,11 +32,14 @@ class FastOptimizationGurobiModel:
                  start_new_pipeline_distances, end_location, config_file,
                  techno_economic_data_conversion, techno_economic_data_transport,
                  warm_start_route=None, export_edges=False,
+                 warm_start_objective_lower_bound=None,
                  solve=False):
+
         self.config_file = config_file
         self.techno_economic_data_conversion = techno_economic_data_conversion
         self.techno_economic_data_transport = techno_economic_data_transport
         self.solution_route = warm_start_route
+        self.warm_start_objective_lower_bound = warm_start_objective_lower_bound
 
         logger.info('Add origin- and destination-specific graph data')
         self.all_nodes_adjusted, self.target_nodes, self.edges, self.production_costs, \
@@ -174,7 +164,14 @@ class FastOptimizationGurobiModel:
             balance, self.edge_binaries, GRB.EQUAL,
             np.zeros(len(internal_indices)), name='balance')
 
-        self.model.setObjective(self.costs[target_indices].sum(), GRB.MINIMIZE)
+        self.objective_expr = self.costs[target_indices].sum()
+        if self.warm_start_objective_lower_bound is not None:
+            self.model.addConstr(
+                self.objective_expr >= self.warm_start_objective_lower_bound,
+                name='warm_start_objective_lower_bound')
+            logger.info('Added objective lower bound from warm-start value: %.6f',
+                        self.warm_start_objective_lower_bound)
+        self.model.setObjective(self.objective_expr, GRB.MINIMIZE)
         self.model.update()
         logger.info('Finished matrix model construction in %.2f s', time.time() - now)
 
@@ -207,66 +204,3 @@ class FastOptimizationGurobiModel:
             selected = np.flatnonzero(self.edge_binaries.X > 0.5)
             self.chosen_edges = [self.edge_names[index] for index in selected]
             logger.info('Optimal objective value: %.6f', self.objective_function_value)
-
-
-def load_inputs():
-    with open(os.path.join(PROJECT_ROOT, 'algorithm_configuration.yaml')) as yaml_file:
-        config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
-    with open(os.path.join(PROJECT_ROOT, 'data', 'techno_economic_data_transportation.yaml')) as yaml_file:
-        transport_data = yaml.load(yaml_file, Loader=yaml.FullLoader)
-    with open(os.path.join(PROJECT_ROOT, 'data', 'techno_economic_data_conversion.yaml')) as yaml_file:
-        conversion_data = yaml.load(yaml_file, Loader=yaml.FullLoader)
-    return config_file, conversion_data, transport_data
-
-
-def run_optimization(use_minimal_infrastructure=None, solve=False):
-    config_file, conversion_data, transport_data = load_inputs()
-    if use_minimal_infrastructure is None:
-        use_minimal_infrastructure = config_file.get('use_minimal_example', False)
-    processed_path = os.path.join(config_file['project_folder_path'], 'processed_data') + os.sep
-
-    if use_minimal_infrastructure:
-        logger.info('Load preprocessed minimal infrastructure case')
-        case = load_minimal_mip_case(processed_path)
-        return FastOptimizationGurobiModel(
-            static_graph=case['static_graph'],
-            start_location_data=case['start_location_data'],
-            start_road_distances=case['start_road_distances'],
-            start_new_pipeline_distances=case['start_new_pipeline_distances'],
-            end_location=case['end_location'],
-            config_file=config_file,
-            techno_economic_data_conversion=conversion_data,
-            techno_economic_data_transport=transport_data,
-            warm_start_route=case['warm_start_route'],
-            solve=solve)
-
-    logger.info('Load origin-independent graph for real-data optimization runs')
-    static_graph = load_static_mip_graph(os.path.join(processed_path, 'mip_data') + os.sep)
-    options = pd.read_csv(os.path.join(processed_path, 'mip_data', 'options.csv'), index_col=0)
-    start_locations = pd.read_csv(
-        os.path.join(config_file['project_folder_path'], 'start_destination_combinations.csv'),
-        index_col=0)
-    destination = get_destination(config_file)
-    end_location = prepare_destination_mip_data(options, destination)['destination_infrastructure'].tolist()
-    problems = []
-    for location in start_locations.index:
-        logger.info('Prepare optimization run for origin %s', location)
-        problems.append(FastOptimizationGurobiModel(
-            static_graph=static_graph,
-            start_location_data=start_locations.loc[location, :],
-            start_road_distances=pd.read_csv(
-                os.path.join(processed_path, 'mip_data', str(location) + '_start_road_distances.csv'),
-                index_col=0),
-            start_new_pipeline_distances=pd.read_csv(
-                os.path.join(processed_path, 'mip_data', str(location) + '_start_new_pipeline_distances.csv'),
-                index_col=0),
-            end_location=end_location,
-            config_file=config_file,
-            techno_economic_data_conversion=conversion_data,
-            techno_economic_data_transport=transport_data,
-            solve=solve))
-    return problems
-
-
-if __name__ == '__main__':
-    run_optimization()

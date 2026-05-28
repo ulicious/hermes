@@ -1,4 +1,3 @@
-import argparse
 import logging
 import os
 import time
@@ -36,7 +35,8 @@ def load_configuration_and_technology_data():
 
 def create_model(static_graph, start_location_data, start_road_distances,
                  start_new_pipeline_distances, end_location, config_file,
-                 conversion_data, transport_data, solve, warm_start_route=None):
+                 conversion_data, transport_data, solve, warm_start_route=None,
+                 warm_start_objective_lower_bound=None):
     """Build one Gurobi MIP instance and optionally start its optimization."""
     return FastOptimizationGurobiModel(
         static_graph=static_graph,
@@ -48,52 +48,64 @@ def create_model(static_graph, start_location_data, start_road_distances,
         techno_economic_data_conversion=conversion_data,
         techno_economic_data_transport=transport_data,
         warm_start_route=warm_start_route,
+        warm_start_objective_lower_bound=warm_start_objective_lower_bound,
         solve=solve)
 
 
 def create_warm_start_solution(result):
+    """Convert a stored heuristic result row into MIP edge keys and its objective value."""
     result = result[result.columns[0]]
     route = ast.literal_eval(result.loc['taken_routes'])
+    objective_value = float(result.loc['current_total_costs'])
 
     commodity = None
     start = None
     end = None
-    solution_route = []  # same commodity conversion required?
+    solution_route = []
     for n, segment in enumerate(route):
-        if n > 0:
-            if len(segment) == 5:  # transport
-
-                start = segment[0]
-                end = segment[3]
-
-                if start == 'Start':
-                    start = 'start'
-
-                transport_mean = segment[1]
-
-                solution_route.append(start + '+' + commodity + '-' + end + '+' + commodity + '-' + transport_mean)
-                start = end
-            elif len(segment) == 3:  # conversion
-
-                if commodity == segment[1]:
-                    continue
-
-                solution_route.append(start + '+' + commodity + '-' + end + '+' + segment[1])
-                commodity = segment[1]
-        else:
+        if n == 0:
             commodity = segment[0]
             start = 'start'
+            continue
+
+        if len(segment) == 5:
+            start = segment[0]
+            end = segment[3]
+            if start == 'Start':
+                start = 'start'
+            transport_mean = segment[1]
+            solution_route.append(
+                start + '+' + commodity + '-' + end + '+' + commodity + '-' + transport_mean)
+            start = end
+        elif len(segment) == 3:
+            if commodity == segment[1]:
+                continue
+            solution_route.append(start + '+' + commodity + '-' + end + '+' + segment[1])
+            commodity = segment[1]
 
     solution_route += [end + '+' + commodity + '-end']
+    return solution_route, objective_value
 
-    return solution_route
+
+def load_warm_start_from_result_file(project_path, location):
+    """Load one optional warm-start route from the heuristic result folder."""
+    result_file = os.path.join(
+        project_path, 'results', 'location_results', str(location) + '_final_solution.csv')
+    if not os.path.exists(result_file):
+        logger.warning('Warm-start result file not found for origin %s: %s', location, result_file)
+        return None, None
+    result = pd.read_csv(result_file, index_col=0)
+    return create_warm_start_solution(result)
 
 
-def run_minimal_case(config_file, conversion_data, transport_data, solve):
+def run_minimal_case(config_file, conversion_data, transport_data, solve,
+                     warm_start_objective_lower_bound=None):
     """Build or solve the preprocessed diagnostic example."""
     processed_path = os.path.join(config_file['project_folder_path'], 'processed_data') + os.sep
     logger.info('Run preprocessed minimal MIP infrastructure case')
     case = load_minimal_mip_case(processed_path)
+    if warm_start_objective_lower_bound is None:
+        warm_start_objective_lower_bound = case.get('warm_start_objective_lower_bound')
     return create_model(
         static_graph=case['static_graph'],
         start_location_data=case['start_location_data'],
@@ -104,10 +116,13 @@ def run_minimal_case(config_file, conversion_data, transport_data, solve):
         conversion_data=conversion_data,
         transport_data=transport_data,
         solve=solve,
-        warm_start_route=case['warm_start_route'])
+        warm_start_route=case['warm_start_route'],
+        warm_start_objective_lower_bound=warm_start_objective_lower_bound)
 
 
-def run_real_locations(config_file, conversion_data, transport_data, solve):
+def run_real_locations(config_file, conversion_data, transport_data, solve,
+                       warm_start_routes=None, warm_start_objective_lower_bounds=None,
+                       use_warm_start_from_results=False):
     """
     Build or solve one MIP per real origin.
 
@@ -132,13 +147,25 @@ def run_real_locations(config_file, conversion_data, transport_data, solve):
     results = []
     for location in start_locations.index:
         logger.info('Build MIP for origin %s', location)
+        warm_start_route = None
+        if isinstance(warm_start_routes, dict):
+            warm_start_route = warm_start_routes.get(location)
+        elif warm_start_routes is not None:
+            warm_start_route = warm_start_routes
 
-        use_warm_start = True
-        if use_warm_start:
-            solution  = pd.read_csv(project_path + 'results/location_results/' + str(location) + '_final_solution.csv', index_col=0)
-            solution_route = create_warm_start_solution(solution)
+        result_objective = None
+        if use_warm_start_from_results:
+            result_route, result_objective = load_warm_start_from_result_file(project_path, location)
+            if warm_start_route is None:
+                warm_start_route = result_route
+
+        warm_start_objective_lower_bound = None
+        if isinstance(warm_start_objective_lower_bounds, dict):
+            warm_start_objective_lower_bound = warm_start_objective_lower_bounds.get(location)
         else:
-            solution_route = None
+            warm_start_objective_lower_bound = warm_start_objective_lower_bounds
+        if warm_start_objective_lower_bound is None:
+            warm_start_objective_lower_bound = result_objective
 
         model = create_model(
             static_graph=static_graph,
@@ -154,8 +181,8 @@ def run_real_locations(config_file, conversion_data, transport_data, solve):
             conversion_data=conversion_data,
             transport_data=transport_data,
             solve=solve,
-            warm_start_route=solution_route)
-
+            warm_start_route=warm_start_route,
+            warm_start_objective_lower_bound=warm_start_objective_lower_bound)
         if solve:
             results.append({
                 'location': location,
@@ -169,22 +196,38 @@ def run_real_locations(config_file, conversion_data, transport_data, solve):
     return results
 
 
-def run_mip_optimization(use_minimal_example=None, solve=True):
+def run_mip_optimization(use_minimal_example=None, solve=True,
+                         warm_start_routes=None,
+                         warm_start_objective_lower_bounds=None,
+                         use_warm_start_from_results=False):
     """Central entry point for both the diagnostic example and real MIP runs."""
     config_file, conversion_data, transport_data = load_configuration_and_technology_data()
     if use_minimal_example is None:
         use_minimal_example = config_file.get('use_minimal_example', False)
     start = time.time()
     if use_minimal_example:
-        result = run_minimal_case(config_file, conversion_data, transport_data, solve)
+        result = run_minimal_case(
+            config_file, conversion_data, transport_data, solve,
+            warm_start_objective_lower_bounds)
     else:
-        result = run_real_locations(config_file, conversion_data, transport_data, solve)
+        result = run_real_locations(
+            config_file, conversion_data, transport_data, solve,
+            warm_start_routes, warm_start_objective_lower_bounds,
+            use_warm_start_from_results)
     logger.info('MIP run completed in %.2f s', time.time() - start)
     return result
 
 
 if __name__ == '__main__':
-    use_minimal_example = False
-    solve = True
+    # Set `USE_MINIMAL_EXAMPLE` to None to use the value from
+    # algorithm_configuration.yaml. Otherwise force True/False here.
+    USE_MINIMAL_EXAMPLE = None
+    SOLVE = True
+    USE_WARM_START_FROM_RESULTS = False
+    WARM_START_OBJECTIVE_LOWER_BOUND = None
 
-    run_mip_optimization(use_minimal_example=use_minimal_example, solve=solve)
+    run_mip_optimization(
+        use_minimal_example=USE_MINIMAL_EXAMPLE,
+        solve=SOLVE,
+        warm_start_objective_lower_bounds=WARM_START_OBJECTIVE_LOWER_BOUND,
+        use_warm_start_from_results=USE_WARM_START_FROM_RESULTS)
