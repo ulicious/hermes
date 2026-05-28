@@ -1,0 +1,7 @@
+Assumption / Setting;Values;Explanation
+commodity_colors;dictionary;Maps commodities and None to matplotlib color names used in commodity and route plots
+nice_name_dictionary;dictionary;Maps commodities, transport means, result names, and None to display labels
+transport_mean_styles;dictionary;Maps transport means to hatch or marker styles used in plots
+transport_mean_line_styles;dictionary;Maps transport means to line styles used for route plots
+line_widths;nested dictionary;Sets route line widths by commodity and transport mean
+infrastructure_colors;dictionary;Maps infrastructure types to colors used in infrastructure plots

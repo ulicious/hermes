@@ -1,0 +1,11 @@
+Assumption / Setting;type;Unit;Explanation
+strike_prices;dictionary;-;Commodity-specific strike prices that can be added to the optimization target when consider_commodity_prices is enabled
+Hydrogen_Gas;float;EUR/MWh_commodity;Strike price for gaseous hydrogen
+Hydrogen_Liquid;float;EUR/MWh_commodity;Strike price for liquid hydrogen
+Ammonia;float;EUR/MWh_commodity;Strike price for ammonia
+Methanol;float;EUR/MWh_commodity;Strike price for methanol
+Methane_Gas;float;EUR/MWh_commodity;Strike price for gaseous methane
+Methane_Liquid;float;EUR/MWh_commodity;Strike price for liquid methane
+DBT;float;EUR/MWh_commodity;Strike price for DBT
+MCH;float;EUR/MWh_commodity;Strike price for MCH
+FTF;float;EUR/MWh_commodity;Strike price for Fischer-Tropsch fuel

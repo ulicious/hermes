@@ -7,7 +7,7 @@ import pandas as pd
 import yaml
 
 from data_processing.helpers_geometry import get_destination
-from data_processing.process_mip_data import (
+from mixed_integer_program.mip_data_helpers import (
     load_minimal_mip_case,
     load_static_mip_graph,
     prepare_destination_mip_data,
@@ -36,7 +36,9 @@ def load_configuration_and_technology_data():
 def create_model(static_graph, start_location_data, start_road_distances,
                  start_new_pipeline_distances, end_location, config_file,
                  conversion_data, transport_data, solve, warm_start_route=None,
-                 use_warm_start_as_lower_bound=False):
+                 use_warm_start_as_lower_bound=False,
+                 mip_gap=None, time_limit=None,
+                 filter_edges_above_warm_start=False):
     """Build one Gurobi MIP instance and optionally start its optimization."""
     return FastOptimizationGurobiModel(
         static_graph=static_graph,
@@ -49,6 +51,9 @@ def create_model(static_graph, start_location_data, start_road_distances,
         techno_economic_data_transport=transport_data,
         warm_start_route=warm_start_route,
         use_warm_start_as_lower_bound=use_warm_start_as_lower_bound,
+        mip_gap=mip_gap,
+        time_limit=time_limit,
+        filter_edges_above_warm_start=filter_edges_above_warm_start,
         solve=solve)
 
 
@@ -95,7 +100,9 @@ def load_warm_start_from_result_file(project_path, location):
 
 
 def run_minimal_case(config_file, conversion_data, transport_data, solve,
-                     use_warm_start_as_lower_bound=False):
+                     use_warm_start_as_lower_bound=False,
+                     mip_gap=None, time_limit=None,
+                     filter_edges_above_warm_start=False):
     """Build or solve the preprocessed diagnostic example."""
     processed_path = os.path.join(config_file['project_folder_path'], 'processed_data') + os.sep
     logger.info('Run preprocessed minimal MIP infrastructure case')
@@ -111,12 +118,17 @@ def run_minimal_case(config_file, conversion_data, transport_data, solve,
         transport_data=transport_data,
         solve=solve,
         warm_start_route=case['warm_start_route'],
-        use_warm_start_as_lower_bound=use_warm_start_as_lower_bound)
+        use_warm_start_as_lower_bound=use_warm_start_as_lower_bound,
+        mip_gap=mip_gap,
+        time_limit=time_limit,
+        filter_edges_above_warm_start=filter_edges_above_warm_start)
 
 
 def run_real_locations(config_file, conversion_data, transport_data, solve,
                        use_warm_start=False,
-                       use_warm_start_as_lower_bound=False):
+                       use_warm_start_as_lower_bound=False,
+                       mip_gap=None, time_limit=None,
+                       filter_edges_above_warm_start=False):
     """
     Build or solve one MIP per real origin.
 
@@ -128,6 +140,10 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
         raise ValueError(
             'use_warm_start_as_lower_bound=True requires use_warm_start=True '
             'so the bound can be calculated from a route.')
+    if filter_edges_above_warm_start and not use_warm_start:
+        raise ValueError(
+            'filter_edges_above_warm_start=True requires use_warm_start=True '
+            'so the filter can calculate the route costs.')
 
     processed_path = os.path.join(project_path, 'processed_data')
     mip_path = os.path.join(processed_path, 'mip_data')
@@ -165,7 +181,10 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
             transport_data=transport_data,
             solve=solve,
             warm_start_route=warm_start_route,
-            use_warm_start_as_lower_bound=use_warm_start_as_lower_bound)
+            use_warm_start_as_lower_bound=use_warm_start_as_lower_bound,
+            mip_gap=mip_gap,
+            time_limit=time_limit,
+            filter_edges_above_warm_start=filter_edges_above_warm_start)
         if solve:
             results.append({
                 'location': location,
@@ -179,36 +198,42 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
     return results
 
 
-def run_mip_optimization(use_minimal_example=None, solve=True,
+def run_mip_optimization(use_minimal_example=False, solve=True,
                          use_warm_start=False,
-                         use_warm_start_as_lower_bound=False):
+                         use_warm_start_as_lower_bound=False,
+                         mip_gap=None, time_limit=None,
+                         filter_edges_above_warm_start=False):
     """Central entry point for both the diagnostic example and real MIP runs."""
     config_file, conversion_data, transport_data = load_configuration_and_technology_data()
-    if use_minimal_example is None:
-        use_minimal_example = config_file.get('use_minimal_example', False)
     start = time.time()
     if use_minimal_example:
         result = run_minimal_case(
             config_file, conversion_data, transport_data, solve,
-            use_warm_start_as_lower_bound)
+            use_warm_start_as_lower_bound, mip_gap, time_limit,
+            filter_edges_above_warm_start)
     else:
         result = run_real_locations(
             config_file, conversion_data, transport_data, solve,
-            use_warm_start, use_warm_start_as_lower_bound)
+            use_warm_start, use_warm_start_as_lower_bound, mip_gap, time_limit,
+            filter_edges_above_warm_start)
     logger.info('MIP run completed in %.2f s', time.time() - start)
     return result
 
 
 if __name__ == '__main__':
-    # Set `USE_MINIMAL_EXAMPLE` to None to use the value from
-    # algorithm_configuration.yaml. Otherwise force True/False here.
-    USE_MINIMAL_EXAMPLE = None
+    USE_MINIMAL_EXAMPLE = False
     SOLVE = True
     USE_WARM_START = False
     USE_WARM_START_AS_LOWER_BOUND = False
+    FILTER_EDGES_ABOVE_WARM_START = False
+    MIP_GAP = None
+    TIME_LIMIT = None
 
     run_mip_optimization(
         use_minimal_example=USE_MINIMAL_EXAMPLE,
         solve=SOLVE,
         use_warm_start=USE_WARM_START,
-        use_warm_start_as_lower_bound=USE_WARM_START_AS_LOWER_BOUND)
+        use_warm_start_as_lower_bound=USE_WARM_START_AS_LOWER_BOUND,
+        mip_gap=MIP_GAP,
+        time_limit=TIME_LIMIT,
+        filter_edges_above_warm_start=FILTER_EDGES_ABOVE_WARM_START)

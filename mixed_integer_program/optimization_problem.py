@@ -14,8 +14,6 @@ try:
     from .prepare_data import prepare_data, create_edges_from_distance_only, create_graph
 except ImportError:
     from prepare_data import prepare_data, create_edges_from_distance_only, create_graph
-from data_processing.process_mip_data import calculate_road_distances
-
 
 # noinspection PyTypeChecker
 class OptimizationGurobiModel:
@@ -236,6 +234,10 @@ class OptimizationGurobiModel:
         self.model.Params.PoolSearchMode = 0  # don’t look for additional solutions
 
         self.model.Params.Threads = 1
+        if self.mip_gap is not None:
+            self.model.Params.MIPGap = self.mip_gap
+        if self.time_limit is not None:
+            self.model.Params.TimeLimit = self.time_limit
 
         binaries = [v for v in self.model.getVars() if v.VType == gp.GRB.BINARY]
         self.model._binaries = binaries
@@ -302,11 +304,11 @@ class OptimizationGurobiModel:
 
         self.status = self.model.status
 
-        if self.status == 2:
+        if self.model.SolCount > 0:
 
             self.objective_function_value = self.model.objVal
 
-    def __init__(self):
+    def __init__(self, mip_gap=None, time_limit=None):
 
         # ----------------------------------
         # Set up problem
@@ -314,6 +316,9 @@ class OptimizationGurobiModel:
         self.instance = None
         self.status = None
         self.objective = None
+        self.objective_function_value = None
+        self.mip_gap = mip_gap
+        self.time_limit = time_limit
 
         self.model_type = 'gurobi'
 
@@ -353,12 +358,6 @@ class OptimizationGurobiModel:
 
             df = pd.DataFrame(subset_seven).transpose()
             df.to_excel(path_overall_data + 'transport_full_edges.xlsx')
-
-        if False:
-            start_distance = calculate_road_distances(config_file['tolerance_distance'], options, start_point, start_name)
-            self.start_edges = create_edges_from_distance_only([start_distance],
-                                                               ['Road', 'New_Pipeline_Gas', 'New_Pipeline_Liquid'],
-                                                               techno_economic_data_transport, all_commodities, start_commodities)
 
         self.model = gp.Model()
         self.optimize()
@@ -439,6 +438,8 @@ target_commodities = config_file['target_commodity']
 path_overall_data = config_file['project_folder_path']
 path_raw_data = path_overall_data + 'raw_data/'
 path_processed_data = path_overall_data + 'processed_data/'
+MIP_GAP = None
+TIME_LIMIT = None
 
 options = pd.read_csv(path_processed_data + 'mip_data/' + 'options.csv', index_col=0)
 
@@ -450,7 +451,9 @@ for i in start_locations.index:
     start_name = 'start'
     end_location = destination_infrastructure['destination_infrastructure'].tolist()
 
-    problem = OptimizationGurobiModel()  # todo: alle end infrastructure fehlen
+    problem = OptimizationGurobiModel(
+        mip_gap=MIP_GAP,
+        time_limit=TIME_LIMIT)  # todo: alle end infrastructure fehlen
 
 if False:
     result = pd.read_csv(path_overall_data + 'results/location_results/' + str(n) + '_final_solution.csv', index_col=0)

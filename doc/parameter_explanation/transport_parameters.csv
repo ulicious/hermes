@@ -1,0 +1,12 @@
+Assumption / Setting;type;Unit;Explanation
+potential_transportation;list;-;Transport means that can be used for the commodity
+Pipeline_Gas;float;EUR/MWh_commodity/1000 km;Specific transport cost for existing gas pipelines
+New_Pipeline_Gas;float;EUR/MWh_commodity/1000 km;Specific transport cost for newly built gas pipelines
+Pipeline_Liquid;float;EUR/MWh_commodity/1000 km;Specific transport cost for existing liquid pipelines
+New_Pipeline_Liquid;float;EUR/MWh_commodity/1000 km;Specific transport cost for newly built liquid pipelines
+Shipping;float;EUR/MWh_commodity/1000 km;Specific shipping cost
+Road;float;EUR/MWh_commodity/1000 km;Specific road transport cost
+Boil_Off;float;1/d;Daily transported-energy loss fraction for shipping
+Uses_Commodity_as_Shipping_Fuel;True / False;-;If True, shipping fuel use is modeled as commodity self-consumption instead of adding a monetary shipping cost
+Self_Consumption;float;1/km;Transported-energy loss fraction per km when the commodity is used as shipping fuel
+Shipping_Speed;float;km/h;Average shipping speed

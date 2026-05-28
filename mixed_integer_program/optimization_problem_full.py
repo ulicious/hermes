@@ -16,9 +16,7 @@ try:
     from .prepare_data import prepare_data, create_edges_from_distance_only, create_graph
 except ImportError:
     from prepare_data import prepare_data, create_edges_from_distance_only, create_graph
-from data_processing.process_mip_data import (
-    calculate_road_distances,
-    build_static_mip_graph,
+from mixed_integer_program.mip_data_helpers import (
     load_static_mip_graph,
     load_minimal_mip_case,
     prepare_destination_mip_data,
@@ -335,6 +333,12 @@ class OptimizationGurobiModel:
         self.model.Params.PoolSearchMode = 0  # don’t look for additional solutions
 
         self.model.Params.Threads = 1
+        if self.mip_gap is not None:
+            self.model.Params.MIPGap = self.mip_gap
+            logger.info('Set Gurobi MIPGap to %s', self.mip_gap)
+        if self.time_limit is not None:
+            self.model.Params.TimeLimit = self.time_limit
+            logger.info('Set Gurobi TimeLimit to %s seconds', self.time_limit)
         logger.info('Solver parameters set; start optimization')
 
         binaries = [v for v in self.model.getVars() if v.VType == gp.GRB.BINARY]
@@ -433,16 +437,21 @@ class OptimizationGurobiModel:
         self.status = self.model.status
         logger.info('Optimization finished with Gurobi status %s', self.status)
 
-        if self.status == 2:
-
+        if self.model.SolCount > 0:
             self.objective_function_value = self.model.objVal
-            logger.info('Optimal objective value: %.6f', self.objective_function_value)
+            if self.status == GRB.OPTIMAL:
+                logger.info('Optimal objective value: %.6f', self.objective_function_value)
+            else:
+                logger.info('Best incumbent objective value: %.6f with status %s',
+                            self.objective_function_value, self.status)
 
     def __init__(self, static_graph, start_location_data, start_road_distances,
                  start_new_pipeline_distances, end_location, config_file,
                  techno_economic_data_conversion, techno_economic_data_transport,
                  warm_start_route=None, create_results=False,
-                 warm_start_objective_lower_bound=None):
+                 warm_start_objective_lower_bound=None,
+                 mip_gap=None, time_limit=None,
+                 filter_edges_above_warm_start=False):
 
         # ----------------------------------
         # Set up problem
@@ -450,6 +459,7 @@ class OptimizationGurobiModel:
         self.instance = None
         self.status = None
         self.objective = None
+        self.objective_function_value = None
 
         self.model_type = 'gurobi'
 
@@ -461,13 +471,17 @@ class OptimizationGurobiModel:
         self.eps = 0.001
         self.solution_route = warm_start_route
         self.warm_start_objective_lower_bound = warm_start_objective_lower_bound
+        self.mip_gap = mip_gap
+        self.time_limit = time_limit
+        self.filter_edges_above_warm_start = filter_edges_above_warm_start
 
         logger.info('Add origin- and destination-specific graph data')
         self.all_nodes_adjusted, self.target_nodes, self.edges, self.production_costs, self.transport_means, \
             self.max_costs, self.conversion_edges, self.transport_edges = \
             prepare_data(start_location_data, static_graph, start_road_distances,
                          start_new_pipeline_distances, end_location, config_file,
-                         self.techno_economic_data_transport)
+                         self.techno_economic_data_transport, warm_start_route,
+                         filter_edges_above_warm_start)
 
         logger.info('Optimization graph contains %s nodes and %s edges (%s conversion, %s transport)',
                     len(self.all_nodes_adjusted), len(self.edges),
@@ -488,12 +502,6 @@ class OptimizationGurobiModel:
         pd.DataFrame(subset_six).transpose().to_csv(path_overall_data + 'conversion_edges.csv')
         pd.DataFrame(subset_seven).transpose().to_csv(path_overall_data + 'transport_edges.csv')
         logger.info('Exported current conversion and transport edge tables')
-
-        if False:
-            start_distance = calculate_road_distances(config_file['tolerance_distance'], options, start_point, start_name)
-            self.start_edges = create_edges_from_distance_only([start_distance],
-                                                               ['Road', 'New_Pipeline_Gas', 'New_Pipeline_Liquid'],
-                                                               techno_economic_data_transport, all_commodities, start_commodities)
 
         self.model = gp.Model()
         logger.info('Created Gurobi model instance')
@@ -583,6 +591,8 @@ techno_economic_path = path_config + '/data/'
 # This switch selects which preprocessed static graph file is loaded.
 # `prepare_data` adds only the current start and destination edges.
 USE_MINIMAL_INFRASTRUCTURE = True
+MIP_GAP = None
+TIME_LIMIT = None
 
 if USE_MINIMAL_INFRASTRUCTURE:
     logger.info('Load preprocessed minimal infrastructure case')
@@ -597,7 +607,10 @@ if USE_MINIMAL_INFRASTRUCTURE:
         config_file=config_file,
         techno_economic_data_conversion=techno_economic_data_conversion,
         techno_economic_data_transport=techno_economic_data_transport,
-        warm_start_route=minimal_case['warm_start_route'])
+        warm_start_route=minimal_case['warm_start_route'],
+        mip_gap=MIP_GAP,
+        time_limit=TIME_LIMIT,
+        filter_edges_above_warm_start=False)
 else:
     logger.info('Load origin-independent graph for real-data optimization runs')
     static_graph = load_static_mip_graph(path_processed_data + 'mip_data/')
@@ -625,7 +638,10 @@ else:
             end_location=end_location,
             config_file=config_file,
             techno_economic_data_conversion=techno_economic_data_conversion,
-            techno_economic_data_transport=techno_economic_data_transport)
+            techno_economic_data_transport=techno_economic_data_transport,
+            mip_gap=MIP_GAP,
+            time_limit=TIME_LIMIT,
+            filter_edges_above_warm_start=False)
 
 if False:
     result = pd.read_csv(path_overall_data + 'results/location_results/' + str(n) + '_final_solution.csv', index_col=0)

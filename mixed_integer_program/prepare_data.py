@@ -1,13 +1,18 @@
 import ast
+import logging
 
 import pandas as pd
 import networkx as nx
 
-from data_processing.process_mip_data import create_transport_edges
+from mixed_integer_program.mip_data_helpers import create_transport_edges
+
+
+logger = logging.getLogger(__name__)
 
 
 def prepare_data(start_location_data, static_graph, start_road_distances, start_new_pipeline_distances,
-                 end_node, config_file, techno_economic_data_transport):
+                 end_node, config_file, techno_economic_data_transport,
+                 warm_start_route=None, filter_edges_above_warm_start=False):
     """
     Complete the commodity-expanded graph for one optimization location.
 
@@ -92,7 +97,61 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
         {key: value[1:] for key, value in sink_edges.items()}, orient='index', columns=columns)
     transport_edges = pd.concat([transport_edges, sink_edges_df], axis=0)
 
+    if filter_edges_above_warm_start:
+        edges, conversion_edges, transport_edges = filter_edges_by_warm_start_costs(
+            edges, conversion_edges, transport_edges, production_costs, warm_start_route)
+
     return all_nodes_adjusted, target_nodes, edges, production_costs, transport_means, max_costs, conversion_edges, transport_edges
+
+
+def calculate_route_objective(edges, production_costs, route):
+    """Calculate route costs with the same cost propagation used by the MIP."""
+    if not route:
+        raise ValueError('Cannot calculate route objective for an empty route')
+
+    first_edge = edges[route[0]]
+    start_commodity = first_edge[1].split('+', 1)[1]
+    total_costs = production_costs[start_commodity]
+
+    for edge_key in route:
+        edge = edges[edge_key]
+        edge_costs = edge[3]
+        edge_loss = edge[4]
+        total_costs = (total_costs + edge_costs) / (1 - edge_loss)
+
+    return total_costs
+
+
+def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
+                                     production_costs, warm_start_route):
+    """
+    Remove loss-free edges whose additive costs already exceed the warm-start route.
+
+    Edge position 4 stores loss, not efficiency. Therefore an edge with
+    technology efficiency 1 has loss 0 and contributes only absolute costs.
+    """
+    if warm_start_route is None:
+        logger.warning('Warm-start edge filter requested, but no warm-start route was provided')
+        return edges, conversion_edges, transport_edges
+
+    warm_start_costs = calculate_route_objective(edges, production_costs, warm_start_route)
+    warm_start_edges = set(warm_start_route)
+    removed_edges = [
+        key for key, edge in edges.items()
+        if key not in warm_start_edges and abs(edge[4]) <= 1e-12 and edge[3] > warm_start_costs
+    ]
+    if not removed_edges:
+        logger.info('Warm-start edge filter removed no edges; route costs %.6f', warm_start_costs)
+        return edges, conversion_edges, transport_edges
+
+    filtered_edges = {key: value for key, value in edges.items() if key not in removed_edges}
+    conversion_edges = conversion_edges.drop(
+        index=conversion_edges.index.intersection(removed_edges))
+    transport_edges = transport_edges.drop(
+        index=transport_edges.index.intersection(removed_edges))
+    logger.info('Warm-start edge filter removed %s loss-free edges with costs above %.6f',
+                len(removed_edges), warm_start_costs)
+    return filtered_edges, conversion_edges, transport_edges
 
 
 def create_edges_from_distance_only(df_list, transport_means, techno_economic_data_transport,

@@ -33,6 +33,8 @@ class FastOptimizationGurobiModel:
                  techno_economic_data_conversion, techno_economic_data_transport,
                  warm_start_route=None, export_edges=False,
                  use_warm_start_as_lower_bound=False,
+                 mip_gap=None, time_limit=None,
+                 filter_edges_above_warm_start=False,
                  solve=False):
 
         self.config_file = config_file
@@ -41,6 +43,9 @@ class FastOptimizationGurobiModel:
         self.solution_route = warm_start_route
         self.use_warm_start_as_lower_bound = use_warm_start_as_lower_bound
         self.warm_start_objective_lower_bound = None
+        self.mip_gap = mip_gap
+        self.time_limit = time_limit
+        self.filter_edges_above_warm_start = filter_edges_above_warm_start
 
         logger.info('Add origin- and destination-specific graph data')
         self.all_nodes_adjusted, self.target_nodes, self.edges, self.production_costs, \
@@ -48,7 +53,8 @@ class FastOptimizationGurobiModel:
             self.conversion_edges, self.transport_edges = prepare_data(
                 start_location_data, static_graph, start_road_distances,
                 start_new_pipeline_distances, end_location, config_file,
-                techno_economic_data_transport)
+                techno_economic_data_transport, warm_start_route,
+                filter_edges_above_warm_start)
 
         logger.info('Optimization graph contains %s nodes and %s edges (%s conversion, %s transport)',
                     len(self.all_nodes_adjusted), len(self.edges),
@@ -227,12 +233,22 @@ class FastOptimizationGurobiModel:
         self.model.Params.Presolve = 2
         self.model.Params.PoolSearchMode = 0
         self.model.Params.Threads = 1
+        if self.mip_gap is not None:
+            self.model.Params.MIPGap = self.mip_gap
+            logger.info('Set Gurobi MIPGap to %s', self.mip_gap)
+        if self.time_limit is not None:
+            self.model.Params.TimeLimit = self.time_limit
+            logger.info('Set Gurobi TimeLimit to %s seconds', self.time_limit)
 
         logger.info('Start optimization')
         self.model.optimize()
         self.status = self.model.Status
-        if self.status == GRB.OPTIMAL:
+        if self.model.SolCount > 0:
             self.objective_function_value = self.model.ObjVal
             selected = np.flatnonzero(self.edge_binaries.X > 0.5)
             self.chosen_edges = [self.edge_names[index] for index in selected]
-            logger.info('Optimal objective value: %.6f', self.objective_function_value)
+            if self.status == GRB.OPTIMAL:
+                logger.info('Optimal objective value: %.6f', self.objective_function_value)
+            else:
+                logger.info('Best incumbent objective value: %.6f with status %s',
+                            self.objective_function_value, self.status)
