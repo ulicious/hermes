@@ -12,11 +12,15 @@ from gurobipy import GRB
 
 from shapely.geometry import Point
 
-from prepare_data import prepare_data, create_edges_from_distance_only, create_graph
+try:
+    from .prepare_data import prepare_data, create_edges_from_distance_only, create_graph
+except ImportError:
+    from prepare_data import prepare_data, create_edges_from_distance_only, create_graph
 from data_processing.process_mip_data import (
     calculate_road_distances,
     build_static_mip_graph,
     load_static_mip_graph,
+    load_minimal_mip_case,
     prepare_destination_mip_data,
 )
 from data_processing.helpers_geometry import get_destination
@@ -455,6 +459,7 @@ class OptimizationGurobiModel:
 
         self.BigM = 200
         self.eps = 0.001
+        self.solution_route = warm_start_route
         self.warm_start_objective_lower_bound = warm_start_objective_lower_bound
 
         logger.info('Add origin- and destination-specific graph data')

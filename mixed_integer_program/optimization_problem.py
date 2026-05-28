@@ -10,7 +10,10 @@ from gurobipy import GRB
 
 from shapely.geometry import Point
 
-from prepare_data import prepare_data, create_edges_from_distance_only, create_graph
+try:
+    from .prepare_data import prepare_data, create_edges_from_distance_only, create_graph
+except ImportError:
+    from prepare_data import prepare_data, create_edges_from_distance_only, create_graph
 from data_processing.process_mip_data import calculate_road_distances
 
 
