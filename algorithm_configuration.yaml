@@ -1,5 +1,5 @@
 # general configuration
-project_folder_path: '/home/localadmin/Dokumente/Transportmodell/'  # full path of folder
+project_folder_path: 'C:\Users\mt5285\Documents\Transportmodell\'  # full path of folder
 use_minimal_example: False
 use_low_storage: False  # distances are not precalculated --> lower storage demand but higher memory and time demand
 use_low_memory: False  # avoids parallel processing and large matrix implementations --> lower memory demand but higher time demand
@@ -16,10 +16,8 @@ create_mip_data: False
 # parameters and assumptions for start - destination - combination file
 destination_type: 'country'  # defines the destination type: 'location' (single point) or 'country' (polygon / multipolygon)
 destination_location: [9.993682, 53.551086]  # [Longitude, Latitude]  # todo: check with single location
-destination_polygon: {"Germany": []}  # dictionary with country: list of states. If complete country, leave list empty
+destination_countries: {"Germany": []}  # dictionary with country: list of states. If complete country, leave list empty
 use_biggest_landmass: True  # True/False; some countries have several not connected shapes (USA: mainland, Alaska, hawaii, ...) --> choose biggest
-destination_country: "Germany"  # todo: get country and continent from destination
-destination_continent: 'Europe'
 origin_continents: []  # [] if all continents are possible, else define continents like ['Europe']  # todo: auch bei Voronoi Zellen implementieren
 low_temp_heat_available_at_start: False
 mid_temp_heat_available_at_start: False
