@@ -3,18 +3,16 @@ import math
 
 from shapely.geometry import Polygon, Point, MultiPolygon
 import geopandas as gpd
-import cartopy.io.shapereader as shpreader
+
+from data_processing.natural_earth_data import load_states, load_world
 
 
 def _load_world():
-    country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
-    return gpd.read_file(country_shapefile)
+    return load_world()
 
 
 def _load_states():
-    state_shapefile = shpreader.natural_earth(resolution='10m', category='cultural',
-                                              name='admin_1_states_provinces')
-    return gpd.read_file(state_shapefile)
+    return load_states()
 
 
 def _get_destination_countries_from_config(config_file):
@@ -26,6 +24,120 @@ def _get_destination_countries_from_config(config_file):
 
 def _unique_preserve_order(values):
     return list(dict.fromkeys(values))
+
+
+def create_rectangle(minimal_latitude, maximal_latitude, minimal_longitude, maximal_longitude):
+    """Create a rectangular lon/lat polygon from latitude and longitude bounds."""
+    return Polygon([Point([minimal_longitude, minimal_latitude]),
+                    Point([minimal_longitude, maximal_latitude]),
+                    Point([maximal_longitude, maximal_latitude]),
+                    Point([maximal_longitude, minimal_latitude])])
+
+
+def get_boundaries_from_config(config_file, prefix, use_minimal_example=None):
+    """
+    Read latitude/longitude bounds from explicitly prefixed config keys.
+    """
+    if use_minimal_example is None:
+        use_minimal_example = config_file.get('use_minimal_example', False)
+    if use_minimal_example:
+        return 35, 71, -25, 45
+
+    required_keys = [
+        prefix + 'minimal_latitude',
+        prefix + 'maximal_latitude',
+        prefix + 'minimal_longitude',
+        prefix + 'maximal_longitude',
+    ]
+    missing_keys = [key for key in required_keys if key not in config_file]
+    if missing_keys:
+        raise KeyError('Missing required configuration keys: ' + ', '.join(missing_keys))
+
+    return (config_file[prefix + 'minimal_latitude'], config_file[prefix + 'maximal_latitude'],
+            config_file[prefix + 'minimal_longitude'], config_file[prefix + 'maximal_longitude'])
+
+
+def create_country_state_polygon(country_states, world=None, states=None,
+                                 use_biggest_landmass=False):
+    """Create one polygon from a {country: [states]} mapping."""
+    if not country_states:
+        raise ValueError('No countries configured for polygon creation.')
+
+    if world is None:
+        world = _load_world()
+    if states is None:
+        states = _load_states()
+
+    first = True
+    combined_location = None
+    selected_countries = []
+    selected_continents = []
+
+    for country in sorted(country_states.keys()):
+        country_data = world[world['NAME_EN'] == country]
+        if country_data.empty:
+            raise ValueError('Country not found in Natural Earth data: ' + str(country))
+
+        selected_countries.append(country)
+        selected_continents += country_data['CONTINENT'].dropna().tolist()
+
+        if country_states[country]:
+            for state in sorted(country_states[country]):
+                state_data = states[states['name'] == state]
+                if state_data.empty:
+                    raise ValueError('State not found in Natural Earth data: ' + str(state))
+
+                geom = state_data['geometry'].values[0]
+                combined_location = geom if first else combined_location.union(geom)
+                first = False
+        else:
+            geom = country_data['geometry'].values[0]
+            combined_location = geom if first else combined_location.union(geom)
+            first = False
+
+    combined_location = combined_location.buffer(0)
+
+    if use_biggest_landmass and len(country_states) == 1 and isinstance(combined_location, MultiPolygon):
+        combined_location = max(combined_location.geoms, key=lambda geom: geom.area)
+
+    return {'location': combined_location,
+            'countries': _unique_preserve_order(selected_countries),
+            'continents': _unique_preserve_order(selected_continents),
+            'country_states': country_states}
+
+
+def get_start_location_information(config_file, world=None, states=None):
+    """Build the configured start-location sampling polygon."""
+    if world is None:
+        world = _load_world()
+    if states is None:
+        states = _load_states()
+
+    if config_file.get('use_minimal_example', False):
+        europe = world[world['CONTINENT'] == 'Europe']
+        return {'location': europe.unary_union.buffer(0),
+                'countries': europe['NAME_EN'].dropna().tolist(),
+                'continents': ['Europe'],
+                'country_states': {}}
+
+    area_type = config_file.get('start_location_area_type', 'rectangle')
+    if area_type == 'countries':
+        return create_country_state_polygon(
+            config_file.get('start_location_countries', {}),
+            world=world, states=states,
+            use_biggest_landmass=config_file.get('use_biggest_landmass', False))
+
+    if area_type != 'rectangle':
+        raise ValueError("start_location_area_type must be 'rectangle' or 'countries'.")
+
+    min_lat, max_lat, min_lon, max_lon = get_boundaries_from_config(
+        config_file, prefix='start_location_')
+    rectangle = create_rectangle(min_lat, max_lat, min_lon, max_lon)
+    countries = world[world.geometry.intersects(rectangle)]
+    return {'location': rectangle,
+            'countries': countries['NAME_EN'].dropna().tolist(),
+            'continents': countries['CONTINENT'].dropna().tolist(),
+            'country_states': {}}
 
 
 def get_destination_information(config_file, world=None, states=None):
@@ -59,59 +171,10 @@ def get_destination_information(config_file, world=None, states=None):
                 'continents': _unique_preserve_order(destination_continents),
                 'country_states': {}}
 
-    destination_countries = _get_destination_countries_from_config(config_file)
-    if not destination_countries:
-        raise ValueError('No destination countries configured.')
-
-    if states is None:
-        states = _load_states()
-
-    first = True
-    destination_location = None
-    destination_continents = []
-    for c in sorted(destination_countries.keys()):
-        country_data = world[world['NAME_EN'] == c]
-        if country_data.empty:
-            raise ValueError('Destination country not found in Natural Earth data: ' + str(c))
-
-        destination_continents += country_data['CONTINENT'].dropna().tolist()
-
-        if destination_countries[c]:
-            for s in sorted(destination_countries[c]):
-                state_data = states[states['name'] == s]
-                if state_data.empty:
-                    raise ValueError('Destination state not found in Natural Earth data: ' + str(s))
-
-                if first:
-                    destination_location = state_data['geometry'].values[0]
-                    first = False
-                else:
-                    destination_location = destination_location.union(state_data['geometry'].values[0])
-        else:
-            if first:
-                destination_location = country_data['geometry'].values[0]
-                first = False
-            else:
-                destination_location = destination_location.union(country_data['geometry'].values[0])
-
-    destination_location = destination_location.buffer(0)
-
-    if config_file['use_biggest_landmass']:
-        if len([*destination_countries.keys()]) == 1:
-            if isinstance(destination_location, MultiPolygon):
-                largest_area = 0
-                chosen_geom = None
-                for geom in destination_location.geoms:
-                    if geom.area > largest_area:
-                        largest_area = geom.area
-                        chosen_geom = geom
-
-                destination_location = chosen_geom
-
-    return {'location': destination_location,
-            'countries': _unique_preserve_order([*destination_countries.keys()]),
-            'continents': _unique_preserve_order(destination_continents),
-            'country_states': destination_countries}
+    return create_country_state_polygon(
+        _get_destination_countries_from_config(config_file),
+        world=world, states=states,
+        use_biggest_landmass=config_file['use_biggest_landmass'])
 
 
 def create_polygons(hydrogen_costs_and_quantities):

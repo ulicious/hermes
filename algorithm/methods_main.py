@@ -7,12 +7,12 @@ import pandas as pd
 import numpy as np
 import geopandas as gpd
 import networkx as nx
-import cartopy.io.shapereader as shpreader
 
 from shapely.wkt import loads
 from shapely.geometry import MultiLineString, Point
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure
 from data_processing.helpers_geometry import get_destination_information
+from data_processing.natural_earth_data import load_world
 
 
 def process_network_data(data, name, node_locations, graph_data):
@@ -108,8 +108,7 @@ def prepare_data_and_configuration_dictionary(config_file):
     coastlines = coastlines.sort_index()
     coastlines.set_geometry('geometry', inplace=True)
 
-    country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
-    world = gpd.read_file(country_shapefile)
+    world = load_world(path_raw_data)
 
     final_commodities = config_file['target_commodity']
     strike_prices_commodity = {}

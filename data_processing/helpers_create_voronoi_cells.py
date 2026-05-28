@@ -11,7 +11,6 @@ import geopandas as gpd
 import numpy as np
 from geovoronoi import voronoi_regions_from_coords
 import matplotlib.pyplot as plt
-import cartopy.io.shapereader as shpreader
 from shapely import make_valid
 from shapely.geometry import Point, LineString, Polygon, MultiPolygon
 from shapely.ops import unary_union
@@ -21,6 +20,8 @@ from collections import defaultdict
 from pyproj import Geod
 
 from data_processing.helpers_misc import plot_points_and_areas, create_random_colors
+from data_processing.helpers_geometry import get_start_location_information
+from data_processing.natural_earth_data import load_states, load_world
 
 
 def can_be_single_polygon(geom):
@@ -363,10 +364,27 @@ def divide_area_by_two(geom, lp1, lp2):
     return split_area
 
 
+def extract_polygon_geometries(geometry):
+    """Return only polygonal parts of a possibly mixed Shapely geometry."""
+    if geometry.is_empty:
+        return []
+    if isinstance(geometry, Polygon):
+        return [geometry]
+    if isinstance(geometry, MultiPolygon):
+        return [geom for geom in geometry.geoms if not geom.is_empty]
+    if geometry.geom_type == 'GeometryCollection':
+        polygons = []
+        for geom in geometry.geoms:
+            polygons += extract_polygon_geometries(geom)
+        return polygons
+    return []
+
+
 def attach_voronoi_cells_to_locations(locations, config_file):
 
-    country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
-    world = gpd.read_file(country_shapefile)
+    path_raw_data = config_file['project_folder_path'] + 'raw_data/'
+    world = load_world(path_raw_data)
+    states = load_states(path_raw_data)
 
     # Create voronoi cells
     unprocessed_polygons = {}
@@ -376,21 +394,8 @@ def attach_voronoi_cells_to_locations(locations, config_file):
 
     location_points = [Point([locations.loc[i, 'longitude'], locations.loc[i, 'latitude']]) for i in locations.index]
 
-    if not config_file['use_minimal_example']:
-        # use boundaries from config file
-        minimal_latitude = config_file['minimal_latitude']
-        maximal_latitude = config_file['maximal_latitude']
-        minimal_longitude = config_file['minimal_longitude']
-        maximal_longitude = config_file['maximal_longitude']
-    else:
-        # if minimal example, set boundaries to Europe
-        minimal_latitude, maximal_latitude = 35, 71
-        minimal_longitude, maximal_longitude = -25, 45
-
-    covered_area_polygon = Polygon([Point([minimal_longitude, minimal_latitude]),
-                                    Point([minimal_longitude, maximal_latitude]),
-                                    Point([maximal_longitude, maximal_latitude]),
-                                    Point([maximal_longitude, minimal_latitude])])
+    covered_area_polygon = get_start_location_information(
+        config_file, world=world, states=states)['location']
 
     m = 0
     for c in world.index:
@@ -406,24 +411,27 @@ def attach_voronoi_cells_to_locations(locations, config_file):
 
         # only consider the area covered by set longitudes and latitudes
         area_shape = area_shape.intersection(covered_area_polygon)
+        area_polygons = extract_polygon_geometries(area_shape)
+        if not area_polygons:
+            continue
 
         affected_index = locations[locations['country_start'] == country].index.tolist()
         coords_in_country = [Point([locations.loc[i, 'longitude'], locations.loc[i, 'latitude']])
                              for i in affected_index]
 
-        if isinstance(area_shape, shapely.geometry.MultiPolygon):
-
-            intersecting_subpolygons = [poly for poly in area_shape.geoms if any(poly.intersects(point) for point in coords_in_country)]
-
-            not_intersecting_subpolygons = [poly for poly in area_shape.geoms
-                                            if poly not in intersecting_subpolygons]
+        if len(area_polygons) > 1:
+            intersecting_subpolygons = [
+                poly for poly in area_polygons
+                if any(poly.intersects(point) for point in coords_in_country)]
+            not_intersecting_subpolygons = [
+                poly for poly in area_polygons if poly not in intersecting_subpolygons]
 
             for geom in not_intersecting_subpolygons:
                 unprocessed_polygons[m] = geom
                 m += 1
 
         else:
-            intersecting_subpolygons = [area_shape]
+            intersecting_subpolygons = area_polygons
 
         for geom in intersecting_subpolygons:
 
@@ -517,19 +525,13 @@ def attach_voronoi_cells_to_locations(locations, config_file):
 
     # merge polygons which are adjacent since they should not be surrounded by other polygons without voronoi cells
     # unprocessed_polygons = merge_unattached_polygons(unprocessed_polygons)
-    unprocessed_polygons = shapely.ops.unary_union([*unprocessed_polygons.values()])
-    unprocessed_polygons = list(unprocessed_polygons.geoms)
+    unprocessed_polygons = extract_polygon_geometries(
+        shapely.ops.unary_union([*unprocessed_polygons.values()]))
 
     failed_polygons = []
     for area in unprocessed_polygons:
-
-        if isinstance(area, shapely.geometry.Polygon):
-            locations, not_processable_polygons = attach_polygon_to_other_voronoi_cells(area, locations)
-            failed_polygons += not_processable_polygons
-        else:
-            for polygon in area.geoms:
-                locations, not_processable_polygons = attach_polygon_to_other_voronoi_cells(polygon, locations)
-                failed_polygons += not_processable_polygons
+        locations, not_processable_polygons = attach_polygon_to_other_voronoi_cells(area, locations)
+        failed_polygons += not_processable_polygons
 
     # finally, some polygons can still not be processed (problem with geovoronoi)
     # --> attach them to closest voronoi cell if connected
@@ -545,8 +547,7 @@ def attach_voronoi_cells_to_locations(locations, config_file):
         geod = Geod(ellps="WGS84")
         max_location_ind = locations.index[-1] + 1
 
-        country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
-        world = gpd.read_file(country_shapefile)
+        world = load_world(path_raw_data)
 
         for poly in still_failed:
             lon, lat = poly.exterior.coords.xy

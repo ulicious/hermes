@@ -24,7 +24,7 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 def load_configuration_and_technology_data():
     """Load settings and techno-economic assumptions used by every MIP run."""
-    with open(os.path.join(PROJECT_ROOT, 'algorithm_configuration.yaml')) as yaml_file:
+    with open(os.path.join(PROJECT_ROOT, '_1_algorithm_configuration.yaml')) as yaml_file:
         config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
     with open(os.path.join(PROJECT_ROOT, 'data', 'techno_economic_data_transportation.yaml')) as yaml_file:
         transport_data = yaml.load(yaml_file, Loader=yaml.FullLoader)

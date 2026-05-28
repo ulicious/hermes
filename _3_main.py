@@ -18,7 +18,7 @@ warnings.filterwarnings('ignore')
 if __name__ == '__main__':
 
     # load configuration file
-    path_config = os.getcwd() + '/algorithm_configuration.yaml'
+    path_config = os.getcwd() + '/_1_algorithm_configuration.yaml'
     yaml_file = open(path_config)
     config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 

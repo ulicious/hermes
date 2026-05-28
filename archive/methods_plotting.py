@@ -13,14 +13,19 @@ import pandas as pd
 from shapely.wkt import loads
 from textwrap import wrap
 
+from data_processing.natural_earth_data import load_world_lowres
+
 import warnings
 warnings.filterwarnings('ignore')
 
 
+def _load_plot_world():
+    return gpd.GeoDataFrame(load_world_lowres()['geometry'], columns=['geometry'])
+
+
 def plot_line(line, direct_plot=True):
     # Read world map
-    map_plot = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-    map_plot = gpd.GeoDataFrame(map_plot['geometry'], columns=['geometry'])
+    map_plot = _load_plot_world()
 
     colors_used = []
     for ind in map_plot.index:
@@ -42,8 +47,7 @@ def plot_line(line, direct_plot=True):
 
 def plot_lines(lines, direct_plot=True, different_colors=False):
     # Read world map
-    map_plot = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-    map_plot = gpd.GeoDataFrame(map_plot['geometry'], columns=['geometry'])
+    map_plot = _load_plot_world()
 
     colors_used = []
     for ind in map_plot.index:
@@ -70,8 +74,7 @@ def plot_lines(lines, direct_plot=True, different_colors=False):
 
 def plot_lines_and_show_specific(lines, line_specific, direct_plot=True):
     # Read world map
-    map_plot = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-    map_plot = gpd.GeoDataFrame(map_plot['geometry'], columns=['geometry'])
+    map_plot = _load_plot_world()
 
     colors_used = []
     for ind in map_plot.index:
@@ -100,8 +103,7 @@ def plot_lines_and_show_specific(lines, line_specific, direct_plot=True):
 
 def plot_solution(s, direct_plot=True):
     # Read world map
-    map_plot = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-    map_plot = gpd.GeoDataFrame(map_plot['geometry'], columns=['geometry'])
+    map_plot = _load_plot_world()
 
     colors_used = []
     for ind in map_plot.index:
@@ -146,8 +148,7 @@ def plot_solution_path(k, path_plot, solutions_dict, final_solution):
 
         fig = plt.figure()
 
-        map_plot = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-        map_plot = gpd.GeoDataFrame(map_plot['geometry'], columns=['geometry'])
+        map_plot = _load_plot_world()
 
         colors_used = []
         for ind in map_plot.index:
@@ -210,8 +211,7 @@ def plot_solution_path(k, path_plot, solutions_dict, final_solution):
 
         fig = plt.figure()
 
-        map_plot = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-        map_plot = gpd.GeoDataFrame(map_plot['geometry'], columns=['geometry'])
+        map_plot = _load_plot_world()
 
         colors_used = []
         for ind in map_plot.index:

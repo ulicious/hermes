@@ -6,11 +6,11 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import numpy as np
 import geopandas as gpd
-import cartopy.io.shapereader as shpreader
 
 from geopandas.tools import sjoin
 from math import cos, sin, asin, sqrt, radians
 from shapely.geometry import Point
+from data_processing.natural_earth_data import load_world
 
 
 def calc_distance_single_to_single(latitude_1, longitude_1, latitude_2, longitude_2):
@@ -147,8 +147,7 @@ def get_continent_from_location(location, world=None):
     location_latitude = location[1]
 
     if world is None:
-        country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
-        world = gpd.read_file(country_shapefile)
+        world = load_world()
 
     gdf = gpd.GeoDataFrame(geometry=gpd.points_from_xy([location_longitude], [location_latitude])).set_crs('EPSG:4326')
     result = gpd.sjoin(gdf, world, how='left')

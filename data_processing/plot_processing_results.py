@@ -7,6 +7,9 @@ import yaml
 import os
 import random
 
+from data_processing.helpers_geometry import get_boundaries_from_config
+from data_processing.natural_earth_data import load_world_lowres
+
 
 def plot_original_pipeline_data():
 
@@ -172,7 +175,7 @@ def get_infrastructure_figure(sub_axes, boundaries, link_to_data, fig_title=''):
     data_pipeline_oil_nodes['geometry'] = oil_nodes
 
     # plot map on axis
-    countries = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
+    countries = load_world_lowres()
     antarctica = countries[countries['continent'] == 'Antarctica'].index[0]
     countries.drop([antarctica], inplace=True)
     countries.plot(color="lightgrey", ax=sub_axes)
@@ -243,22 +246,14 @@ def plot_unprocessed_pipelines():
     plt.show()
 
 # load configuration file
-path_config = os.path.dirname(os.getcwd()) + '/algorithm_configuration.yaml'
+path_config = os.path.dirname(os.getcwd()) + '/_1_algorithm_configuration.yaml'
 yaml_file = open(path_config)
 config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
 path_processed_data = config_file['project_folder_path'] + 'processed_data/'
 
-if not config_file['use_minimal_example']:
-    # use boundaries from config file
-    min_lat = config_file['minimal_latitude']
-    max_lat = config_file['maximal_latitude']
-    min_lon = config_file['minimal_longitude']
-    max_lon = config_file['maximal_longitude']
-else:
-    # if minimal example, set boundaries to Europe
-    min_lat, max_lat = 35, 71
-    min_lon, max_lon = -25, 45
+min_lat, max_lat, min_lon, max_lon = get_boundaries_from_config(
+    config_file, prefix='infrastructure_')
 
 boundaries = {'min_latitude': min_lat - 2,
               'max_latitude': max_lat + 2,

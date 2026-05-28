@@ -1,8 +1,8 @@
 import json
-import cartopy.io.shapereader as shpreader
 import geopandas as gpd
 import pandas as pd
 
+from data_processing.natural_earth_data import load_world
 
 GEOGRAPHIC_LAND_CONTINENT_CONNECTIONS = {
     'Africa': {'Africa', 'Asia', 'Europe'},
@@ -17,12 +17,7 @@ GEOGRAPHIC_LAND_CONTINENT_CONNECTIONS = {
 
 
 def _load_world():
-    country_shapefile = shpreader.natural_earth(
-        resolution='10m',
-        category='cultural',
-        name='admin_0_countries_deu',
-    )
-    world = gpd.read_file(country_shapefile)[['CONTINENT', 'geometry']].copy()
+    world = load_world()[['CONTINENT', 'geometry']].copy()
     return world.set_crs('EPSG:4326', allow_override=True)
 
 

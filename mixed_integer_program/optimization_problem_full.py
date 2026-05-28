@@ -570,7 +570,7 @@ class OptimizationGurobiModel:
 path_config = os.getcwd()
 path_config = os.path.dirname(path_config)
 
-yaml_file = open(path_config + '/algorithm_configuration.yaml')
+yaml_file = open(path_config + '/_1_algorithm_configuration.yaml')
 config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
 yaml_file = open(path_config + '/data/techno_economic_data_transportation.yaml')

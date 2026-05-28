@@ -9,6 +9,7 @@ location_data_name;string;CSV file in raw_data with location-specific production
 country_data_name;string;CSV file in raw_data with country-level fallback values for techno-economic data;
 available_commodity;list;Indicates which commodities will be considered;
 available_transport_means;list;Indicates which transport means will be considered;
-enforce_update_of_data;True / False;If True, infrastructure will be processed again even though files have been created. Otherwise, only such infrastructure will be processed which has not been processed yet;Especially useful if infrastructure processing has been stopped/interrupted
-update_only_conversion_costs_and_efficiency;True / False;If True, only techno-economic data (conversion costs at locations) will be updated. If False, infrastructure will be calculated as well;
+infrastructure_enforce_update_of_data;True / False;If True, infrastructure will be processed again even though files have been created. Otherwise, only such infrastructure will be processed which has not been processed yet;Especially useful if infrastructure processing has been stopped/interrupted
+infrastructure_update_only_conversion_costs_and_efficiency;True / False;If True, only infrastructure techno-economic data (conversion costs and efficiencies) will be updated. If False, infrastructure will be calculated as well;
+start_locations_update_only_conversion_costs_and_efficiency;True / False;If True, existing start locations are reused and only start-location costs and conversion efficiencies are updated. If False, start locations are generated again;
 create_mip_data;True / False;If True, additional processed files for later mixed-integer validation are created;Increases preprocessing time and storage demand

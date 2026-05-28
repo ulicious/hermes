@@ -21,8 +21,9 @@ try:
     from data_processing.process_mip_data import prepare_minimal_mip_case
 except ImportError:
     prepare_minimal_mip_case = None
-from data_processing.helpers_geometry import get_destination
+from data_processing.helpers_geometry import get_destination, get_boundaries_from_config
 from data_processing.helpers_continent_connections import build_continent_connectivity, save_continent_connectivity
+from data_processing.natural_earth_data import download_natural_earth_data
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -32,17 +33,20 @@ logging.basicConfig(level=logging.INFO)
 time_start = time.time()
 
 # load configuration file
-path_config = os.getcwd() + '/algorithm_configuration.yaml'
+path_config = os.getcwd() + '/_1_algorithm_configuration.yaml'
 yaml_file = open(path_config)
 config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
 use_minimal_example = config_file['use_minimal_example']
 use_low_storage = config_file['use_low_storage']
 use_low_memory = config_file['use_low_memory']
-update_only_conversion_costs_and_efficiency = config_file['update_only_conversion_costs_and_efficiency']
+infrastructure_update_only_conversion_costs_and_efficiency = \
+    config_file['infrastructure_update_only_conversion_costs_and_efficiency']
 
-boundaries = [config_file['minimal_latitude'], config_file['maximal_latitude'],
-              config_file['minimal_longitude'], config_file['maximal_longitude']]
+infrastructure_boundaries = get_boundaries_from_config(
+    config_file, prefix='infrastructure_', use_minimal_example=use_minimal_example)
+boundaries = [infrastructure_boundaries[0], infrastructure_boundaries[1],
+              infrastructure_boundaries[2], infrastructure_boundaries[3]]
 
 num_cores = config_file['number_cores']
 if num_cores == 'max':
@@ -90,8 +94,10 @@ techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
 files_in_folder = os.listdir(path_processed_data)
 
-enforce_update_of_data = config_file['enforce_update_of_data']
+infrastructure_enforce_update_of_data = config_file['infrastructure_enforce_update_of_data']
 create_mip_data = config_file['create_mip_data']
+
+download_natural_earth_data(path_raw_data, force_update=infrastructure_enforce_update_of_data)
 
 destination = get_destination(config_file)  # todo: possible to load the natural earth data instead of using old packagaes
 
@@ -108,11 +114,11 @@ if create_mip_data:
 
 gap_distance = config_file['gap_distance']
 
-if not update_only_conversion_costs_and_efficiency:
+if not infrastructure_update_only_conversion_costs_and_efficiency:
 
     # process coastlines
     logging.info('Processing coastlines and landmasses')
-    if not (('landmasses.csv' in files_in_folder) & ('coastlines.csv' in files_in_folder) & ('water_availability.gpkg' in files_in_folder) & (not enforce_update_of_data)):
+    if not (('landmasses.csv' in files_in_folder) & ('coastlines.csv' in files_in_folder) & ('water_availability.gpkg' in files_in_folder) & (not infrastructure_enforce_update_of_data)):
         landmasses, coastlines, water_availability = get_landmass_polygons_and_coastlines(path_raw_data, use_minimal_example=use_minimal_example)
         landmasses.to_csv(path_processed_data + 'landmasses.csv')
         coastlines.to_csv(path_processed_data + 'coastlines.csv')
@@ -137,14 +143,14 @@ if not update_only_conversion_costs_and_efficiency:
 
     # process raw network data and place all connected lines into network folders
     logging.info('Processing raw pipeline data')
-    if not (('gas_network_data' in files_in_folder) & (not enforce_update_of_data)):
+    if not (('gas_network_data' in files_in_folder) & (not infrastructure_enforce_update_of_data)):
         # process gas pipelines
         logging.info('Gas pipelines')
         path_gas_pipeline_data = path_raw_data + 'network_pipelines_gas.xlsx'
         group_LineStrings('gas', num_cores, path_gas_pipeline_data, path_processed_data, gap_distance,
                           boundaries, destination, use_minimal_example=use_minimal_example)
 
-    if not (('oil_network_data' in files_in_folder) & (not enforce_update_of_data)):
+    if not (('oil_network_data' in files_in_folder) & (not infrastructure_enforce_update_of_data)):
         # process oil pipelines
         logging.info('Oil pipelines')
         path_oil_pipeline_data = path_raw_data + 'network_pipelines_oil.xlsx'
@@ -158,7 +164,7 @@ if not update_only_conversion_costs_and_efficiency:
     path_oil_pipeline_data = path_processed_data + 'oil_network_data/'
 
     if not (('gas_pipeline_graphs.csv' in files_in_folder) & ('gas_pipeline_node_locations.csv' in files_in_folder)
-            & (not enforce_update_of_data)):
+            & (not infrastructure_enforce_update_of_data)):
         if use_minimal_example:
             gas_graph, gas_nodes \
                 = process_network_data_to_network_objects_with_additional_connection_points('gas_pipeline', path_gas_pipeline_data,
@@ -178,7 +184,7 @@ if not update_only_conversion_costs_and_efficiency:
         gas_nodes = pd.read_csv(path_processed_data + 'gas_pipeline_node_locations.csv', index_col=0)
 
     if not (('oil_pipeline_graphs.csv' in files_in_folder) & ('oil_pipeline_node_locations.csv' in files_in_folder)
-            & (not enforce_update_of_data)):
+            & (not infrastructure_enforce_update_of_data)):
         if use_minimal_example:
             oil_graph, oil_nodes \
                 = process_network_data_to_network_objects_with_additional_connection_points('oil_pipeline', path_oil_pipeline_data,
@@ -198,7 +204,7 @@ if not update_only_conversion_costs_and_efficiency:
 
     # process ports
     logging.info('Processing ports')
-    if not (('ports.csv' in files_in_folder) & (not enforce_update_of_data)):
+    if not (('ports.csv' in files_in_folder) & (not infrastructure_enforce_update_of_data)):
         ports = process_ports(path_raw_data, coastlines, landmasses, boundaries, destination, use_minimal_example=use_minimal_example)
         ports.to_csv(path_processed_data + 'ports.csv', encoding='utf-8', index=True)
     else:
@@ -213,7 +219,7 @@ if not update_only_conversion_costs_and_efficiency:
         if 'inner_infrastructure_distances' not in os.listdir(path_processed_data):
             os.mkdir(name_folder)
 
-        if not (('inner_infrastructure_distances' in files_in_folder) & (not enforce_update_of_data)
+        if not (('inner_infrastructure_distances' in files_in_folder) & (not infrastructure_enforce_update_of_data)
                 & (not (create_mip_data & (not 'port_distances.csv' in files_in_mip_folder)))):
             get_distances_within_networks(gas_graph, gas_nodes, path_processed_data, num_cores, use_low_memory=use_low_memory, create_mip_data=create_mip_data)
             get_distances_within_networks(oil_graph, oil_nodes, path_processed_data, num_cores, use_low_memory=use_low_memory, create_mip_data=create_mip_data)
@@ -222,11 +228,11 @@ if not update_only_conversion_costs_and_efficiency:
     # calculate closest infrastructure for each node
     logging.info('Calculate closest infrastructure')
     options = pd.concat([gas_nodes, oil_nodes, ports])
-    if not (('minimal_distances.csv' in files_in_folder) & (not enforce_update_of_data)):
+    if not (('minimal_distances.csv' in files_in_folder) & (not infrastructure_enforce_update_of_data)):
         get_distances_of_closest_infrastructure(config_file, options, path_processed_data, num_cores)
 
     logging.info('Calculate continent connectivity')
-    if not (('continent_connections.json' in files_in_folder) & (not enforce_update_of_data)):
+    if not (('continent_connections.json' in files_in_folder) & (not infrastructure_enforce_update_of_data)):
         continent_connectivity = build_continent_connectivity(landmasses, gas_nodes, oil_nodes)
         save_continent_connectivity(path_processed_data + 'continent_connections.json', continent_connectivity)
 

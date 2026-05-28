@@ -9,12 +9,12 @@ from shapely.geometry import Point
 from shapely.ops import unary_union
 
 import geopandas as gpd
-import cartopy.io.shapereader as shpreader
 
 from itertools import combinations
 from tqdm import tqdm
 
 from mixed_integer_program.mip_data_helpers import create_transport_edges
+from data_processing.natural_earth_data import load_land
 
 
 logger = logging.getLogger(__name__)
@@ -31,11 +31,7 @@ def calculate_road_distances(tolerance, infrastructure, single_point=None, singl
 
     # todo: road distances between ports if they are not on same landmass --> should not exist
 
-    # Get path to high-resolution land shapefile (global)
-    shp_path = shpreader.natural_earth(resolution='10m', category='physical', name='land')
-
-    # Load with GeoPandas
-    land = gpd.read_file(shp_path)
+    land = load_land()
 
     # Explode into distinct landmasses (connected polygons)
     land_union = unary_union(land.geometry)

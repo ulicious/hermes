@@ -119,10 +119,12 @@ Things to consider
 ==================
 
 - If techno-economic assumptions change, rerun ``_1_script_process_raw_data.py`` and
-  ``_2_create_random_locations.py``. The flag
-  ``update_only_conversion_costs_and_efficiency`` can be used to skip the full
-  infrastructure preprocessing.
-- ``enforce_update_of_data`` forces regeneration of already processed files.
+  ``_2_create_random_locations.py``. The flags
+  ``infrastructure_update_only_conversion_costs_and_efficiency`` and
+  ``start_locations_update_only_conversion_costs_and_efficiency`` can be used
+  to skip full infrastructure preprocessing or start-location regeneration.
+- ``infrastructure_enforce_update_of_data`` forces regeneration of already
+  processed infrastructure files.
 - ``use_low_storage`` reduces disk usage by skipping precomputed inner-network
   distances, but increases runtime during routing.
 - ``use_low_memory`` disables the parallel high-memory code path and usually

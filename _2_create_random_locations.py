@@ -7,7 +7,6 @@ import multiprocessing
 
 import pandas as pd
 import geopandas as gpd
-import cartopy.io.shapereader as shpreader
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -17,7 +16,11 @@ from shapely.geometry import Point, Polygon
 from rtree import index
 
 from data_processing.helpers_create_voronoi_cells import attach_voronoi_cells_to_locations
-from data_processing.helpers_geometry import randlatlon1, round_to_quarter, create_polygons
+from data_processing.helpers_geometry import (
+    randlatlon1, round_to_quarter, create_polygons,
+    get_start_location_information,
+)
+from data_processing.natural_earth_data import load_states, load_world
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_start_locations, \
     check_if_location_is_valid, attach_feedstock_costs_and_interest_rate
 from data_processing.process_mip_data import calculate_road_distances
@@ -28,7 +31,7 @@ warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO)
 
 
-path_config = os.getcwd() + '/algorithm_configuration.yaml'
+path_config = os.getcwd() + '/_1_algorithm_configuration.yaml'
 yaml_file = open(path_config)
 config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
@@ -40,25 +43,10 @@ if num_cores == 'max':
 else:
     num_cores = min(num_cores, multiprocessing.cpu_count() - 1)
 
-update_only_techno_economic_data = config_file['update_only_conversion_costs_and_efficiency']
-
-if not config_file['use_minimal_example']:
-    # use boundaries from config file
-    minimal_latitude = config_file['minimal_latitude']
-    maximal_latitude = config_file['maximal_latitude']
-    minimal_longitude = config_file['minimal_longitude']
-    maximal_longitude = config_file['maximal_longitude']
-else:
-    # if minimal example, set boundaries to Europe
-    minimal_latitude, maximal_latitude = 35, 71
-    minimal_longitude, maximal_longitude = -25, 45
+start_locations_update_only_conversion_costs_and_efficiency = \
+    config_file['start_locations_update_only_conversion_costs_and_efficiency']
 
 world_surface = Polygon([Point([-180, -90]), Point([-180, 90]), Point([180, 90]), Point([180, -90])])
-
-valid_polygon = Polygon([Point([minimal_longitude, minimal_latitude]),
-                         Point([minimal_longitude, maximal_latitude]),
-                         Point([maximal_longitude, maximal_latitude]),
-                         Point([maximal_longitude, minimal_latitude])])
 
 levelized_costs_location = pd.read_csv(path_raw_data + config_file['location_data_name'], index_col=0, sep=';')
 levelized_costs_country = pd.read_csv(path_raw_data + config_file['country_data_name'], index_col=0)
@@ -66,22 +54,21 @@ levelized_costs_country = pd.read_csv(path_raw_data + config_file['country_data_
 yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
 techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-if not update_only_techno_economic_data:
+if not start_locations_update_only_conversion_costs_and_efficiency:
 
     logging.info('Create new locations')
 
-    country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
-    world = gpd.read_file(country_shapefile)
+    world = load_world(path_raw_data)
+    states = load_states(path_raw_data)
 
-    state_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_1_states_provinces')
-    states = gpd.read_file(state_shapefile)
-
-    countries = world['NAME_EN'].tolist()
+    start_location_information = get_start_location_information(config_file, world=world, states=states)
+    valid_polygon = start_location_information['location']
+    minimal_longitude, minimal_latitude, maximal_longitude, maximal_latitude = valid_polygon.bounds
+    countries = start_location_information['countries'].copy()
 
     origin_continents = config_file['origin_continents']
     if config_file['use_minimal_example']:  # overwrite origin continent if minimal example
         origin_continents = ['Europe']
-        countries = world[world['CONTINENT'] == 'Europe']['NAME_EN'].tolist()
 
     country_shape = shapely.ops.unary_union(world['geometry'].tolist())
     country_shape = valid_polygon.intersection(country_shape)
@@ -162,8 +149,8 @@ if not update_only_techno_economic_data:
 
         number_points = math.ceil(config_file['number_locations'] / (country_shape.area / valid_polygon_shape.area) * 1.1)
 
-        lat_min, lat_max = config_file['minimal_latitude'], config_file['maximal_latitude']
-        lon_min, lon_max = config_file['minimal_longitude'], config_file['maximal_longitude']
+        lat_min, lat_max = minimal_latitude, maximal_latitude
+        lon_min, lon_max = minimal_longitude, maximal_longitude
 
         z_min = np.sin(np.radians(lat_min))
         z_max = np.sin(np.radians(lat_max))
@@ -256,8 +243,11 @@ if not update_only_techno_economic_data:
         for country in countries:
             area_shape = world[world['NAME_EN'] == country].index[0]
             area_shape = world.at[area_shape, 'geometry']
+            area_shape = area_shape.intersection(valid_polygon)
+            if area_shape.is_empty:
+                continue
 
-            area_shape_center = area_shape.centroid
+            area_shape_center = area_shape.representative_point()
 
             start_lat = area_shape_center.y
             start_lon = area_shape_center.x

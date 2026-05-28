@@ -3,7 +3,6 @@ import os
 os.environ["OGR_ORGANIZE_POLYGONS"] = "SKIP"
 
 import geopandas as gpd
-import cartopy.io.shapereader as shpreader
 
 from shapely.geometry import MultiPolygon
 
@@ -14,18 +13,16 @@ from pathlib import Path
 import geopandas as gpd
 from shapely.ops import unary_union
 
+from data_processing.natural_earth_data import get_natural_earth_shapefile, load_world
+
 
 def create_water_availability_polygon(BASE_DIR):
 
     BASE_DIR = Path(BASE_DIR)
 
     aqueduct_zip = BASE_DIR / "water.zip"
-    coastline_zip = BASE_DIR / "ne_10m_coastline.zip"
-
     aqueduct_extract_dir = BASE_DIR / "aqueduct_data"
-    coastline_extract_dir = BASE_DIR / "coastline_data"
-
-    coastline_shp = coastline_extract_dir / "ne_10m_coastline.shp"
+    coastline_shp = Path(get_natural_earth_shapefile(str(BASE_DIR), '10m', 'physical', 'coastline'))
 
     risk_column = "bws_score"
     threshold = 3.0
@@ -52,7 +49,12 @@ def create_water_availability_polygon(BASE_DIR):
         return gdf
 
     unzip_file(aqueduct_zip, aqueduct_extract_dir)
-    unzip_file(coastline_zip, coastline_extract_dir)
+    if not coastline_shp.exists():
+        raise FileNotFoundError(
+            'Missing Natural Earth coastline shapefile:\n'
+            + str(coastline_shp)
+            + '\nRun _1_script_process_raw_data.py once to download Natural Earth data into raw_data.'
+        )
 
     gdb_paths = list(aqueduct_extract_dir.rglob("*.gdb"))
 
@@ -132,56 +134,47 @@ def get_landmass_polygons_and_coastlines(path_raw_data, use_minimal_example=Fals
     @return: geopandas.GeoDataFrame multipolygons for landmass and linestrings of coastlines
     """
 
-    # # Load the shapefile data for country boundaries with 10m resolution
-    # world_high_res = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
-    #
-    # # Read the shapefile data
-    # reader = shpreader.Reader(world_high_res)
-    #
-    # # Extract the polygons for the specified country
-    # polygons = []
-    # for country in reader.records():
-    #
-    #     if use_minimal_example:
-    #         if country.attributes['CONTINENT'] != 'Europe':
-    #             continue
-    #
-    #     country_polygon = country.geometry
-    #
-    #     if isinstance(country_polygon, MultiPolygon):
-    #         for p in country_polygon.geoms:
-    #             polygons.append(p)
-    #     else:
-    #         polygons.append(country_polygon)
-    #
-    # # Combine polygons that touch each other into MultiPolygons
-    # merged_polygons = []
-    # coastlines = []
-    # while len(polygons) > 0:
-    #     merged_polygon = polygons.pop(0)
-    #
-    #     broken = True
-    #     while broken:
-    #         broken = False
-    #         for polygon in polygons:
-    #
-    #             if merged_polygon.touches(polygon):
-    #                 merged_polygon = merged_polygon.union(polygon)
-    #                 polygons.remove(polygon)
-    #                 broken = True
-    #                 break
-    #
-    #     merged_polygons.append(merged_polygon)
-    #     coastlines.append(merged_polygon.boundary)
-    #
-    # polygons = gpd.GeoDataFrame(geometry=merged_polygons)
-    # coastlines = gpd.GeoDataFrame(geometry=coastlines)
+    world_high_res = load_world(path_raw_data)
 
-    print('start water')
+    # Extract the polygons for the specified country
+    polygons = []
+    for _, country in world_high_res.iterrows():
+
+        if use_minimal_example:
+            if country['CONTINENT'] != 'Europe':
+                continue
+
+        country_polygon = country.geometry
+
+        if isinstance(country_polygon, MultiPolygon):
+            for p in country_polygon.geoms:
+                polygons.append(p)
+        else:
+            polygons.append(country_polygon)
+
+    # Combine polygons that touch each other into MultiPolygons
+    merged_polygons = []
+    coastlines = []
+    while len(polygons) > 0:
+        merged_polygon = polygons.pop(0)
+
+        broken = True
+        while broken:
+            broken = False
+            for polygon in polygons:
+
+                if merged_polygon.touches(polygon):
+                    merged_polygon = merged_polygon.union(polygon)
+                    polygons.remove(polygon)
+                    broken = True
+                    break
+
+        merged_polygons.append(merged_polygon)
+        coastlines.append(merged_polygon.boundary)
+
+    polygons = gpd.GeoDataFrame(geometry=merged_polygons)
+    coastlines = gpd.GeoDataFrame(geometry=coastlines)
 
     water_availability = create_water_availability_polygon(path_raw_data)
-
-    polygons = None
-    coastlines = None
 
     return polygons, coastlines, water_availability

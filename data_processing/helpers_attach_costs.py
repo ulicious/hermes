@@ -9,10 +9,9 @@ import tqdm
 import math
 from collections import defaultdict
 
-import cartopy.io.shapereader as shpreader
-
 from algorithm.methods_geographic import calc_distance_list_to_single
 from data_processing.helpers_geometry import round_to_quarter
+from data_processing.natural_earth_data import load_world
 
 
 def check_if_location_is_valid(techno_economic_data_conversion, country_start, adjusted_latitude,
@@ -605,8 +604,7 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
 
     shipping_options = [i for i in locations.index if 'H' in i]  # harbours have information on country already
 
-    country_shapefile = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries_deu')
-    world = gpd.read_file(country_shapefile)
+    world = load_world(path_raw_data)
     gdf = gpd.GeoDataFrame(not_shipping_options, geometry=gpd.points_from_xy(not_shipping_options.longitude, not_shipping_options.latitude))
     result = gpd.sjoin(gdf, world, how='left')
     not_shipping_options['country'] = result['NAME_EN']
