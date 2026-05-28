@@ -13,8 +13,10 @@ from tqdm import tqdm
 from joblib import Parallel, delayed
 
 from shapely.geometry import Point, Polygon
+from shapely.wkt import loads
 from rtree import index
 
+from algorithm.methods_geographic import calc_distance_list_to_single, check_if_reachable_on_land
 from data_processing.helpers_create_voronoi_cells import attach_voronoi_cells_to_locations
 from data_processing.helpers_geometry import (
     randlatlon1, round_to_quarter, create_polygons,
@@ -23,12 +25,64 @@ from data_processing.helpers_geometry import (
 from data_processing.natural_earth_data import load_states, load_world
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_start_locations, \
     check_if_location_is_valid, attach_feedstock_costs_and_interest_rate
-from data_processing.process_mip_data import calculate_road_distances
 
 import warnings
 warnings.filterwarnings("ignore")
 
 logging.basicConfig(level=logging.INFO)
+
+
+def _as_float_or_inf(value):
+    if isinstance(value, str):
+        return math.inf
+    return value
+
+
+def calculate_start_mip_distances_like_heuristic(config_file, options, starting_location, coastlines):
+    max_length_road = _as_float_or_inf(config_file['max_length_road'])
+    max_length_new_segment = _as_float_or_inf(config_file['max_length_new_segment'])
+    no_road_multiplier = _as_float_or_inf(config_file['no_road_multiplier'])
+    max_length = max(max_length_road, max_length_new_segment) / no_road_multiplier
+
+    options = options.copy()
+    options['distance_to_start'] = calc_distance_list_to_single(
+        options['latitude'], options['longitude'], starting_location.y, starting_location.x)
+    options.sort_values(['distance_to_start'], inplace=True)
+
+    first_ten_harbours = []
+    for option in options.index:
+        if 'H' in option:
+            first_ten_harbours.append(option)
+            if len(first_ten_harbours) == 10:
+                break
+
+    candidate_nodes = options[options['distance_to_start'] <= max_length].index[0:1000].tolist()
+    candidate_nodes = list(set(candidate_nodes + first_ten_harbours))
+
+    if not candidate_nodes:
+        return pd.DataFrame(columns=['pointA', 'pointB', 'same_landmass', 'distance'])
+
+    if {'longitude_on_coastline', 'latitude_on_coastline'}.issubset(options.columns):
+        longitude = options.loc[candidate_nodes, 'longitude_on_coastline'].fillna(options.loc[candidate_nodes, 'longitude'])
+        latitude = options.loc[candidate_nodes, 'latitude_on_coastline'].fillna(options.loc[candidate_nodes, 'latitude'])
+    else:
+        longitude = options.loc[candidate_nodes, 'longitude']
+        latitude = options.loc[candidate_nodes, 'latitude']
+
+    reachable = check_if_reachable_on_land(starting_location, longitude, latitude, coastlines, get_only_availability=True)
+    reachable_nodes = pd.Index(candidate_nodes)[reachable].tolist()
+
+    road_distances = pd.DataFrame({
+        'pointA': 'start',
+        'pointB': reachable_nodes,
+        'same_landmass': True,
+        'distance': options.loc[reachable_nodes, 'distance_to_start'].tolist(),
+    })
+
+    in_tolerance = road_distances[road_distances['distance'] <= config_file['tolerance_distance']].index
+    road_distances.loc[in_tolerance, 'distance'] = 0
+
+    return road_distances
 
 
 path_config = os.getcwd() + '/_1_algorithm_configuration.yaml'
@@ -372,22 +426,24 @@ if create_mip_data:
     path = config_file['project_folder_path'] + '/processed_data/'
 
     options = pd.read_csv(path + 'mip_data/' + 'options.csv', index_col=0)
+    coastlines = pd.read_csv(path + 'landmasses.csv', index_col=0)
+    coastlines = gpd.GeoDataFrame(coastlines, geometry=coastlines['geometry'].apply(loads))
+    coastlines = coastlines.sort_index()
+    coastlines.set_geometry('geometry', inplace=True)
 
     # distances
-    for ind in locations.index:
+    for ind in tqdm(locations.index, desc='Create start MIP distances'):
 
-        options_with_location = options.copy()
-        options_with_location = pd.concat([options_with_location, locations.loc[[ind], ['longitude', 'latitude']]], axis=0)
-        options_with_location.index.values[-1] = 'start'
         point = Point([locations.loc[ind, 'longitude'], locations.loc[ind, 'latitude']])
 
-        road_distances = calculate_road_distances(config_file['tolerance_distance'], options_with_location,
-                                                  single_point=point, single_point_name='start')
+        road_distances = calculate_start_mip_distances_like_heuristic(config_file, options, point, coastlines)
         new_pipeline_distances = road_distances.copy()
-        new_pipeline_distances = new_pipeline_distances[new_pipeline_distances['distance'] <= config_file['max_length_new_segment']]
+        max_length_new_segment = _as_float_or_inf(config_file['max_length_new_segment'])
+        no_road_multiplier = _as_float_or_inf(config_file['no_road_multiplier'])
+        new_pipeline_distances = new_pipeline_distances[new_pipeline_distances['distance'] <= max_length_new_segment]
 
-        road_distances['distance'] *= config_file['no_road_multiplier']
-        new_pipeline_distances['distance'] *= config_file['no_road_multiplier']
+        road_distances['distance'] *= no_road_multiplier
+        new_pipeline_distances['distance'] *= no_road_multiplier
 
         road_distances.to_csv(path + 'mip_data/' + str(ind) +  '_start_road_distances.csv')
         new_pipeline_distances.to_csv(path + 'mip_data/' + str(ind) + '_start_new_pipeline_distances.csv')
