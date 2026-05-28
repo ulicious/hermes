@@ -31,8 +31,9 @@ class FastOptimizationGurobiModel:
     def __init__(self, static_graph, start_location_data, start_road_distances,
                  start_new_pipeline_distances, end_location, config_file,
                  techno_economic_data_conversion, techno_economic_data_transport,
-                 warm_start_route=None, export_edges=False,
+                 warm_start_route=None, warm_start_bound_route=None, export_edges=False,
                  use_warm_start_as_lower_bound=False,
+                 use_warm_start_as_upper_bound=False,
                  mip_gap=None, time_limit=None,
                  filter_edges_above_warm_start=False,
                  solve=False):
@@ -41,8 +42,11 @@ class FastOptimizationGurobiModel:
         self.techno_economic_data_conversion = techno_economic_data_conversion
         self.techno_economic_data_transport = techno_economic_data_transport
         self.solution_route = warm_start_route
+        self.warm_start_bound_route = warm_start_bound_route if warm_start_bound_route is not None else warm_start_route
         self.use_warm_start_as_lower_bound = use_warm_start_as_lower_bound
+        self.use_warm_start_as_upper_bound = use_warm_start_as_upper_bound
         self.warm_start_objective_lower_bound = None
+        self.warm_start_objective_upper_bound = None
         self.mip_gap = mip_gap
         self.time_limit = time_limit
         self.filter_edges_above_warm_start = filter_edges_above_warm_start
@@ -53,7 +57,7 @@ class FastOptimizationGurobiModel:
             self.conversion_edges, self.transport_edges = prepare_data(
                 start_location_data, static_graph, start_road_distances,
                 start_new_pipeline_distances, end_location, config_file,
-                techno_economic_data_transport, warm_start_route,
+                techno_economic_data_transport, self.warm_start_bound_route,
                 filter_edges_above_warm_start)
 
         logger.info('Optimization graph contains %s nodes and %s edges (%s conversion, %s transport)',
@@ -68,7 +72,7 @@ class FastOptimizationGurobiModel:
         self.objective_function_value = None
         self.chosen_edges = []
         self._prepare_index_arrays()
-        self._prepare_warm_start_lower_bound()
+        self._prepare_warm_start_objective_bounds()
         self.build_model()
         if solve:
             self.optimize()
@@ -104,18 +108,79 @@ class FastOptimizationGurobiModel:
             (index for index, edge in enumerate(edge_values)
              if edge[0] == 'transport' and edge[1] == 'end'), dtype=np.int64)
 
-    def _prepare_warm_start_lower_bound(self):
-        """Optionally calculate the lower bound from the actual warm-start route."""
-        if not self.use_warm_start_as_lower_bound:
+    def _prepare_warm_start_objective_bounds(self):
+        """Optionally calculate objective bounds from a known warm-start route."""
+        if not self.use_warm_start_as_lower_bound and not self.use_warm_start_as_upper_bound:
             return
-        if self.solution_route is None:
-            logger.warning('Warm-start lower bound requested, but no warm-start route was provided')
+        if self.warm_start_bound_route is None:
+            logger.warning('Warm-start objective bound requested, but no warm-start route was provided')
             return
 
-        self.warm_start_objective_lower_bound = self._calculate_route_objective(
-            self.solution_route)
-        logger.info('Calculated warm-start lower bound from route: %.6f',
-                    self.warm_start_objective_lower_bound)
+        warm_start_objective = self._calculate_route_objective(self.warm_start_bound_route)
+        if self.use_warm_start_as_lower_bound:
+            self.warm_start_objective_lower_bound = warm_start_objective
+            logger.info('Calculated warm-start lower bound from route: %.6f',
+                        self.warm_start_objective_lower_bound)
+        if self.use_warm_start_as_upper_bound:
+            self.warm_start_objective_upper_bound = warm_start_objective
+            logger.info('Calculated warm-start upper bound from route: %.6f',
+                        self.warm_start_objective_upper_bound)
+
+    def _estimate_transport_distance_km(self, edge):
+        """Estimate route-section distance from the MIP transport cost definition."""
+        edge_costs = edge[3]
+        commodity = edge[5]
+        transport_mean = edge[6]
+        if transport_mean == 'Destination':
+            return 0.0
+
+        cost_rate = self.techno_economic_data_transport[commodity].get(transport_mean)
+        if cost_rate in (None, 0):
+            return None
+
+        return edge_costs * 1000000 / cost_rate
+
+    def log_warm_start_route_details(self, route, route_name='warm-start route'):
+        """Log section-wise costs, losses and distances for a known route."""
+        if not route:
+            logger.warning('Cannot log %s because it is empty', route_name)
+            return
+
+        first_edge = self.edges[route[0]]
+        start_commodity = first_edge[1].split('+', 1)[1]
+        total_costs = self.production_costs[start_commodity]
+        logger.info('%s starts with commodity %s and production costs %.6f',
+                    route_name, start_commodity, total_costs)
+
+        for section_number, edge_key in enumerate(route, start=1):
+            edge = self.edges[edge_key]
+            section_type = edge[0]
+            start = edge[1]
+            end = edge[2]
+            edge_costs = edge[3]
+            edge_loss = edge[4]
+            previous_costs = total_costs
+            total_costs = (total_costs + edge_costs) / (1 - edge_loss)
+            marginal_route_costs = total_costs - previous_costs
+
+            if section_type == 'transport':
+                distance_km = self._estimate_transport_distance_km(edge)
+                distance_text = 'n/a' if distance_km is None else f'{distance_km:.3f} km'
+                logger.info(
+                    '%s section %s | transport %s | %s -> %s | commodity=%s | '
+                    'distance=%s | edge_costs=%.6f | loss=%.6f | '
+                    'section_cost_effect=%.6f | cumulative_costs=%.6f',
+                    route_name, section_number, edge[6], start, end, edge[5],
+                    distance_text, edge_costs, edge_loss, marginal_route_costs, total_costs)
+            else:
+                logger.info(
+                    '%s section %s | conversion | %s -> %s | end_commodity=%s | '
+                    'edge_costs=%.6f | loss=%.6f | section_cost_effect=%.6f | '
+                    'cumulative_costs=%.6f',
+                    route_name, section_number, start, end, edge[5],
+                    edge_costs, edge_loss, marginal_route_costs, total_costs)
+
+        logger.info('%s total objective costs: %.6f', route_name, total_costs)
 
     def _calculate_route_objective(self, route):
         """Calculate total route costs using the same edge propagation logic as the MIP."""
@@ -209,12 +274,19 @@ class FastOptimizationGurobiModel:
                 name='warm_start_objective_lower_bound')
             logger.info('Added objective lower bound from warm-start value: %.6f',
                         self.warm_start_objective_lower_bound)
+        if self.warm_start_objective_upper_bound is not None:
+            self.model.addConstr(
+                self.objective_expr <= self.warm_start_objective_upper_bound,
+                name='warm_start_objective_upper_bound')
+            logger.info('Added objective upper bound from warm-start value: %.6f',
+                        self.warm_start_objective_upper_bound)
         self.model.setObjective(self.objective_expr, GRB.MINIMIZE)
         self.model.update()
         logger.info('Finished matrix model construction in %.2f s', time.time() - now)
 
     def optimize(self):
         if self.solution_route is not None:
+            self.log_warm_start_route_details(self.solution_route)
             start_values = np.zeros(len(self.edge_names))
             for edge in self.solution_route:
                 start_values[self.edge_index[edge]] = 1

@@ -13,9 +13,9 @@ from gurobipy import GRB
 from shapely.geometry import Point
 
 try:
-    from .prepare_data import prepare_data, create_edges_from_distance_only, create_graph
+    from .prepare_data import prepare_data, create_edges_from_distance_only, create_graph, calculate_route_objective
 except ImportError:
-    from prepare_data import prepare_data, create_edges_from_distance_only, create_graph
+    from prepare_data import prepare_data, create_edges_from_distance_only, create_graph, calculate_route_objective
 from mixed_integer_program.mip_data_helpers import (
     load_static_mip_graph,
     load_minimal_mip_case,
@@ -232,6 +232,12 @@ class OptimizationGurobiModel:
                 name='warm_start_objective_lower_bound')
             logger.info('Added objective lower bound from warm-start value: %.6f',
                         self.warm_start_objective_lower_bound)
+        if self.warm_start_objective_upper_bound is not None:
+            self.model.addConstr(
+                objective_expr <= self.warm_start_objective_upper_bound,
+                name='warm_start_objective_upper_bound')
+            logger.info('Added objective upper bound from warm-start value: %.6f',
+                        self.warm_start_objective_upper_bound)
         self.model.setObjective(objective_expr, gp.GRB.MINIMIZE)
 
     def attach_edges_test(self):
@@ -448,8 +454,11 @@ class OptimizationGurobiModel:
     def __init__(self, static_graph, start_location_data, start_road_distances,
                  start_new_pipeline_distances, end_location, config_file,
                  techno_economic_data_conversion, techno_economic_data_transport,
-                 warm_start_route=None, create_results=False,
+                 warm_start_route=None, warm_start_bound_route=None, create_results=False,
                  warm_start_objective_lower_bound=None,
+                 warm_start_objective_upper_bound=None,
+                 use_warm_start_as_lower_bound=False,
+                 use_warm_start_as_upper_bound=False,
                  mip_gap=None, time_limit=None,
                  filter_edges_above_warm_start=False):
 
@@ -470,7 +479,9 @@ class OptimizationGurobiModel:
         self.BigM = 200
         self.eps = 0.001
         self.solution_route = warm_start_route
+        warm_start_bound_route = warm_start_bound_route if warm_start_bound_route is not None else warm_start_route
         self.warm_start_objective_lower_bound = warm_start_objective_lower_bound
+        self.warm_start_objective_upper_bound = warm_start_objective_upper_bound
         self.mip_gap = mip_gap
         self.time_limit = time_limit
         self.filter_edges_above_warm_start = filter_edges_above_warm_start
@@ -480,8 +491,20 @@ class OptimizationGurobiModel:
             self.max_costs, self.conversion_edges, self.transport_edges = \
             prepare_data(start_location_data, static_graph, start_road_distances,
                          start_new_pipeline_distances, end_location, config_file,
-                         self.techno_economic_data_transport, warm_start_route,
+                         self.techno_economic_data_transport, warm_start_bound_route,
                          filter_edges_above_warm_start)
+
+        if warm_start_bound_route is not None:
+            warm_start_objective = calculate_route_objective(
+                self.edges, self.production_costs, warm_start_bound_route)
+            if use_warm_start_as_lower_bound and self.warm_start_objective_lower_bound is None:
+                self.warm_start_objective_lower_bound = warm_start_objective
+                logger.info('Calculated warm-start lower bound from route: %.6f',
+                            self.warm_start_objective_lower_bound)
+            if use_warm_start_as_upper_bound and self.warm_start_objective_upper_bound is None:
+                self.warm_start_objective_upper_bound = warm_start_objective
+                logger.info('Calculated warm-start upper bound from route: %.6f',
+                            self.warm_start_objective_upper_bound)
 
         logger.info('Optimization graph contains %s nodes and %s edges (%s conversion, %s transport)',
                     len(self.all_nodes_adjusted), len(self.edges),
