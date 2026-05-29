@@ -142,18 +142,19 @@ def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
         return edges, conversion_edges, transport_edges
 
     warm_start_edges = set(warm_start_route)
-    removed_edges = [
+    removed_edges = {
         key for key, edge in edges.items()
         if key not in warm_start_edges
         and abs(edge[4]) <= 1e-12
         and edge[3] + hydrogen_production_costs > warm_start_costs
-    ]
+    }
     if not removed_edges:
         logger.info('Warm-start edge filter removed no edges; route costs %.6f, hydrogen production costs %.6f',
                     warm_start_costs, hydrogen_production_costs)
         return edges, conversion_edges, transport_edges
 
-    filtered_edges = {key: value for key, value in edges.items() if key not in removed_edges}
+    for key in removed_edges:
+        edges.pop(key, None)
     conversion_edges = conversion_edges.drop(
         index=conversion_edges.index.intersection(removed_edges))
     transport_edges = transport_edges.drop(
@@ -161,7 +162,7 @@ def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
     logger.info('Warm-start edge filter removed %s loss-free edges with edge costs plus hydrogen production costs '
                 'above %.6f; hydrogen production costs %.6f',
                 len(removed_edges), warm_start_costs, hydrogen_production_costs)
-    return filtered_edges, conversion_edges, transport_edges
+    return edges, conversion_edges, transport_edges
 
 
 def create_edges_from_distance_only(df_list, transport_means, techno_economic_data_transport,
