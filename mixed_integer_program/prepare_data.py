@@ -125,7 +125,8 @@ def calculate_route_objective(edges, production_costs, route):
 def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
                                      production_costs, warm_start_route):
     """
-    Remove loss-free edges whose additive costs already exceed the warm-start route.
+    Remove loss-free edges whose additive costs plus start hydrogen production
+    costs already exceed the warm-start route.
 
     Edge position 4 stores loss, not efficiency. Therefore an edge with
     technology efficiency 1 has loss 0 and contributes only absolute costs.
@@ -135,13 +136,21 @@ def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
         return edges, conversion_edges, transport_edges
 
     warm_start_costs = calculate_route_objective(edges, production_costs, warm_start_route)
+    hydrogen_production_costs = production_costs.get('Hydrogen_Gas')
+    if hydrogen_production_costs is None:
+        logger.warning('Warm-start edge filter requested, but Hydrogen_Gas production costs are unavailable')
+        return edges, conversion_edges, transport_edges
+
     warm_start_edges = set(warm_start_route)
     removed_edges = [
         key for key, edge in edges.items()
-        if key not in warm_start_edges and abs(edge[4]) <= 1e-12 and edge[3] > warm_start_costs
+        if key not in warm_start_edges
+        and abs(edge[4]) <= 1e-12
+        and edge[3] + hydrogen_production_costs > warm_start_costs
     ]
     if not removed_edges:
-        logger.info('Warm-start edge filter removed no edges; route costs %.6f', warm_start_costs)
+        logger.info('Warm-start edge filter removed no edges; route costs %.6f, hydrogen production costs %.6f',
+                    warm_start_costs, hydrogen_production_costs)
         return edges, conversion_edges, transport_edges
 
     filtered_edges = {key: value for key, value in edges.items() if key not in removed_edges}
@@ -149,8 +158,9 @@ def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
         index=conversion_edges.index.intersection(removed_edges))
     transport_edges = transport_edges.drop(
         index=transport_edges.index.intersection(removed_edges))
-    logger.info('Warm-start edge filter removed %s loss-free edges with costs above %.6f',
-                len(removed_edges), warm_start_costs)
+    logger.info('Warm-start edge filter removed %s loss-free edges with edge costs plus hydrogen production costs '
+                'above %.6f; hydrogen production costs %.6f',
+                len(removed_edges), warm_start_costs, hydrogen_production_costs)
     return filtered_edges, conversion_edges, transport_edges
 
 
