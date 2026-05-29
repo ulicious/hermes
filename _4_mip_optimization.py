@@ -168,7 +168,9 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
         os.path.join(project_path, 'start_destination_combinations.csv'), index_col=0)
     destination = get_destination(config_file)
     end_location = prepare_destination_mip_data(
-        options, destination)['destination_infrastructure'].tolist()
+        options, destination,
+        destination_tolerance=config_file['to_final_destination_tolerance']
+    )['destination_infrastructure'].tolist()
     logger.info('Loaded %s static nodes, %s static edges, %s destinations and %s origins',
                 len(static_graph['nodes']), len(static_graph['edges']),
                 len(end_location), len(start_locations))

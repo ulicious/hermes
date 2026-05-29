@@ -1,12 +1,26 @@
 import logging
+import math
 import os
 
 import pandas as pd
 from shapely.geometry import Point
+from shapely.ops import nearest_points
 from tqdm import tqdm
+
+from algorithm.methods_geographic import calc_distance_single_to_single
 
 
 logger = logging.getLogger(__name__)
+
+
+def _as_float_tolerance(value):
+    if value is None:
+        return 0
+    if isinstance(value, str):
+        if value == 'math.inf':
+            return math.inf
+        return float(value)
+    return value
 
 
 def create_transport_edges(distance_options, commodities, techno_economic_data_transport,
@@ -130,13 +144,29 @@ def load_static_mip_graph(path_mip_data):
     return static_graph
 
 
-def prepare_destination_mip_data(options, destination, path_processed_data=None):
+def prepare_destination_mip_data(options, destination, path_processed_data=None, destination_tolerance=0):
     """Determine the infrastructure nodes accepted as sinks for one destination."""
+    destination_tolerance = _as_float_tolerance(destination_tolerance)
     destination_infrastructure = []
-    if hasattr(destination, 'contains'):
+    if hasattr(destination, 'covers'):
         for option in options.index:
             option_point = Point([options.loc[option, 'longitude'], options.loc[option, 'latitude']])
-            if destination.contains(option_point):
+            if destination.covers(option_point):
+                destination_infrastructure.append(option)
+                continue
+
+            if destination_tolerance > 0:
+                destination_point = nearest_points(destination, option_point)[0]
+                distance_to_destination = calc_distance_single_to_single(
+                    option_point.y, option_point.x, destination_point.y, destination_point.x)
+                if distance_to_destination <= destination_tolerance:
+                    destination_infrastructure.append(option)
+    elif isinstance(destination, Point):
+        for option in options.index:
+            option_point = Point([options.loc[option, 'longitude'], options.loc[option, 'latitude']])
+            distance_to_destination = calc_distance_single_to_single(
+                option_point.y, option_point.x, destination.y, destination.x)
+            if distance_to_destination <= destination_tolerance:
                 destination_infrastructure.append(option)
 
     result = pd.DataFrame(destination_infrastructure, columns=['destination_infrastructure'])

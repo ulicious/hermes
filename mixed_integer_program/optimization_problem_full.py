@@ -640,7 +640,10 @@ else:
     options = pd.read_csv(path_processed_data + 'mip_data/options.csv', index_col=0)
     start_locations = pd.read_csv(path_overall_data + '/' + 'start_destination_combinations.csv', index_col=0)
     destination = get_destination(config_file)
-    end_location = prepare_destination_mip_data(options, destination)['destination_infrastructure'].tolist()
+    end_location = prepare_destination_mip_data(
+        options, destination,
+        destination_tolerance=config_file['to_final_destination_tolerance']
+    )['destination_infrastructure'].tolist()
     logger.info('Loaded %s global nodes, %s global edges and %s destination infrastructure nodes',
                 len(static_graph['nodes']), len(static_graph['edges']), len(end_location))
 
