@@ -342,8 +342,8 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             branch_position = branches.index.get_loc(branch_index)
 
             pipeline_applicable \
-                = current_commodity_object.get_transportation_options_specific_mean_of_transport('Pipeline_Gas') \
-                | current_commodity_object.get_transportation_options_specific_mean_of_transport('Pipeline_Liquid')
+                = current_commodity_object.get_transportation_options_specific_mean_of_transport('New_Pipeline_Gas') \
+                | current_commodity_object.get_transportation_options_specific_mean_of_transport('New_Pipeline_Liquid')
 
             # check which transport mean was used in previous iteration
             was_not_road = branches.at[branch_index, 'current_transport_mean'] != 'Road'
@@ -570,8 +570,8 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                     | commodity_object.get_transportation_options()['New_Pipeline_Liquid']):
 
                 # add information before any change to distances is made
-                pipeline_applicable = (branch_meta['Pipeline_Gas_applicable'].to_numpy(dtype=bool)
-                                       | branch_meta['Pipeline_Liquid_applicable'].to_numpy(dtype=bool))
+                pipeline_applicable = (branch_meta['New_Pipeline_Gas_applicable'].to_numpy(dtype=bool)
+                                       | branch_meta['New_Pipeline_Liquid_applicable'].to_numpy(dtype=bool))
                 minimal_distance = minimal_distances.loc[columns_to_keep, 'minimal_distance'].to_numpy()
 
                 # remove branches where all minimal distances are already higher than minimal distance to next node,
@@ -679,12 +679,12 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         new_infrastructure_options['current_total_costs'] \
             = new_infrastructure_options['previous_total_costs'] + new_infrastructure_options['current_transportation_costs']
 
-        pipeline_gas_branches = branches[branches['Pipeline_Gas_applicable']].index
+        pipeline_gas_branches = branches[branches['New_Pipeline_Gas_applicable']].index
         pg_options \
             = new_infrastructure_options[new_infrastructure_options['previous_branch'].isin(pipeline_gas_branches)].index
         new_infrastructure_options.loc[pg_options, 'current_transport_mean'] = 'New_Pipeline_Gas'
 
-        pipeline_liquid_branches = branches[branches['Pipeline_Liquid_applicable']].index
+        pipeline_liquid_branches = branches[branches['New_Pipeline_Liquid_applicable']].index
         pl_options \
             = new_infrastructure_options[new_infrastructure_options['previous_branch'].isin(pipeline_liquid_branches)].index
         new_infrastructure_options.loc[pl_options, 'current_transport_mean'] = 'New_Pipeline_Liquid'

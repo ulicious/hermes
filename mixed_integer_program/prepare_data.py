@@ -1,5 +1,6 @@
 import ast
 import logging
+import math
 
 import pandas as pd
 import networkx as nx
@@ -52,6 +53,10 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
       keys directly, as used by the minimal infrastructure example;
     - `create_results=True` retains the legacy option of rebuilding a route
       from an existing result file for a real start location.
+
+    Configuration-dependent feasibility is applied after the broad graph is
+    assembled for this location. The global preprocessed MIP artifacts stay
+    broad, but one concrete optimization run does not carry impossible edges.
     """
 
     all_commodities = config_file['available_commodity']
@@ -93,10 +98,22 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
             key = destination + '+' + commodity + '-end'
             sink_edges[key] = ('transport', destination + '+' + commodity, 'end', 0, 0,
                                commodity, 'Destination')
+    if warm_start_route is not None:
+        for edge_key in warm_start_route:
+            if not edge_key.startswith('start+') or not edge_key.endswith('-end'):
+                continue
+            commodity = edge_key.split('+', 1)[1].rsplit('-', 1)[0]
+            if commodity not in target_commodities:
+                continue
+            sink_edges[edge_key] = ('transport', 'start+' + commodity, 'end', 0, 0,
+                                    commodity, 'Destination')
     edges.update(sink_edges)
     sink_edges_df = pd.DataFrame.from_dict(
         {key: value[1:] for key, value in sink_edges.items()}, orient='index', columns=columns)
     transport_edges = pd.concat([transport_edges, sink_edges_df], axis=0)
+
+    edges, transport_edges = filter_transport_edges_by_configuration(
+        edges, transport_edges, config_file, techno_economic_data_transport)
 
     if filter_edges_above_warm_start:
         edges, conversion_edges, transport_edges = filter_edges_by_warm_start_costs(
@@ -108,6 +125,102 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
                 all_nodes_adjusted, edges, transport_edges, production_costs, warm_start_route)
 
     return all_nodes_adjusted, target_nodes, edges, production_costs, transport_means, max_costs, conversion_edges, transport_edges
+
+
+def _as_float_config(value):
+    """Parse numeric configuration values, including the local `math.inf` convention."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        if value == 'math.inf':
+            return math.inf
+        return float(value)
+    return float(value)
+
+
+def _physical_node_name(node):
+    if '+' not in node:
+        return node
+    return node.split('+', 1)[0]
+
+
+def _estimate_transport_distance(edge, techno_economic_data_transport):
+    commodity = edge[5]
+    transport_mean = edge[6]
+    if transport_mean == 'Destination':
+        return 0.0
+    cost_rate = techno_economic_data_transport.get(commodity, {}).get(transport_mean)
+    if cost_rate in (None, 0):
+        return None
+    return edge[3] * 1000000 / cost_rate
+
+
+def transport_edge_forbidden_reason(edge, config_file, techno_economic_data_transport):
+    """Return why a transport edge is not allowed in this run, or None."""
+    if edge[0] != 'transport':
+        return None
+
+    start = edge[1]
+    end = edge[2]
+    commodity = edge[5]
+    transport_mean = edge[6]
+
+    if transport_mean == 'Destination':
+        return None
+
+    if _physical_node_name(start) == _physical_node_name(end):
+        return 'self_loop'
+
+    if transport_mean not in config_file['available_transport_means']:
+        return 'transport_mean_not_available'
+
+    transport_options = techno_economic_data_transport.get(commodity, {}).get('potential_transportation', [])
+    if transport_mean not in transport_options:
+        return 'commodity_transport_not_allowed'
+
+    if 'New' in transport_mean and not config_file['build_new_infrastructure']:
+        return 'new_infrastructure_disabled'
+
+    if (commodity == 'Hydrogen_Gas'
+            and transport_mean == 'Pipeline_Gas'
+            and not config_file['H2_ready_infrastructure']):
+        return 'hydrogen_in_existing_gas_pipeline_not_ready'
+
+    distance = _estimate_transport_distance(edge, techno_economic_data_transport)
+    if distance is not None and math.isfinite(distance):
+        if transport_mean == 'Road':
+            max_length_road = _as_float_config(config_file['max_length_road'])
+            if max_length_road is not None and distance > max_length_road + 1e-9:
+                return 'road_distance_above_max_length'
+        elif transport_mean in {'New_Pipeline_Gas', 'New_Pipeline_Liquid'}:
+            max_length_new_segment = _as_float_config(config_file['max_length_new_segment'])
+            if max_length_new_segment is not None and distance > max_length_new_segment + 1e-9:
+                return 'new_pipeline_distance_above_max_length'
+
+    return None
+
+
+def filter_transport_edges_by_configuration(edges, transport_edges, config_file, techno_economic_data_transport):
+    """Remove run-specific infeasible transport edges before building the MIP."""
+    removed_edges = []
+    removed_by_reason = {}
+    for key, edge in list(edges.items()):
+        reason = transport_edge_forbidden_reason(edge, config_file, techno_economic_data_transport)
+        if reason is None:
+            continue
+        removed_edges.append(key)
+        removed_by_reason[reason] = removed_by_reason.get(reason, 0) + 1
+        edges.pop(key, None)
+
+    if not removed_edges:
+        logger.info('Configuration transport filter removed no edges')
+        return edges, transport_edges
+
+    transport_edges = transport_edges.drop(
+        index=transport_edges.index.intersection(removed_edges))
+    logger.info('Configuration transport filter removed %s edges before model build: %s',
+                len(removed_edges), removed_by_reason)
+    return edges, transport_edges
 
 
 def calculate_route_objective(edges, production_costs, route):
@@ -138,11 +251,13 @@ def calculate_route_objective(edges, production_costs, route):
 def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
                                      production_costs, warm_start_route):
     """
-    Remove loss-free edges whose additive costs plus start hydrogen production
-    costs already exceed the warm-start route.
+    Remove edges that cannot be part of a route cheaper than the warm start.
 
-    Edge position 4 stores loss, not efficiency. Therefore an edge with
-    technology efficiency 1 has loss 0 and contributes only absolute costs.
+    Edge position 4 stores loss, not efficiency. If all losses are
+    non-negative, costs cannot decrease along a path. In that case every edge
+    must at least carry the cheapest available start production cost before its
+    own costs and losses are applied. Edges whose resulting lower bound already
+    exceeds the warm-start objective cannot improve the incumbent.
     """
     if warm_start_route is None:
         logger.warning('Warm-start edge filter requested, but no warm-start route was provided')
@@ -154,21 +269,36 @@ def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
         return edges, conversion_edges, transport_edges
 
     warm_start_costs = calculate_route_objective(edges, production_costs, warm_start_route)
-    hydrogen_production_costs = production_costs.get('Hydrogen_Gas')
-    if hydrogen_production_costs is None:
-        logger.warning('Warm-start edge filter requested, but Hydrogen_Gas production costs are unavailable')
+    if not production_costs:
+        logger.warning('Warm-start edge filter requested, but no production costs are available')
         return edges, conversion_edges, transport_edges
 
+    has_negative_losses = any(edge[4] < -1e-12 for edge in edges.values())
+    if has_negative_losses:
+        logger.warning('Warm-start edge filter skipped because at least one edge has negative loss')
+        return edges, conversion_edges, transport_edges
+
+    minimal_production_costs = min(production_costs.values())
     warm_start_edges = set(warm_start_route)
-    removed_edges = {
-        key for key, edge in edges.items()
-        if key not in warm_start_edges
-        and abs(edge[4]) <= 1e-12
-        and edge[3] + hydrogen_production_costs > warm_start_costs
-    }
+    removed_edges = set()
+    for key, edge in edges.items():
+        if key in warm_start_edges:
+            continue
+
+        edge_costs = edge[3]
+        edge_loss = edge[4]
+        if edge_loss >= 1:
+            removed_edges.add(key)
+            continue
+
+        edge_lower_bound = (minimal_production_costs + edge_costs) / (1 - edge_loss)
+        if edge_lower_bound > warm_start_costs:
+            removed_edges.add(key)
+
     if not removed_edges:
-        logger.info('Warm-start edge filter removed no edges; route costs %.6f, hydrogen production costs %.6f',
-                    warm_start_costs, hydrogen_production_costs)
+        logger.info('Warm-start edge filter removed no edges; route costs %.6f, '
+                    'minimal production costs %.6f',
+                    warm_start_costs, minimal_production_costs)
         return edges, conversion_edges, transport_edges
 
     for key in removed_edges:
@@ -177,9 +307,9 @@ def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
         index=conversion_edges.index.intersection(removed_edges))
     transport_edges = transport_edges.drop(
         index=transport_edges.index.intersection(removed_edges))
-    logger.info('Warm-start edge filter removed %s loss-free edges with edge costs plus hydrogen production costs '
-                'above %.6f; hydrogen production costs %.6f',
-                len(removed_edges), warm_start_costs, hydrogen_production_costs)
+    logger.info('Warm-start edge filter removed %s edges with edge lower bound above %.6f; '
+                'minimal production costs %.6f',
+                len(removed_edges), warm_start_costs, minimal_production_costs)
     return edges, conversion_edges, transport_edges
 
 

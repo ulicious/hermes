@@ -151,8 +151,15 @@ def load_static_mip_graph(path_mip_data):
     return static_graph
 
 
-def prepare_destination_mip_data(options, destination, path_processed_data=None, destination_tolerance=0):
-    """Determine the infrastructure nodes accepted as sinks for one destination."""
+def prepare_destination_mip_data(options, destination, path_processed_data=None, destination_tolerance=0,
+                                 include_tolerance_for_polygons=False):
+    """Determine the infrastructure nodes accepted as sinks for one destination.
+
+    Country/polygon destinations mirror the heuristic: direct sink
+    infrastructure is only infrastructure inside the destination polygon.
+    The destination tolerance is used for point destinations, and can be
+    explicitly enabled for polygons if needed.
+    """
     destination_tolerance = _as_float_tolerance(destination_tolerance)
     destination_infrastructure = []
     if options.empty or not {'longitude', 'latitude'}.issubset(options.columns):
@@ -171,7 +178,7 @@ def prepare_destination_mip_data(options, destination, path_processed_data=None,
                 destination_infrastructure.append(option)
                 continue
 
-            if destination_tolerance > 0:
+            if include_tolerance_for_polygons and destination_tolerance > 0:
                 destination_point = nearest_points(destination, option_point)[0]
                 distance_to_destination = calc_distance_single_to_single(
                     option_point.y, option_point.x, destination_point.y, destination_point.x)

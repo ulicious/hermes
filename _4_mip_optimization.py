@@ -2,6 +2,7 @@ import logging
 import os
 import time
 import ast
+import math
 
 import pandas as pd
 import yaml
@@ -20,6 +21,27 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger('gurobipy').setLevel(logging.WARNING)
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+
+def configure_mip_logging(show_mip_logs=True):
+    """Keep optional MIP progress logs quiet while preserving incumbent updates."""
+    incumbent_logger = logging.getLogger(
+        'mixed_integer_program.optimization_problem_full_fast.incumbent')
+    regular_loggers = [
+        logging.getLogger('mixed_integer_program'),
+        logging.getLogger('data_processing'),
+        logging.getLogger('algorithm'),
+        logger,
+    ]
+    if show_mip_logs:
+        for regular_logger in regular_loggers:
+            regular_logger.setLevel(logging.INFO)
+    else:
+        for regular_logger in regular_loggers:
+            regular_logger.setLevel(logging.CRITICAL + 1)
+
+    incumbent_logger.setLevel(logging.INFO)
+    incumbent_logger.propagate = True
 
 
 def load_configuration_and_technology_data():
@@ -67,7 +89,12 @@ def create_warm_start_solution(result):
     if 'taken_routes' not in result.index or pd.isna(result.loc['taken_routes']):
         logger.warning('Warm-start result has no taken_routes entry')
         return None
-    route = ast.literal_eval(result.loc['taken_routes'])
+    taken_routes_text = str(result.loc['taken_routes'])
+    try:
+        route = ast.literal_eval(taken_routes_text)
+    except (SyntaxError, ValueError):
+        route = ast.literal_eval(
+            taken_routes_text.replace('nan', 'None').replace('inf', '1e309'))
     if not route:
         logger.warning('Warm-start result contains an empty route')
         return None
@@ -88,6 +115,19 @@ def create_warm_start_solution(result):
             if start == 'Start':
                 start = 'start'
             transport_mean = segment[1]
+            if transport_mean is None or (isinstance(transport_mean, float) and math.isnan(transport_mean)):
+                distance_type = result.get('distance_type')
+                if distance_type == 'new':
+                    if commodity in {'Hydrogen_Gas', 'Methane_Gas'}:
+                        transport_mean = 'New_Pipeline_Gas'
+                    else:
+                        transport_mean = 'New_Pipeline_Liquid'
+                else:
+                    transport_mean = result.get('current_transport_mean')
+                    if pd.isna(transport_mean):
+                        transport_mean = 'Road'
+                logger.info('Warm-start route segment has no transport mean; inferred %s for %s -> %s',
+                            transport_mean, start, end)
             solution_route.append(
                 start + '+' + commodity + '-' + end + '+' + commodity + '-' + transport_mean)
             start = end
@@ -100,7 +140,12 @@ def create_warm_start_solution(result):
             solution_route.append(start + '+' + commodity + '-' + end + '+' + segment[1])
             commodity = segment[1]
 
-    if end is None or commodity is None or not solution_route:
+    if commodity is not None and not solution_route:
+        logger.info('Warm-start route for commodity %s is already complete at the start location',
+                    commodity)
+        return ['start+' + commodity + '-end']
+
+    if end is None or commodity is None:
         logger.warning('Warm-start route has no usable transport path')
         return None
 
@@ -203,6 +248,7 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
     results = []
     for location in start_locations.index:
         logger.info('Build MIP for origin %s', location)
+        config_file['current_mip_location'] = location
         known_route = None
         if needs_warm_start_route:
             known_route = load_warm_start_from_result_file(project_path, location)
@@ -251,8 +297,10 @@ def run_mip_optimization(use_minimal_example=False, solve=True,
                          use_warm_start_as_lower_bound=False,
                          mip_gap=None, time_limit=None,
                          filter_edges_above_warm_start=False,
-                         filter_start_options_above_warm_start=False):
+                         filter_start_options_above_warm_start=False,
+                         show_mip_logs=True):
     """Central entry point for both the diagnostic example and real MIP runs."""
+    configure_mip_logging(show_mip_logs)
     config_file, conversion_data, transport_data = load_configuration_and_technology_data()
     start = time.time()
     if use_minimal_example:
@@ -282,6 +330,7 @@ if __name__ == '__main__':
     FILTER_START_OPTIONS_ABOVE_WARM_START = True
     MIP_GAP = None
     TIME_LIMIT = None
+    SHOW_MIP_LOGS = False
 
     run_mip_optimization(
         use_minimal_example=USE_MINIMAL_EXAMPLE,
@@ -291,4 +340,5 @@ if __name__ == '__main__':
         mip_gap=MIP_GAP,
         time_limit=TIME_LIMIT,
         filter_edges_above_warm_start=FILTER_EDGES_ABOVE_WARM_START,
-        filter_start_options_above_warm_start=FILTER_START_OPTIONS_ABOVE_WARM_START)
+        filter_start_options_above_warm_start=FILTER_START_OPTIONS_ABOVE_WARM_START,
+        show_mip_logs=SHOW_MIP_LOGS)

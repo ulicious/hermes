@@ -7,6 +7,7 @@ import time
 import pandas as pd
 import gurobipy as gp
 import geopandas as gpd
+import numpy as np
 
 from gurobipy import GRB
 
@@ -32,6 +33,108 @@ logging.getLogger('gurobipy').setLevel(logging.WARNING)
 
 # noinspection PyTypeChecker
 class OptimizationGurobiModel:
+    CONNECTOR_TRANSPORT_MEANS = {'Road', 'New_Pipeline_Gas', 'New_Pipeline_Liquid'}
+
+    @staticmethod
+    def physical_node_name(node):
+        """Return the infrastructure node without the commodity suffix."""
+        if '+' not in node:
+            return node
+        return node.split('+', 1)[0]
+
+    @staticmethod
+    def as_float(value):
+        """Parse numeric configuration values, including the local `math.inf` convention."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            if value == 'math.inf':
+                return np.inf
+            return float(value)
+        return float(value)
+
+    def estimate_transport_distance(self, edge):
+        """Estimate stored transport distance from the MIP transport cost definition."""
+        commodity = edge[5]
+        transport_mean = edge[6]
+        if transport_mean == 'Destination':
+            return 0.0
+        cost_rate = self.techno_economic_data_transport[commodity].get(transport_mean)
+        if cost_rate in (None, 0):
+            return None
+        return edge[3] * 1000000 / cost_rate
+
+    def configuration_forbidden_reason(self, edge):
+        """Return why an edge is forbidden by run-specific heuristic rules, or None."""
+        edge_type = edge[0]
+        start = edge[1]
+        end = edge[2]
+        edge_costs = edge[3]
+        edge_loss = edge[4]
+
+        if edge_type == 'conversion':
+            start_commodity = start.split('+', 1)[1]
+            end_commodity = end.split('+', 1)[1]
+            conversion_options = self.techno_economic_data_conversion.get(
+                start_commodity, {}).get('potential_conversions', [])
+            if end_commodity not in conversion_options:
+                return 'conversion_not_allowed'
+            if not np.isfinite(edge_costs) or not np.isfinite(edge_loss):
+                return 'conversion_cost_or_loss_not_finite'
+            return None
+
+        if edge_type != 'transport':
+            return None
+
+        commodity = edge[5]
+        transport_mean = edge[6]
+        if transport_mean == 'Destination':
+            return None
+
+        if self.physical_node_name(start) == self.physical_node_name(end):
+            return 'self_loop'
+
+        if transport_mean not in self.config_file['available_transport_means']:
+            return 'transport_mean_not_available'
+
+        transport_options = self.techno_economic_data_transport.get(
+            commodity, {}).get('potential_transportation', [])
+        if transport_mean not in transport_options:
+            return 'commodity_transport_not_allowed'
+
+        if 'New' in transport_mean and not self.config_file['build_new_infrastructure']:
+            return 'new_infrastructure_disabled'
+
+        if (commodity == 'Hydrogen_Gas'
+                and transport_mean == 'Pipeline_Gas'
+                and not self.config_file['H2_ready_infrastructure']):
+            return 'hydrogen_in_existing_gas_pipeline_not_ready'
+
+        distance = self.estimate_transport_distance(edge)
+        if distance is not None and np.isfinite(distance):
+            if transport_mean == 'Road':
+                max_length_road = self.as_float(self.config_file['max_length_road'])
+                if max_length_road is not None and distance > max_length_road + 1e-9:
+                    return 'road_distance_above_max_length'
+            elif transport_mean in {'New_Pipeline_Gas', 'New_Pipeline_Liquid'}:
+                max_length_new_segment = self.as_float(self.config_file['max_length_new_segment'])
+                if max_length_new_segment is not None and distance > max_length_new_segment + 1e-9:
+                    return 'new_pipeline_distance_above_max_length'
+
+        return None
+
+    def configuration_forbidden_edges(self):
+        """Collect edges disabled by run-specific heuristic feasibility assumptions."""
+        forbidden_edges = []
+        forbidden_by_reason = {}
+        for edge_key, edge in self.edges.items():
+            reason = self.configuration_forbidden_reason(edge)
+            if reason is None:
+                continue
+            forbidden_edges.append(edge_key)
+            forbidden_by_reason[reason] = forbidden_by_reason.get(reason, 0) + 1
+        return forbidden_edges, forbidden_by_reason
+
     def validate_route_against_graph(self, route, route_name):
         """Disable optional route-based features if the route does not fit the current graph."""
         if route is None:
@@ -53,6 +156,16 @@ class OptimizationGurobiModel:
         self.capacity_at_node = self.model.addVars(self.all_nodes_adjusted, vtype='I', name=self.all_nodes_adjusted)
 
         self.edge_binaries = self.model.addVars([*self.edges], vtype='B', name=[*self.edges.keys()])
+
+        forbidden_edges, forbidden_by_reason = self.configuration_forbidden_edges()
+        if forbidden_edges:
+            self.model.addConstrs(
+                (self.edge_binaries[edge] == 0 for edge in forbidden_edges),
+                name='configuration_forbidden_edges')
+            logger.info('Added %s configuration feasibility constraints for forbidden edges: %s',
+                        len(forbidden_edges), forbidden_by_reason)
+        else:
+            logger.info('No edges forbidden by configuration feasibility constraints')
 
         now = time.time()
         # for row in self.conversion_edges.itertuples():
@@ -172,11 +285,20 @@ class OptimizationGurobiModel:
 
         incoming_edges = defaultdict(list)  # edges with node in position 2
         outgoing_edges = defaultdict(list)  # edges with node in position 1
+        incoming_connector_edges_by_physical_node = defaultdict(list)
+        outgoing_connector_edges_by_physical_node = defaultdict(list)
 
         for key, edge in self.edges.items():
             # Assuming edge is something like (…, tail_node, head_node)
             outgoing_edges[edge[1]].append(key)
             incoming_edges[edge[2]].append(key)
+            if edge[0] == 'transport' and edge[6] in self.CONNECTOR_TRANSPORT_MEANS:
+                if edge[2] != 'end':
+                    incoming_connector_edges_by_physical_node[
+                        self.physical_node_name(edge[2])].append(key)
+                if not edge[1].startswith('start+'):
+                    outgoing_connector_edges_by_physical_node[
+                        self.physical_node_name(edge[1])].append(key)
 
         for node in self.all_nodes_adjusted:
             # sum of binaries where node is in position 2
@@ -193,6 +315,19 @@ class OptimizationGurobiModel:
 
                 self.model.addConstr(sum_edge_key_1 == sum_edge_key_2,
                                      name=f'balance[{node}]')
+
+        connector_physical_nodes = (
+            set(incoming_connector_edges_by_physical_node)
+            .intersection(outgoing_connector_edges_by_physical_node)
+        )
+        for node in connector_physical_nodes:
+            connector_edges = (
+                incoming_connector_edges_by_physical_node[node]
+                + outgoing_connector_edges_by_physical_node[node]
+            )
+            self.model.addConstr(
+                gp.quicksum(self.edge_binaries[key] for key in connector_edges) <= 1,
+                name=f'no_consecutive_connector_edges[{node}]')
 
         # # ensure that each node is visited max. once or a specific conversion takes place max. once
         # for node in self.all_nodes_adjusted:
