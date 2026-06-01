@@ -25,7 +25,8 @@ def process_ports(path_data, coastlines, landmasses, boundaries, destination, us
         gj = geojson.load(f)
     features = gj['features']
 
-    ports = pd.DataFrame(columns=['latitude', 'longitude', 'name', 'country', 'continent'])
+    ports = pd.DataFrame(columns=['latitude', 'longitude', 'name', 'country', 'continent',
+                                  'longitude_on_coastline', 'latitude_on_coastline'])
     ports.drop_duplicates(subset=['latitude', 'longitude'], keep='first')
 
     i = 0

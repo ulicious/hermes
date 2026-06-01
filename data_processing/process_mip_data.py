@@ -256,8 +256,16 @@ def prepare_global_mip_data(options, ports, config_file, techno_economic_data_co
     path_mip_data = path_processed_data + 'mip_data/'
     logger.info('Prepare global MIP data independent from origin and destination')
     mip_options = options.copy()
-    mip_options.loc[ports.index, 'longitude'] = mip_options.loc[ports.index, 'longitude_on_coastline']
-    mip_options.loc[ports.index, 'latitude'] = mip_options.loc[ports.index, 'latitude_on_coastline']
+
+    if ports.empty:
+        logger.info('No ports available for MIP data; skip coastline coordinate replacement')
+    elif {'longitude_on_coastline', 'latitude_on_coastline'}.issubset(mip_options.columns):
+        port_index = mip_options.index.intersection(ports.index)
+        mip_options.loc[port_index, 'longitude'] = mip_options.loc[port_index, 'longitude_on_coastline']
+        mip_options.loc[port_index, 'latitude'] = mip_options.loc[port_index, 'latitude_on_coastline']
+    else:
+        logger.warning('Ports are available, but coastline coordinate columns are missing; use original port coordinates')
+
     columns_to_drop = ['name', 'country', 'continent', 'longitude_on_coastline', 'latitude_on_coastline']
     mip_options.drop(columns=[column for column in columns_to_drop if column in mip_options.columns], inplace=True)
     mip_options.to_csv(path_mip_data + 'options.csv', encoding='utf-8', index=True)
