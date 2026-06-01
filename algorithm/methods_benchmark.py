@@ -217,7 +217,7 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
         raise
 
     if shipping_options.empty:
-        return None
+        return math.inf, [], None, None, None, None, None, None
 
     transportation_options = shipping_commodity.get_transportation_options()
     transportation_costs = shipping_commodity.get_transportation_costs()
