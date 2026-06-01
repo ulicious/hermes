@@ -184,8 +184,13 @@ def prepare_data_and_configuration_dictionary(config_file):
         # will not be applied to calculate actual costs
         costs_efficiencies_destinations = conversion_costs_and_efficiencies.loc[infrastructure_in_destination, :]
         if costs_efficiencies_destinations.empty:
-            min_costs_efficiencies_destinations = pd.DataFrame(
-                {column: math.inf for column in conversion_costs_and_efficiencies.columns}, index=['Destination'])
+            destination_point = destination_location.representative_point()
+            destination = pd.DataFrame({'longitude': destination_point.x, 'latitude': destination_point.y},
+                                       index=['Destination'])
+            destination = attach_conversion_costs_and_efficiency_to_infrastructure(
+                destination, config_file, techno_economic_data_conversion)
+            min_costs_efficiencies_destinations = destination
+            infrastructure_in_destination = ['Destination']
         else:
             min_costs_efficiencies_destinations = pd.DataFrame(
                 costs_efficiencies_destinations.min(axis='index')).transpose()

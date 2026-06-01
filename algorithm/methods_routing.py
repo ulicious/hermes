@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 import networkx as nx
 
+from shapely.geometry import Point
+
 from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list
 from algorithm.methods_cost_approximations import calculate_cheapest_option_to_closest_infrastructure, \
     calculate_cheapest_option_to_final_destination
@@ -97,10 +99,18 @@ def get_complete_infrastructure(data, config_file):
 
         if m == 'Road':
 
-            if config_file['destination_type'] == 'location':
+            if (config_file['destination_type'] == 'location'
+                    or 'Destination' in _as_list(data['destination'].get('infrastructure'))):
                 # Check final destination and add to option outside tolerance if applicable
-                complete_infrastructure.loc['Destination', 'latitude'] = final_destination.y
-                complete_infrastructure.loc['Destination', 'longitude'] = final_destination.x
+                if isinstance(final_destination, pd.Series):
+                    destination_point = Point([final_destination['longitude'], final_destination['latitude']])
+                elif hasattr(final_destination, 'representative_point') and not hasattr(final_destination, 'x'):
+                    destination_point = final_destination.representative_point()
+                else:
+                    destination_point = final_destination
+
+                complete_infrastructure.loc['Destination', 'latitude'] = destination_point.y
+                complete_infrastructure.loc['Destination', 'longitude'] = destination_point.x
                 complete_infrastructure.loc['Destination', 'current_transport_mean'] = m
                 complete_infrastructure.loc['Destination', 'graph'] = None
                 complete_infrastructure.loc['Destination', 'continent'] = _as_list(data['destination']['continent'])[0]

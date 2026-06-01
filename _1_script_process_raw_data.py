@@ -63,6 +63,15 @@ def write_csv_with_schema(data, path_file, columns):
     return data
 
 
+def csv_has_rows(path_file):
+    if not os.path.exists(path_file):
+        return False
+    try:
+        return not pd.read_csv(path_file, index_col=0).empty
+    except pd.errors.EmptyDataError:
+        return False
+
+
 def ensure_processed_infrastructure_files(path_processed):
     """Create schema-correct empty infrastructure files for optional layers."""
     defaults = {
@@ -120,8 +129,6 @@ if not os.path.exists(path_raw_data):
 if not os.path.exists(path_processed_data):
     os.mkdir(path_processed_data)
 
-ensure_processed_infrastructure_files(path_processed_data)
-
 if not os.path.exists(path_overall_data + 'results/'):
     os.mkdir(path_overall_data + 'results/')
 
@@ -147,6 +154,17 @@ yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
 techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
 files_in_folder = os.listdir(path_processed_data)
+ensure_processed_infrastructure_files(path_processed_data)
+gas_pipeline_files_have_data = (
+    csv_has_rows(path_processed_data + 'gas_pipeline_graphs.csv')
+    and csv_has_rows(path_processed_data + 'gas_pipeline_node_locations.csv')
+)
+oil_pipeline_files_have_data = (
+    csv_has_rows(path_processed_data + 'oil_pipeline_graphs.csv')
+    and csv_has_rows(path_processed_data + 'oil_pipeline_node_locations.csv')
+)
+ports_file_has_data = csv_has_rows(path_processed_data + 'ports.csv')
+minimal_distances_file_has_data = csv_has_rows(path_processed_data + 'minimal_distances.csv')
 
 infrastructure_enforce_update_of_data = config_file['infrastructure_enforce_update_of_data']
 create_mip_data = config_file['create_mip_data']
@@ -217,8 +235,7 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
     path_gas_pipeline_data = path_processed_data + 'gas_network_data/'
     path_oil_pipeline_data = path_processed_data + 'oil_network_data/'
 
-    if not (('gas_pipeline_graphs.csv' in files_in_folder) & ('gas_pipeline_node_locations.csv' in files_in_folder)
-            & (not infrastructure_enforce_update_of_data)):
+    if not (gas_pipeline_files_have_data & (not infrastructure_enforce_update_of_data)):
         if use_minimal_example:
             gas_graph, gas_nodes \
                 = process_network_data_to_network_objects_with_additional_connection_points('gas_pipeline', path_gas_pipeline_data,
@@ -239,8 +256,7 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
         gas_graph = read_csv_or_empty(path_processed_data + 'gas_pipeline_graphs.csv', PIPELINE_GRAPH_COLUMNS)
         gas_nodes = read_csv_or_empty(path_processed_data + 'gas_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
 
-    if not (('oil_pipeline_graphs.csv' in files_in_folder) & ('oil_pipeline_node_locations.csv' in files_in_folder)
-            & (not infrastructure_enforce_update_of_data)):
+    if not (oil_pipeline_files_have_data & (not infrastructure_enforce_update_of_data)):
         if use_minimal_example:
             oil_graph, oil_nodes \
                 = process_network_data_to_network_objects_with_additional_connection_points('oil_pipeline', path_oil_pipeline_data,
@@ -262,7 +278,7 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
 
     # process ports
     logging.info('Processing ports')
-    if not (('ports.csv' in files_in_folder) & (not infrastructure_enforce_update_of_data)):
+    if not (ports_file_has_data & (not infrastructure_enforce_update_of_data)):
         ports = process_ports(path_raw_data, coastlines, landmasses, boundaries, destination, use_minimal_example=use_minimal_example)
         ports = write_csv_with_schema(ports, path_processed_data + 'ports.csv', PORT_COLUMNS)
     else:
@@ -286,7 +302,7 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
     # calculate closest infrastructure for each node
     logging.info('Calculate closest infrastructure')
     options = pd.concat([gas_nodes, oil_nodes, ports])
-    if not (('minimal_distances.csv' in files_in_folder) & (not infrastructure_enforce_update_of_data)):
+    if not (minimal_distances_file_has_data & (not infrastructure_enforce_update_of_data)):
         get_distances_of_closest_infrastructure(config_file, options, path_processed_data, num_cores)
 
     logging.info('Calculate continent connectivity')
