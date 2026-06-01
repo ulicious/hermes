@@ -814,6 +814,42 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
     return locations
 
 
+def select_lowest_conversion_costs_and_efficiencies(conversion_costs_list, efficiency_list, column_labels):
+    """Select the cheapest conversion path per row from possibly mixed-dtype input series."""
+    conversion_costs_df = pd.concat(conversion_costs_list, axis=1)
+    efficiency_df = pd.concat(efficiency_list, axis=1)
+    conversion_costs_df.columns = column_labels
+    efficiency_df.columns = column_labels
+
+    conversion_costs_df = conversion_costs_df.apply(pd.to_numeric, errors='coerce').replace(np.nan, np.inf)
+    efficiency_df = efficiency_df.apply(pd.to_numeric, errors='coerce').replace(np.nan, 0)
+    efficiency_df = efficiency_df.replace(0, np.nan)
+    cost_efficiency = (conversion_costs_df / efficiency_df).replace(np.nan, np.inf)
+
+    if conversion_costs_df.empty:
+        return pd.Series(dtype=float), pd.Series(dtype=float)
+
+    if (cost_efficiency >= conversion_costs_df).to_numpy().all():
+        index_min = cost_efficiency.idxmin(axis=1)
+    else:
+        index_min = conversion_costs_df.idxmin(axis=1)
+
+    column_positions = conversion_costs_df.columns.get_indexer(index_min)
+    valid_rows = column_positions >= 0
+    row_positions = np.arange(len(conversion_costs_df))
+
+    costs_min_values = np.full(len(conversion_costs_df), np.inf)
+    efficiency_min_values = np.zeros(len(efficiency_df))
+    costs_min_values[valid_rows] = conversion_costs_df.to_numpy()[row_positions[valid_rows],
+                                                                  column_positions[valid_rows]]
+    efficiency_min_values[valid_rows] = efficiency_df.to_numpy()[row_positions[valid_rows],
+                                                                 column_positions[valid_rows]]
+
+    costs_min = pd.Series(costs_min_values, index=conversion_costs_df.index)
+    efficiency_min = pd.Series(efficiency_min_values, index=efficiency_df.index)
+    return costs_min, efficiency_min
+
+
 def calculate_conversion_costs_and_efficiencies_for_all_combinations(config_file, locations, techno_economic_data_conversion):
 
     new_conversions = []
@@ -863,28 +899,8 @@ def calculate_conversion_costs_and_efficiencies_for_all_combinations(config_file
 
             if conversion_possible:
                 new_conversions.append([c1, c2])
-                conversion_costs_df = pd.concat(conversion_costs_list, axis=1)
-                efficiency_df = pd.concat(efficiency_list, axis=1)
-
-                conversion_costs_df.columns = range(len(conversion_costs_df.columns))
-                efficiency_df.columns = range(len(efficiency_df.columns))
-
-                cost_efficiency = conversion_costs_df / efficiency_df
-
-                if (cost_efficiency >= conversion_costs_df).to_numpy().all():
-                    index_min = cost_efficiency.idxmin(axis=1)
-                else:
-                    # print('check')  # todo : why check?
-                    index_min = conversion_costs_df.min(axis=1)
-
-                if isinstance(conversion_costs_df, pd.DataFrame):
-                    costs_min = conversion_costs_df.to_numpy()[np.arange(len(conversion_costs_df)), conversion_costs_df.columns.get_indexer(index_min)]
-                    costs_min = pd.Series(costs_min, index=conversion_costs_df.index)
-
-                    efficiency_min = efficiency_df.to_numpy()[np.arange(len(efficiency_df)), efficiency_df.columns.get_indexer(index_min)]
-                    efficiency_min = pd.Series(efficiency_min, index=efficiency_df.index)
-                else:
-                    print('not df')
+                costs_min, efficiency_min = select_lowest_conversion_costs_and_efficiencies(
+                    conversion_costs_list, efficiency_list, range(len(conversion_costs_list)))
 
                 locations[c1 + '-' + c2 + '-conversion_costs'] = costs_min
                 locations[c1 + '-' + c2 + '-conversion_efficiency'] = efficiency_min
@@ -938,28 +954,8 @@ def calculate_conversion_costs_and_efficiencies_for_all_combinations(config_file
                 if (c1, c2) not in new_conversions:
                     new_conversions.append((c1, c2))
 
-                conversion_costs_df = pd.concat(conversion_costs_list, axis=1)
-                conversion_costs_df.columns = mid_cs
-
-                efficiency_df = pd.concat(efficiency_list, axis=1)
-                efficiency_df.columns = mid_cs
-
-                cost_efficiency = conversion_costs_df / efficiency_df
-
-                if (cost_efficiency >= conversion_costs_df).to_numpy().all():
-                    index_min = cost_efficiency.idxmin(axis=1)
-                else:
-                    # print('check')  # todo: why check?
-                    index_min = conversion_costs_df.min(axis=1)
-
-                if isinstance(conversion_costs_df, pd.DataFrame):
-                    costs_min = conversion_costs_df.to_numpy()[np.arange(len(conversion_costs_df)), conversion_costs_df.columns.get_indexer(index_min)]
-                    costs_min = pd.Series(costs_min, index=conversion_costs_df.index)
-
-                    efficiency_min = efficiency_df.to_numpy()[np.arange(len(efficiency_df)), efficiency_df.columns.get_indexer(index_min)]
-                    efficiency_min = pd.Series(efficiency_min, index=efficiency_df.index)
-                else:
-                    print('not df')
+                costs_min, efficiency_min = select_lowest_conversion_costs_and_efficiencies(
+                    conversion_costs_list, efficiency_list, mid_cs)
 
                 locations[c1 + '-' + c2 + '-conversion_costs'] = costs_min
                 locations[c1 + '-' + c2 + '-conversion_efficiency'] = efficiency_min
