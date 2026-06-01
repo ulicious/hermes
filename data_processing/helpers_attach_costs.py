@@ -487,6 +487,16 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
 
     @return: updated dataframe with added columns showing conversion costs and efficiency at each location
     """
+    columns_to_keep = ['conversion_possible']
+    for c1 in config_file['available_commodity']:
+        if c1 not in techno_economic_data_conversion:
+            continue
+        for c2 in techno_economic_data_conversion[c1]['potential_conversions']:
+            columns_to_keep.append(c1 + '-' + c2 + '-conversion_costs')
+            columns_to_keep.append(c1 + '-' + c2 + '-conversion_efficiency')
+
+    if locations is None or locations.empty or not {'longitude', 'latitude'}.issubset(locations.columns):
+        return pd.DataFrame(columns=columns_to_keep)
 
     def apply_conversion(locations_to_process, location):
 
@@ -797,14 +807,6 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
     destination_options = apply_conversion(destination_options, 'destination')
     destination_options['conversion_possible'] = True
 
-    columns_to_keep = ['conversion_possible']
-
-    # if offshore, no conversion possible
-    for c1 in config_file['available_commodity']:
-        for c2 in techno_economic_data_conversion[c1]['potential_conversions']:
-            columns_to_keep.append(c1 + '-' + c2 + '-conversion_costs')
-            columns_to_keep.append(c1 + '-' + c2 + '-conversion_efficiency')
-
     locations = pd.concat([port_options, pipeline_options, start_options, destination_options])
 
     locations = locations[columns_to_keep]
@@ -816,6 +818,8 @@ def calculate_conversion_costs_and_efficiencies_for_all_combinations(config_file
 
     new_conversions = []
     for c1 in config_file['available_commodity']:
+        if c1 not in techno_economic_data_conversion:
+            continue
         if not techno_economic_data_conversion[c1]['potential_conversions']:
             # commodity has generally no conversion
             continue
@@ -887,6 +891,8 @@ def calculate_conversion_costs_and_efficiencies_for_all_combinations(config_file
 
     # do it again to make sure that really the lowest conversion costs are used
     for c1 in config_file['available_commodity']:
+        if c1 not in techno_economic_data_conversion:
+            continue
         if not techno_economic_data_conversion[c1]['potential_conversions']:
             # commodity has generally no conversion
             continue

@@ -1002,7 +1002,19 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     else:  # Railroad
         node_addition = 'RR'
 
+    empty_graphs = pd.DataFrame(columns=['graph', 'node_start', 'node_end', 'distance', 'line'])
+    empty_nodes = pd.DataFrame(columns=['longitude', 'latitude', 'graph'])
+    if not os.path.exists(path_network_data):
+        logging.info('No network data folder found at %s; create empty %s network',
+                     path_network_data, name_network)
+        return empty_graphs, empty_nodes
+
     files = sorted(os.listdir(path_network_data))
+    if not files:
+        logging.info('No network data files found at %s; create empty %s network',
+                     path_network_data, name_network)
+        return empty_graphs, empty_nodes
+
     for file in tqdm(files):
 
         graph_number = int(file.split('_')[-1].split('.')[0])
@@ -1012,6 +1024,11 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
         was_processed = False
 
         network_data = pd.read_csv(path_network_data + file, index_col=0, sep=';')
+        if network_data.empty or 'geometry' not in network_data.columns:
+            continue
+        network_data = network_data[network_data['geometry'].notna()]
+        if network_data.empty:
+            continue
         lines = [shapely.wkt.loads(line) for line in network_data['geometry']]
 
         # Split Multilinestring / Linestring into separate LineStrings if intersections exist
@@ -1305,6 +1322,9 @@ def process_network_data_to_network_objects_with_additional_connection_points(na
     existing_nodes_dict = dict((v, k) for k, v in existing_nodes_dict.items())
     nodes = pd.DataFrame.from_dict(existing_nodes_dict, orient='index', columns=['longitude', 'latitude', 'graph'])
     line_data = pd.DataFrame.from_dict(existing_lines_dict, orient='index', columns=['geometry'])
+
+    if graphs.empty:
+        return empty_graphs, empty_nodes
 
     # Some line used same nodes but differently direction regarding start and end
     dummy_graphs = pd.DataFrame(np.sort(graphs[['node_start', 'node_end']], axis=1), index=graphs.index)

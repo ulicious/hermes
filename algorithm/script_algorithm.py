@@ -843,9 +843,9 @@ def run_algorithm(args):
         time_iteration_start = time.time() - time_iteration
         time_since_start = time.time() - start_time
 
-        # save branches
-        branches.to_csv(
-            configuration['path_results'] + 'assessment_current_run/' + str(location_index) + '_' + str(iteration) + '.csv')
+        # # save branches
+        # branches.to_csv(
+        #     configuration['path_results'] + 'assessment_current_run/' + str(location_index) + '_' + str(iteration) + '.csv')
 
         if print_information:
 

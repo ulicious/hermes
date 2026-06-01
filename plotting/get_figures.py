@@ -60,6 +60,18 @@ def _filter_world_to_boundaries(world, boundaries):
     return world[world.geometry.intersects(boundary_box)].copy()
 
 
+def _read_csv_or_empty(path, columns=None, index_col=0):
+    if os.path.exists(path):
+        return pd.read_csv(path, index_col=index_col)
+    return pd.DataFrame(columns=columns or [])
+
+
+def _read_geodata_or_empty(path, columns=None):
+    if os.path.exists(path):
+        return gpd.read_file(path)
+    return gpd.GeoDataFrame(columns=columns or [], geometry='geometry', crs='EPSG:4326')
+
+
 def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_name_dictionary,
                       infrastructure_data, complete_infrastructure, boundaries, destination_location, fig_title='',
                       add_legend=True,
@@ -1694,19 +1706,37 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
     data_pipeline_gas = 'gas_pipeline_graphs.csv'
     data_pipeline_oil = 'oil_pipeline_graphs.csv'
 
-    data_ports = pd.read_csv(path_data + data_ports, index_col=0)
-    data_pipeline_gas = gpd.read_file(path_data + data_pipeline_gas)
-    data_pipeline_oil = gpd.read_file(path_data + data_pipeline_oil)
+    data_ports = _read_csv_or_empty(path_data + data_ports,
+                                    columns=['latitude', 'longitude', 'name', 'country', 'continent'])
+    data_pipeline_gas = _read_geodata_or_empty(path_data + data_pipeline_gas,
+                                               columns=['graph', 'node_start', 'node_end', 'distance', 'line',
+                                                        'geometry'])
+    data_pipeline_oil = _read_geodata_or_empty(path_data + data_pipeline_oil,
+                                               columns=['graph', 'node_start', 'node_end', 'distance', 'line',
+                                                        'geometry'])
 
-    for p in data_ports.index:
-        data_ports.loc[p, 'geometry'] = Point([data_ports.loc[p, 'longitude'], data_ports.loc[p, 'latitude']])
-    data_ports = gpd.GeoDataFrame(data_ports, geometry='geometry')
+    if data_ports.empty:
+        data_ports = gpd.GeoDataFrame(data_ports, geometry=[], crs='EPSG:4326')
+    else:
+        data_ports['geometry'] = [
+            Point([data_ports.loc[p, 'longitude'], data_ports.loc[p, 'latitude']])
+            for p in data_ports.index
+        ]
+        data_ports = gpd.GeoDataFrame(data_ports, geometry='geometry')
 
-    data_pipeline_gas['line'] = data_pipeline_gas['line'].apply(shapely.wkt.loads)
-    data_pipeline_gas = data_pipeline_gas.set_geometry('line')
+    if 'line' in data_pipeline_gas.columns and not data_pipeline_gas.empty:
+        data_pipeline_gas['line'] = data_pipeline_gas['line'].apply(shapely.wkt.loads)
+        data_pipeline_gas = data_pipeline_gas.set_geometry('line')
+    else:
+        data_pipeline_gas = gpd.GeoDataFrame(columns=list(data_pipeline_gas.columns) + ['geometry'],
+                                             geometry='geometry', crs='EPSG:4326')
 
-    data_pipeline_oil['line'] = data_pipeline_oil['line'].apply(shapely.wkt.loads)
-    data_pipeline_oil = data_pipeline_oil.set_geometry('line')
+    if 'line' in data_pipeline_oil.columns and not data_pipeline_oil.empty:
+        data_pipeline_oil['line'] = data_pipeline_oil['line'].apply(shapely.wkt.loads)
+        data_pipeline_oil = data_pipeline_oil.set_geometry('line')
+    else:
+        data_pipeline_oil = gpd.GeoDataFrame(columns=list(data_pipeline_oil.columns) + ['geometry'],
+                                             geometry='geometry', crs='EPSG:4326')
 
     # plot map on axis
     countries = _load_plot_world(high_resolution=high_resolution_map)
@@ -1715,9 +1745,12 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
     countries.drop(antarctica, inplace=True)
     countries.plot(color="lightgrey", edgecolor=country_edgecolor, linewidth=country_linewidth, ax=ax)
 
-    data_ports.plot(color="blue", ax=ax, markersize=1, label='Port')
-    data_pipeline_gas.plot(color="red", ax=ax, linewidth=0.5, label='Gas Pipeline')
-    data_pipeline_oil.plot(color="black", ax=ax, linewidth=0.5, label='Oil Pipeline')
+    if not data_ports.empty:
+        data_ports.plot(color="blue", ax=ax, markersize=1, label='Port')
+    if not data_pipeline_gas.empty:
+        data_pipeline_gas.plot(color="red", ax=ax, linewidth=0.5, label='Gas Pipeline')
+    if not data_pipeline_oil.empty:
+        data_pipeline_oil.plot(color="black", ax=ax, linewidth=0.5, label='Oil Pipeline')
 
     ax.grid(visible=True, alpha=0.5)
     ax.text(0.6, 0.05, fig_title, transform=ax.transAxes, va='bottom', ha='left')
@@ -1736,18 +1769,23 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
 
     if plot_legend:
         # infrastructure legend
-        handles_list_infrastructure = [mlines.Line2D([], [], color='blue', marker='.',
-                                                     linestyle='None', markersize=5,
-                                                     label='Port'),
-                                       mlines.Line2D([], [], color='red',
-                                                     linestyle='-', markersize=5,
-                                                     label='Gas Pipeline'),
-                                       mlines.Line2D([], [], color='black',
-                                                     linestyle='-', markersize=5,
-                                                     label='Oil Pipeline')]
+        handles_list_infrastructure = []
+        if not data_ports.empty:
+            handles_list_infrastructure.append(mlines.Line2D([], [], color='blue', marker='.',
+                                                             linestyle='None', markersize=5,
+                                                             label='Port'))
+        if not data_pipeline_gas.empty:
+            handles_list_infrastructure.append(mlines.Line2D([], [], color='red',
+                                                             linestyle='-', markersize=5,
+                                                             label='Gas Pipeline'))
+        if not data_pipeline_oil.empty:
+            handles_list_infrastructure.append(mlines.Line2D([], [], color='black',
+                                                             linestyle='-', markersize=5,
+                                                             label='Oil Pipeline'))
 
-        ax.legend(handles=handles_list_infrastructure, loc='upper center', ncol=3, bbox_to_anchor=(0.5, 0),
-                  labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5, fontsize=9)
+        if handles_list_infrastructure:
+            ax.legend(handles=handles_list_infrastructure, loc='upper center', ncol=3, bbox_to_anchor=(0.5, 0),
+                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5, fontsize=9)
 
     if return_fig:
         return ax

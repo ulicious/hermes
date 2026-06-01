@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 def prepare_data(start_location_data, static_graph, start_road_distances, start_new_pipeline_distances,
                  end_node, config_file, techno_economic_data_transport,
-                 warm_start_route=None, filter_edges_above_warm_start=False):
+                 warm_start_route=None, filter_edges_above_warm_start=False,
+                 filter_start_options_above_warm_start=False):
     """
     Complete the commodity-expanded graph for one optimization location.
 
@@ -101,6 +102,11 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
         edges, conversion_edges, transport_edges = filter_edges_by_warm_start_costs(
             edges, conversion_edges, transport_edges, production_costs, warm_start_route)
 
+    if filter_start_options_above_warm_start:
+        all_nodes_adjusted, edges, transport_edges, production_costs = \
+            filter_start_options_by_warm_start_costs(
+                all_nodes_adjusted, edges, transport_edges, production_costs, warm_start_route)
+
     return all_nodes_adjusted, target_nodes, edges, production_costs, transport_means, max_costs, conversion_edges, transport_edges
 
 
@@ -108,6 +114,13 @@ def calculate_route_objective(edges, production_costs, route):
     """Calculate route costs with the same cost propagation used by the MIP."""
     if not route:
         raise ValueError('Cannot calculate route objective for an empty route')
+
+    missing_edges = [edge for edge in route if edge not in edges]
+    if missing_edges:
+        raise ValueError('Cannot calculate route objective because '
+                         + str(len(missing_edges))
+                         + ' route edges are absent from the current MIP graph. First missing edge: '
+                         + missing_edges[0])
 
     first_edge = edges[route[0]]
     start_commodity = first_edge[1].split('+', 1)[1]
@@ -133,6 +146,11 @@ def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
     """
     if warm_start_route is None:
         logger.warning('Warm-start edge filter requested, but no warm-start route was provided')
+        return edges, conversion_edges, transport_edges
+    missing_edges = [edge for edge in warm_start_route if edge not in edges]
+    if missing_edges:
+        logger.warning('Warm-start edge filter skipped because %s route edges are absent from the current MIP graph. '
+                       'First missing edge: %s', len(missing_edges), missing_edges[0])
         return edges, conversion_edges, transport_edges
 
     warm_start_costs = calculate_route_objective(edges, production_costs, warm_start_route)
@@ -163,6 +181,69 @@ def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
                 'above %.6f; hydrogen production costs %.6f',
                 len(removed_edges), warm_start_costs, hydrogen_production_costs)
     return edges, conversion_edges, transport_edges
+
+
+def filter_start_options_by_warm_start_costs(all_nodes_adjusted, edges, transport_edges,
+                                             production_costs, warm_start_route):
+    """
+    Remove start options whose production cost is already above the warm-start objective.
+
+    This is valid only when all losses are non-negative. Then every route can only
+    add costs or lose material, so a start option that is already more expensive
+    than a known complete route cannot improve the incumbent.
+
+    This does not remove the commodity from the infrastructure graph. It only
+    removes `start+Commodity`, its outgoing start edges and the corresponding
+    production-cost fixation.
+    """
+    if warm_start_route is None:
+        logger.warning('Start-option warm-start filter requested, but no warm-start route was provided')
+        return all_nodes_adjusted, edges, transport_edges, production_costs
+
+    missing_edges = [edge for edge in warm_start_route if edge not in edges]
+    if missing_edges:
+        logger.warning('Start-option warm-start filter skipped because %s route edges are absent from '
+                       'the current MIP graph. First missing edge: %s',
+                       len(missing_edges), missing_edges[0])
+        return all_nodes_adjusted, edges, transport_edges, production_costs
+
+    has_negative_losses = any(edge[4] < -1e-12 for edge in edges.values())
+    if has_negative_losses:
+        logger.warning('Start-option warm-start filter skipped because at least one edge has negative loss')
+        return all_nodes_adjusted, edges, transport_edges, production_costs
+
+    warm_start_costs = calculate_route_objective(edges, production_costs, warm_start_route)
+    removed_start_options = {
+        commodity for commodity, production_cost in production_costs.items()
+        if production_cost > warm_start_costs
+    }
+    if not removed_start_options:
+        logger.info('Start-option warm-start filter removed no start options; route costs %.6f',
+                    warm_start_costs)
+        return all_nodes_adjusted, edges, transport_edges, production_costs
+
+    removed_start_nodes = {'start+' + commodity for commodity in removed_start_options}
+    removed_edges = {
+        key for key, edge in edges.items()
+        if edge[1] in removed_start_nodes or edge[2] in removed_start_nodes
+    }
+    for edge in removed_edges:
+        edges.pop(edge, None)
+
+    transport_edges = transport_edges.drop(
+        index=transport_edges.index.intersection(removed_edges))
+    all_nodes_adjusted = [
+        node for node in all_nodes_adjusted
+        if node not in removed_start_nodes
+    ]
+    production_costs = {
+        commodity: production_cost for commodity, production_cost in production_costs.items()
+        if commodity not in removed_start_options
+    }
+    logger.info('Start-option warm-start filter removed %s start options and %s start edges above %.6f: %s',
+                len(removed_start_options), len(removed_edges), warm_start_costs,
+                sorted(removed_start_options))
+    return all_nodes_adjusted, edges, transport_edges, production_costs
 
 
 def create_edges_from_distance_only(df_list, transport_means, techno_economic_data_transport,

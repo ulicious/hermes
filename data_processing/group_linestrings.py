@@ -602,9 +602,21 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
     @param bool use_minimal_example: Indicates if only subset of data should be used
     @param float gap_distance: connects two linestrings automatically if their distance is below gap_distance
     """
+    name_folder = path_processed_data + name + '_network_data/'
+    os.makedirs(name_folder, exist_ok=True)
+    for existing_file in os.listdir(name_folder):
+        if existing_file.startswith('sorted_' + name + '_networks_') and existing_file.endswith('.csv'):
+            os.remove(os.path.join(name_folder, existing_file))
+    if not os.path.exists(path_to_file):
+        logging.info('No raw %s pipeline file found at %s; keep empty network folder',
+                     name, path_to_file)
+        return
 
     # read global energy monitor data
     data = pd.read_excel(path_to_file)
+    if data.empty or 'WKTFormat' not in data.columns:
+        logging.info('No usable %s pipeline rows found; keep empty network folder', name)
+        return
 
     # filter pipeline data based on status
     data = data.loc[data['Status'].isin(['Operating', 'Construction'])]
@@ -684,6 +696,10 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
                 new_single_lines.append(line.intersection(destination))
 
     single_lines = single_lines + new_single_lines
+    if not single_lines:
+        logging.info('No %s pipelines intersect selected infrastructure area or destination; keep empty network folder',
+                     name)
+        return
 
     logging.info('Group single lines to networks')
     single_lines = process_line_strings(single_lines, num_cores, gap_distance, with_adding_lines=True)
@@ -866,10 +882,6 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
     # plt.show()
 
     # save processed data in folder (each network own folder)
-    name_folder = path_processed_data + name + '_network_data/'
-    if name + '_network_data' not in os.listdir(path_processed_data):
-        os.mkdir(name_folder)
-
     networks = []
     network_number = 0
     for line_1 in checked_single_lines:

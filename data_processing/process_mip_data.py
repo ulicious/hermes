@@ -20,8 +20,16 @@ from data_processing.natural_earth_data import load_land
 logger = logging.getLogger(__name__)
 
 
+def _as_float_or_inf(value):
+    if isinstance(value, str):
+        return math.inf
+    return value
+
+
 def create_bidirectional_distances(distances):
     """Expand unordered physical connections into both transport directions."""
+    if distances.empty:
+        return pd.DataFrame(columns=['pointA', 'pointB', 'distance'])
     reverse_distances = distances.copy()
     reverse_distances[['pointA', 'pointB']] = distances[['pointB', 'pointA']].to_numpy()
     return pd.concat([distances, reverse_distances], ignore_index=True)
@@ -31,6 +39,12 @@ def calculate_road_distances(tolerance, infrastructure, single_point=None, singl
                              use_landmass_filter=False):
 
     # todo: road distances between ports if they are not on same landmass --> should not exist
+    tolerance = _as_float_or_inf(tolerance)
+    if infrastructure.empty:
+        return pd.DataFrame(columns=['pointA', 'pointB', 'same_landmass', 'distance'])
+    if not {'longitude', 'latitude'}.issubset(infrastructure.columns):
+        logger.warning('Cannot calculate road distances because infrastructure longitude/latitude columns are missing')
+        return pd.DataFrame(columns=['pointA', 'pointB', 'same_landmass', 'distance'])
 
     land = load_land()
 
@@ -76,6 +90,8 @@ def calculate_road_distances(tolerance, infrastructure, single_point=None, singl
         results.append({'pointA': a, 'pointB': b, 'same_landmass': same})
 
     results_df = pd.DataFrame(results)
+    if results_df.empty:
+        return pd.DataFrame(columns=['pointA', 'pointB', 'same_landmass', 'distance'])
     # Legacy behavior: keep only pairs on the same landmass. Disabled by default
     # so MIP road/new-pipeline options match the heuristic's direct-distance logic.
     if use_landmass_filter:
@@ -182,26 +198,40 @@ def build_static_mip_graph(infrastructure_data, config_file, techno_economic_dat
     conversion_edges = {}
     node_iterator = tqdm(all_nodes, desc='Create conversion edges', disable=not show_progress)
     for node in node_iterator:
+        if node not in conversion_costs_and_efficiencies.index:
+            continue
+        if 'conversion_possible' not in conversion_costs_and_efficiencies.columns:
+            continue
         if not conversion_costs_and_efficiencies.loc[node, 'conversion_possible']:
             continue
         for commodity_start in all_commodities:
+            if commodity_start not in techno_economic_data_conversion:
+                logger.warning('Skip conversions from %s because conversion techno-economic data is missing',
+                               commodity_start)
+                continue
             for commodity_end in techno_economic_data_conversion[commodity_start]['potential_conversions']:
                 if commodity_end not in all_commodities:
                     continue
-                conversion_costs = conversion_costs_and_efficiencies.loc[
-                    node, commodity_start + '-' + commodity_end + '-conversion_costs']
+                conversion_costs_column = commodity_start + '-' + commodity_end + '-conversion_costs'
+                conversion_efficiency_column = commodity_start + '-' + commodity_end + '-conversion_efficiency'
+                if (conversion_costs_column not in conversion_costs_and_efficiencies.columns
+                        or conversion_efficiency_column not in conversion_costs_and_efficiencies.columns):
+                    continue
+                conversion_costs = conversion_costs_and_efficiencies.loc[node, conversion_costs_column]
                 if conversion_costs == math.inf:
                     continue
-                conversion_loss = 1 - conversion_costs_and_efficiencies.loc[
-                    node, commodity_start + '-' + commodity_end + '-conversion_efficiency']
+                conversion_loss = 1 - conversion_costs_and_efficiencies.loc[node, conversion_efficiency_column]
                 key = node + '+' + commodity_start + '-' + node + '+' + commodity_end
                 conversion_edges[key] = (node + '+' + commodity_start, node + '+' + commodity_end,
                                          conversion_costs, conversion_loss, commodity_end)
                 edges[key] = ('conversion',) + conversion_edges[key]
 
     logger.info('Prepare directed infrastructure distances for static transport edges')
-    port_distances = infrastructure_data['port_distances'].stack().reset_index()
-    port_distances.columns = ['pointA', 'pointB', 'distance']
+    if infrastructure_data['port_distances'].empty:
+        port_distances = pd.DataFrame(columns=['pointA', 'pointB', 'distance'])
+    else:
+        port_distances = infrastructure_data['port_distances'].stack().reset_index()
+        port_distances.columns = ['pointA', 'pointB', 'distance']
     distance_options = {
         'Road': create_bidirectional_distances(infrastructure_data['road_distances']),
         'New_Pipeline_Gas': create_bidirectional_distances(infrastructure_data['new_pipeline_distances']),
@@ -254,6 +284,7 @@ def prepare_global_mip_data(options, ports, config_file, techno_economic_data_co
                             path_processed_data):
     """Calculate and persist all MIP input that is common to every optimization location."""
     path_mip_data = path_processed_data + 'mip_data/'
+    os.makedirs(path_mip_data, exist_ok=True)
     logger.info('Prepare global MIP data independent from origin and destination')
     mip_options = options.copy()
 
@@ -273,18 +304,27 @@ def prepare_global_mip_data(options, ports, config_file, techno_economic_data_co
 
     logger.info('Calculate global road and new-pipeline distances')
     road_distances = calculate_road_distances(config_file['tolerance_distance'], mip_options)
+    max_length_new_segment = _as_float_or_inf(config_file['max_length_new_segment'])
+    no_road_multiplier = _as_float_or_inf(config_file['no_road_multiplier'])
     new_pipeline_distances = road_distances[
-        road_distances['distance'] <= config_file['max_length_new_segment']].copy()
+        road_distances['distance'] <= max_length_new_segment].copy()
     road_distances = road_distances.copy()
-    road_distances['distance'] *= config_file['no_road_multiplier']
-    new_pipeline_distances['distance'] *= config_file['no_road_multiplier']
+    road_distances['distance'] *= no_road_multiplier
+    new_pipeline_distances['distance'] *= no_road_multiplier
     road_distances.to_csv(path_mip_data + 'road_distances.csv', encoding='utf-8', index=True)
     new_pipeline_distances.to_csv(path_mip_data + 'new_pipeline_distances.csv', encoding='utf-8', index=True)
     logger.info('Saved %s road and %s new-pipeline physical connections',
                 len(road_distances), len(new_pipeline_distances))
 
     logger.info('Calculate shipping efficiencies per commodity')
-    port_distances = pd.read_csv(path_mip_data + 'port_distances.csv', index_col=0)
+    port_distances_file = path_mip_data + 'port_distances.csv'
+    if os.path.exists(port_distances_file):
+        port_distances = pd.read_csv(port_distances_file, index_col=0)
+    else:
+        logger.warning('No port distance matrix found at %s; continue with an empty shipping matrix',
+                       port_distances_file)
+        port_distances = pd.DataFrame(0, index=ports.index, columns=ports.index.tolist())
+        port_distances.to_csv(port_distances_file, encoding='utf-8', index=True)
     commodity_iterator = tqdm(config_file['available_commodity'], desc='Shipping efficiencies')
     for commodity in commodity_iterator:
         technology = techno_economic_data_transport[commodity]

@@ -64,6 +64,14 @@ def calculate_searoute_distances(ports, num_cores, path_processed_data, create_m
 
     # get all combinations of ports
     combinations = list(itertools.combinations(ports.index, 2))
+    if not combinations:
+        ports_distances = pd.DataFrame(0, index=ports.index, columns=ports.index.tolist())
+        os.makedirs(path_processed_data + 'inner_infrastructure_distances/', exist_ok=True)
+        ports_distances.to_csv(path_processed_data + 'inner_infrastructure_distances/' + 'port_distances.csv')
+        if create_mip_data:
+            os.makedirs(path_processed_data + 'mip_data/', exist_ok=True)
+            ports_distances.to_csv(path_processed_data + 'mip_data/' + 'port_distances.csv')
+        return ports_distances
 
     # apply multiprocessing to calculate distances
     inputs = tqdm(combinations)
@@ -104,6 +112,12 @@ def get_distances_within_networks(network_graph_data, nodes, path_processed_data
     @param bool use_low_memory: indicating of large matrices can be used or not to calculate distances
 
     """
+    os.makedirs(path_processed_data + '/inner_infrastructure_distances/', exist_ok=True)
+    if create_mip_data:
+        os.makedirs(path_processed_data + '/mip_data/', exist_ok=True)
+    if (network_graph_data is None or network_graph_data.empty or nodes is None or nodes.empty
+            or not {'graph', 'node_start', 'node_end', 'distance'}.issubset(network_graph_data.columns)):
+        return
 
     def save_distances_columnwise(inp):
         inp.fillna(math.inf, inplace=True)
@@ -266,6 +280,14 @@ def get_distances_of_closest_infrastructure(config, options, path_processed_data
     @return: A DataFrame containing the minimal distances and the corresponding closest nodes for each option.
     @rtype: pandas.DataFrame
     """
+    if options is None:
+        options = pd.DataFrame()
+    if options.empty or not {'latitude', 'longitude', 'graph'}.issubset(options.columns):
+        distances = pd.DataFrame(columns=['minimal_distance', 'closest_node'])
+        distances.to_csv(path_processed_data + 'minimal_distances.csv')
+        with open(path_processed_data + 'within_tolerance.json', 'w', encoding='utf-8') as f:
+            json.dump({}, f, indent=2)
+        return distances
 
     def calculate_distance(i):
 
@@ -282,6 +304,9 @@ def get_distances_of_closest_infrastructure(config, options, path_processed_data
             other_options = options_without_i[options_without_i['graph'] != graph_1]
         else:
             other_options = options_without_i.copy()
+
+        if other_options.empty:
+            return math.inf, None, []
 
         direct_distances = calc_distance_list_to_single(other_options['latitude'], other_options['longitude'],
                                                         latitude, longitude)

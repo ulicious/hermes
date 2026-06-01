@@ -5,6 +5,7 @@ import shutil
 import logging
 import shapely
 import time
+import json
 
 import pandas as pd
 import geopandas as gpd
@@ -31,6 +32,57 @@ warnings.filterwarnings('ignore')
 logging.basicConfig(level=logging.INFO)
 
 time_start = time.time()
+
+PIPELINE_GRAPH_COLUMNS = ['graph', 'node_start', 'node_end', 'distance', 'line']
+PIPELINE_NODE_COLUMNS = ['longitude', 'latitude', 'graph']
+PORT_COLUMNS = ['latitude', 'longitude', 'name', 'country', 'continent',
+                'longitude_on_coastline', 'latitude_on_coastline']
+MINIMAL_DISTANCE_COLUMNS = ['minimal_distance', 'closest_node']
+
+
+def ensure_columns(data, columns):
+    """Return a copy with all required columns available, even if the data is empty."""
+    if data is None:
+        data = pd.DataFrame()
+    data = data.copy()
+    for column in columns:
+        if column not in data.columns:
+            data[column] = pd.Series(dtype='object')
+    return data[columns + [column for column in data.columns if column not in columns]]
+
+
+def read_csv_or_empty(path_file, columns):
+    if os.path.exists(path_file):
+        return ensure_columns(pd.read_csv(path_file, index_col=0), columns)
+    return pd.DataFrame(columns=columns)
+
+
+def write_csv_with_schema(data, path_file, columns):
+    data = ensure_columns(data, columns)
+    data.to_csv(path_file, encoding='utf-8', index=True)
+    return data
+
+
+def ensure_processed_infrastructure_files(path_processed):
+    """Create schema-correct empty infrastructure files for optional layers."""
+    defaults = {
+        'gas_pipeline_graphs.csv': PIPELINE_GRAPH_COLUMNS,
+        'gas_pipeline_node_locations.csv': PIPELINE_NODE_COLUMNS,
+        'oil_pipeline_graphs.csv': PIPELINE_GRAPH_COLUMNS,
+        'oil_pipeline_node_locations.csv': PIPELINE_NODE_COLUMNS,
+        'ports.csv': PORT_COLUMNS,
+        'minimal_distances.csv': MINIMAL_DISTANCE_COLUMNS,
+    }
+    for filename, columns in defaults.items():
+        path_file = path_processed + filename
+        if not os.path.exists(path_file):
+            pd.DataFrame(columns=columns).to_csv(path_file, encoding='utf-8', index=True)
+
+    tolerance_file = path_processed + 'within_tolerance.json'
+    if not os.path.exists(tolerance_file):
+        with open(tolerance_file, 'w', encoding='utf-8') as file:
+            json.dump({}, file, indent=2)
+
 
 # load configuration file
 path_config = os.getcwd() + '/_1_algorithm_configuration.yaml'
@@ -67,6 +119,8 @@ if not os.path.exists(path_raw_data):
 
 if not os.path.exists(path_processed_data):
     os.mkdir(path_processed_data)
+
+ensure_processed_infrastructure_files(path_processed_data)
 
 if not os.path.exists(path_overall_data + 'results/'):
     os.mkdir(path_overall_data + 'results/')
@@ -176,12 +230,14 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
                                                                                             path_gas_pipeline_data,
                                                                                             number_workers=num_cores)
 
-        gas_graph.to_csv(path_processed_data + 'gas_pipeline_graphs.csv', encoding='utf-8', index=True)
-        gas_nodes.to_csv(path_processed_data + 'gas_pipeline_node_locations.csv', encoding='utf-8', index=True)
+        gas_graph = write_csv_with_schema(
+            gas_graph, path_processed_data + 'gas_pipeline_graphs.csv', PIPELINE_GRAPH_COLUMNS)
+        gas_nodes = write_csv_with_schema(
+            gas_nodes, path_processed_data + 'gas_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
 
     else:
-        gas_graph = pd.read_csv(path_processed_data + 'gas_pipeline_graphs.csv', index_col=0)
-        gas_nodes = pd.read_csv(path_processed_data + 'gas_pipeline_node_locations.csv', index_col=0)
+        gas_graph = read_csv_or_empty(path_processed_data + 'gas_pipeline_graphs.csv', PIPELINE_GRAPH_COLUMNS)
+        gas_nodes = read_csv_or_empty(path_processed_data + 'gas_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
 
     if not (('oil_pipeline_graphs.csv' in files_in_folder) & ('oil_pipeline_node_locations.csv' in files_in_folder)
             & (not infrastructure_enforce_update_of_data)):
@@ -195,20 +251,22 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
                 = process_network_data_to_network_objects_with_additional_connection_points('oil_pipeline', path_oil_pipeline_data,
                                                                                             number_workers=num_cores)
 
-        oil_graph.to_csv(path_processed_data + 'oil_pipeline_graphs.csv', encoding='utf-8', index=True)
-        oil_nodes.to_csv(path_processed_data + 'oil_pipeline_node_locations.csv', encoding='utf-8', index=True)
+        oil_graph = write_csv_with_schema(
+            oil_graph, path_processed_data + 'oil_pipeline_graphs.csv', PIPELINE_GRAPH_COLUMNS)
+        oil_nodes = write_csv_with_schema(
+            oil_nodes, path_processed_data + 'oil_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
 
     else:
-        oil_graph = pd.read_csv(path_processed_data + 'oil_pipeline_graphs.csv', index_col=0)
-        oil_nodes = pd.read_csv(path_processed_data + 'oil_pipeline_node_locations.csv', index_col=0)
+        oil_graph = read_csv_or_empty(path_processed_data + 'oil_pipeline_graphs.csv', PIPELINE_GRAPH_COLUMNS)
+        oil_nodes = read_csv_or_empty(path_processed_data + 'oil_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
 
     # process ports
     logging.info('Processing ports')
     if not (('ports.csv' in files_in_folder) & (not infrastructure_enforce_update_of_data)):
         ports = process_ports(path_raw_data, coastlines, landmasses, boundaries, destination, use_minimal_example=use_minimal_example)
-        ports.to_csv(path_processed_data + 'ports.csv', encoding='utf-8', index=True)
+        ports = write_csv_with_schema(ports, path_processed_data + 'ports.csv', PORT_COLUMNS)
     else:
-        ports = pd.read_csv(path_processed_data + 'ports.csv', index_col=0)
+        ports = read_csv_or_empty(path_processed_data + 'ports.csv', PORT_COLUMNS)
 
     if not use_low_storage:
         # calculate distances within networks (shipping and pipeline network)
@@ -237,11 +295,15 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
         save_continent_connectivity(path_processed_data + 'continent_connections.json', continent_connectivity)
 
 else:
-    ports = pd.read_csv(path_processed_data + 'ports.csv', index_col=0)
-    gas_nodes = pd.read_csv(path_processed_data + 'gas_pipeline_node_locations.csv', index_col=0)
-    oil_nodes = pd.read_csv(path_processed_data + 'oil_pipeline_node_locations.csv', index_col=0)
-    landmasses = pd.read_csv(path_processed_data + 'landmasses.csv')
-    landmasses = gpd.GeoDataFrame(geometry=landmasses['geometry'].apply(shapely.wkt.loads))
+    ensure_processed_infrastructure_files(path_processed_data)
+    ports = read_csv_or_empty(path_processed_data + 'ports.csv', PORT_COLUMNS)
+    gas_nodes = read_csv_or_empty(path_processed_data + 'gas_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
+    oil_nodes = read_csv_or_empty(path_processed_data + 'oil_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
+    if os.path.exists(path_processed_data + 'landmasses.csv'):
+        landmasses = pd.read_csv(path_processed_data + 'landmasses.csv')
+        landmasses = gpd.GeoDataFrame(geometry=landmasses['geometry'].apply(shapely.wkt.loads))
+    else:
+        landmasses = gpd.GeoDataFrame(geometry=[])
 
     options = pd.concat([gas_nodes, oil_nodes, ports])
 

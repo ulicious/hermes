@@ -32,6 +32,9 @@ def create_transport_edges(distance_options, commodities, techno_economic_data_t
     for transport_mean, distances in distance_options.items():
         if distances.empty:
             continue
+        if not {'pointA', 'pointB', 'distance'}.issubset(distances.columns):
+            logger.warning('Skip %s transport edges because distance columns are incomplete', transport_mean)
+            continue
         logger.info('Create %s transport edges from %s directed distances',
                     transport_mean, len(distances))
         row_iterator = tqdm(distances.itertuples(), total=len(distances),
@@ -41,6 +44,10 @@ def create_transport_edges(distance_options, commodities, techno_economic_data_t
             if row.pointA == row.pointB:
                 continue
             for commodity in commodities:
+                if commodity not in techno_economic_data_transport:
+                    logger.warning('Skip commodity %s for %s because transportation techno-economic data is missing',
+                                   commodity, transport_mean)
+                    continue
                 if transport_mean not in techno_economic_data_transport[commodity]['potential_transportation']:
                     continue
 
@@ -148,6 +155,15 @@ def prepare_destination_mip_data(options, destination, path_processed_data=None,
     """Determine the infrastructure nodes accepted as sinks for one destination."""
     destination_tolerance = _as_float_tolerance(destination_tolerance)
     destination_infrastructure = []
+    if options.empty or not {'longitude', 'latitude'}.issubset(options.columns):
+        logger.warning('No destination infrastructure can be selected because options are empty '
+                       'or longitude/latitude columns are missing')
+        result = pd.DataFrame(destination_infrastructure, columns=['destination_infrastructure'])
+        if path_processed_data is not None:
+            result.to_csv(path_processed_data + 'mip_data/destination_infrastructure.csv',
+                          encoding='utf-8', index=True)
+        return result
+
     if hasattr(destination, 'covers'):
         for option in options.index:
             option_point = Point([options.loc[option, 'longitude'], options.loc[option, 'latitude']])

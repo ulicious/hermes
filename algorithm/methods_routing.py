@@ -1,5 +1,6 @@
 import math
 import gc
+import os
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -12,6 +13,17 @@ from algorithm.methods_cost_approximations import calculate_cheapest_option_to_c
 
 import warnings
 warnings.filterwarnings("ignore")
+
+
+def _load_shipping_distances(path_processed_data):
+    path_file = path_processed_data + 'inner_infrastructure_distances/port_distances.csv'
+    if not os.path.exists(path_file):
+        return pd.DataFrame()
+    shipping_distances = pd.read_csv(path_file, index_col=0, header=0, dtype=str, sep=None, engine='python',
+                                     keep_default_na=False)
+    if shipping_distances.empty:
+        return shipping_distances
+    return np.ceil(shipping_distances.apply(pd.to_numeric, errors='raise'))
 
 
 def _build_options_from_mask(values, row_index, column_index, mask):
@@ -801,11 +813,9 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
             shipping_infrastructure = _filter_shipping_infrastructure_by_destination_continents(
                 shipping_infrastructure, destination_continents)
 
-            shipping_distances = pd.read_csv(configuration['path_processed_data']
-                                             + 'inner_infrastructure_distances/port_distances.csv',
-                                             index_col=0, header=0, dtype=str, sep=None, engine='python',
-                                             keep_default_na=False)
-            shipping_distances = np.ceil(shipping_distances.apply(pd.to_numeric, errors='raise'))
+            shipping_distances = _load_shipping_distances(configuration['path_processed_data'])
+            if shipping_distances.empty:
+                continue
 
             # create one big target_infrastructure dataframe for all shipping options
             for s in options_m.index:
@@ -1049,11 +1059,9 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
 
             shipping_infrastructure = data['Shipping']['ports']
 
-            shipping_distances = pd.read_csv(configuration['path_processed_data']
-                                             + 'inner_infrastructure_distances/port_distances.csv',
-                                             index_col=0, header=0, dtype=str, sep=None, engine='python',
-                                             keep_default_na=False)
-            shipping_distances = np.ceil(shipping_distances.apply(pd.to_numeric, errors='raise'))
+            shipping_distances = _load_shipping_distances(configuration['path_processed_data'])
+            if shipping_distances.empty:
+                continue
 
             # Only use ports which are on the same continent as the final destination
             shipping_infrastructure = _filter_shipping_infrastructure_by_destination_continents(

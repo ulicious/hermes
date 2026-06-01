@@ -2,6 +2,7 @@ import math
 import yaml
 import shapely
 import json
+import os
 
 import pandas as pd
 import numpy as np
@@ -13,6 +14,13 @@ from shapely.geometry import MultiLineString, Point
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure
 from data_processing.helpers_geometry import get_destination_information
 from data_processing.natural_earth_data import load_world
+
+
+def _read_csv_or_empty(path, columns=None, index_col=0, dtype=None):
+    """Read optional infrastructure CSVs and keep downstream code on empty frames if absent."""
+    if os.path.exists(path):
+        return pd.read_csv(path, index_col=index_col, dtype=dtype)
+    return pd.DataFrame(columns=columns or [])
 
 
 def process_network_data(data, name, node_locations, graph_data):
@@ -29,6 +37,15 @@ def process_network_data(data, name, node_locations, graph_data):
     """
 
     data[name] = {}
+
+    if node_locations.empty or graph_data.empty:
+        return data
+    if 'graph' not in node_locations.columns or 'line' not in graph_data.columns:
+        return data
+
+    graph_data = graph_data[graph_data['line'].notna()].copy()
+    if graph_data.empty:
+        return data
 
     graph_data = gpd.GeoDataFrame(graph_data)
     graph_data['line'] = graph_data['line'].apply(shapely.wkt.loads)
@@ -80,13 +97,19 @@ def prepare_data_and_configuration_dictionary(config_file):
     # load input data
     location_data = pd.read_csv(path_project_folder + 'start_destination_combinations.csv', index_col=0)
 
-    pipeline_gas_node_locations = pd.read_csv(path_processed_data + 'gas_pipeline_node_locations.csv', index_col=0,
-                                       dtype={'latitude': np.float32, 'longitude': np.float32})
-    pipeline_gas_graphs = pd.read_csv(path_processed_data + 'gas_pipeline_graphs.csv', index_col=0)
-    pipeline_liquid_node_locations = pd.read_csv(path_processed_data + 'oil_pipeline_node_locations.csv', index_col=0,
-                                          dtype={'latitude': np.float32, 'longitude': np.float32})
-    pipeline_liquid_graphs = pd.read_csv(path_processed_data + 'oil_pipeline_graphs.csv', index_col=0)
-    ports = pd.read_csv(path_processed_data + 'ports.csv', index_col=0)
+    node_columns = ['latitude', 'longitude', 'graph']
+    graph_columns = ['graph', 'node_start', 'node_end', 'distance', 'line']
+    port_columns = ['latitude', 'longitude', 'name', 'country', 'continent',
+                    'longitude_on_coastline', 'latitude_on_coastline']
+    pipeline_gas_node_locations = _read_csv_or_empty(
+        path_processed_data + 'gas_pipeline_node_locations.csv', columns=node_columns,
+        dtype={'latitude': np.float32, 'longitude': np.float32})
+    pipeline_gas_graphs = _read_csv_or_empty(path_processed_data + 'gas_pipeline_graphs.csv', columns=graph_columns)
+    pipeline_liquid_node_locations = _read_csv_or_empty(
+        path_processed_data + 'oil_pipeline_node_locations.csv', columns=node_columns,
+        dtype={'latitude': np.float32, 'longitude': np.float32})
+    pipeline_liquid_graphs = _read_csv_or_empty(path_processed_data + 'oil_pipeline_graphs.csv', columns=graph_columns)
+    ports = _read_csv_or_empty(path_processed_data + 'ports.csv', columns=port_columns)
     coastlines = pd.read_csv(path_processed_data + 'landmasses.csv', index_col=0)
     minimal_distances = pd.read_csv(path_processed_data + 'minimal_distances.csv', index_col=0)
 
@@ -149,6 +172,9 @@ def prepare_data_and_configuration_dictionary(config_file):
             else:
                 continue
 
+            if i not in data_set_to_look_up.index:
+                continue
+
             i_location = Point([data_set_to_look_up.loc[i, 'longitude'], data_set_to_look_up.loc[i, 'latitude']])
             if i_location.within(destination_location):
                 infrastructure_in_destination.append(i)
@@ -157,8 +183,13 @@ def prepare_data_and_configuration_dictionary(config_file):
         # when looking for the cheapest option --> take minimal values for costs and efficiencies
         # will not be applied to calculate actual costs
         costs_efficiencies_destinations = conversion_costs_and_efficiencies.loc[infrastructure_in_destination, :]
-        min_costs_efficiencies_destinations = pd.DataFrame(costs_efficiencies_destinations.min(axis='index')).transpose()
-        min_costs_efficiencies_destinations.index = ['Destination']
+        if costs_efficiencies_destinations.empty:
+            min_costs_efficiencies_destinations = pd.DataFrame(
+                {column: math.inf for column in conversion_costs_and_efficiencies.columns}, index=['Destination'])
+        else:
+            min_costs_efficiencies_destinations = pd.DataFrame(
+                costs_efficiencies_destinations.min(axis='index')).transpose()
+            min_costs_efficiencies_destinations.index = ['Destination']
 
         conversion_costs_and_efficiencies = pd.concat([conversion_costs_and_efficiencies,
                                                        min_costs_efficiencies_destinations])

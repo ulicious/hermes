@@ -49,7 +49,11 @@ required_infrastructure_files = [os.path.join(path_data, file) for file in [
     'oil_pipeline_node_locations.csv',
     'oil_pipeline_graphs.csv',
     'ports.csv']]
-check_required_files_exist(required_infrastructure_files, 'infrastructure plotting')
+missing_infrastructure_files = [file for file in required_infrastructure_files if not os.path.exists(file)]
+if missing_infrastructure_files:
+    missing_infrastructure_files_text = '\n'.join('- ' + file for file in missing_infrastructure_files)
+    print('Optional infrastructure plotting data missing; continuing without these layers:\n'
+          + missing_infrastructure_files_text)
 check_required_files_exist([start_destination_combinations_file], 'start-location plotting')
 
 infrastructure_data, destination = load_data(path_data, config_file_general)

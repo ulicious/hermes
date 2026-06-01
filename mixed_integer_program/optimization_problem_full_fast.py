@@ -36,6 +36,7 @@ class FastOptimizationGurobiModel:
                  use_warm_start_as_upper_bound=False,
                  mip_gap=None, time_limit=None,
                  filter_edges_above_warm_start=False,
+                 filter_start_options_above_warm_start=False,
                  solve=False):
 
         self.config_file = config_file
@@ -45,11 +46,14 @@ class FastOptimizationGurobiModel:
         self.warm_start_bound_route = warm_start_bound_route if warm_start_bound_route is not None else warm_start_route
         self.use_warm_start_as_lower_bound = use_warm_start_as_lower_bound
         self.use_warm_start_as_upper_bound = use_warm_start_as_upper_bound
+        self.warm_start_objective = None
         self.warm_start_objective_lower_bound = None
         self.warm_start_objective_upper_bound = None
+        self.big_m_cost_propagation = None
         self.mip_gap = mip_gap
         self.time_limit = time_limit
         self.filter_edges_above_warm_start = filter_edges_above_warm_start
+        self.filter_start_options_above_warm_start = filter_start_options_above_warm_start
 
         logger.info('Add origin- and destination-specific graph data')
         self.all_nodes_adjusted, self.target_nodes, self.edges, self.production_costs, \
@@ -58,11 +62,15 @@ class FastOptimizationGurobiModel:
                 start_location_data, static_graph, start_road_distances,
                 start_new_pipeline_distances, end_location, config_file,
                 techno_economic_data_transport, self.warm_start_bound_route,
-                filter_edges_above_warm_start)
+                filter_edges_above_warm_start,
+                filter_start_options_above_warm_start)
 
         logger.info('Optimization graph contains %s nodes and %s edges (%s conversion, %s transport)',
                     len(self.all_nodes_adjusted), len(self.edges),
                     len(self.conversion_edges), len(self.transport_edges))
+        self.solution_route = self._validate_route_against_graph(self.solution_route, 'warm-start route')
+        self.warm_start_bound_route = self._validate_route_against_graph(
+            self.warm_start_bound_route, 'warm-start bound route')
 
         if export_edges:
             self._export_edges(config_file['project_folder_path'])
@@ -73,6 +81,7 @@ class FastOptimizationGurobiModel:
         self.chosen_edges = []
         self._prepare_index_arrays()
         self._prepare_warm_start_objective_bounds()
+        self.use_big_m_constraints = self.warm_start_objective is not None
         self.build_model()
         if solve:
             self.optimize()
@@ -82,6 +91,18 @@ class FastOptimizationGurobiModel:
         self.conversion_edges.to_csv(os.path.join(path_overall_data, 'conversion_edges.csv'))
         self.transport_edges.to_csv(os.path.join(path_overall_data, 'transport_edges.csv'))
         logger.info('Exported current conversion and transport edge tables')
+
+    def _validate_route_against_graph(self, route, route_name):
+        """Disable optional route-based features if the route does not fit the current graph."""
+        if route is None:
+            return None
+        missing_edges = [edge for edge in route if edge not in self.edges]
+        if missing_edges:
+            logger.warning('%s ignored because %s route edges are absent from the current MIP graph. '
+                           'First missing edge: %s',
+                           route_name, len(missing_edges), missing_edges[0])
+            return None
+        return route
 
     def _prepare_index_arrays(self):
         self.node_names = list(self.all_nodes_adjusted)
@@ -109,22 +130,33 @@ class FastOptimizationGurobiModel:
              if edge[0] == 'transport' and edge[1] == 'end'), dtype=np.int64)
 
     def _prepare_warm_start_objective_bounds(self):
-        """Optionally calculate objective bounds from a known warm-start route."""
-        if not self.use_warm_start_as_lower_bound and not self.use_warm_start_as_upper_bound:
-            return
+        """Calculate warm-start objective value and derive optional model bounds."""
         if self.warm_start_bound_route is None:
-            logger.warning('Warm-start objective bound requested, but no warm-start route was provided')
+            if self.use_warm_start_as_lower_bound or self.use_warm_start_as_upper_bound:
+                logger.warning('Warm-start objective bound requested, but no warm-start route was provided')
             return
 
         warm_start_objective = self._calculate_route_objective(self.warm_start_bound_route)
+        self.warm_start_objective = warm_start_objective
+        max_production_costs = max(self.production_costs.values()) if self.production_costs else 0
+        finite_edge_mask = self.edge_losses < 1
+        if finite_edge_mask.any():
+            max_edge_requirement = np.max(
+                (max_production_costs + self.edge_costs[finite_edge_mask]) * self.edge_scales[finite_edge_mask])
+        else:
+            max_edge_requirement = 0
+        self.big_m_cost_propagation = max(warm_start_objective, max_production_costs, max_edge_requirement)
+        if self.big_m_cost_propagation > warm_start_objective:
+            logger.info('Increase effective Big-M from warm-start objective %.6f to %.6f '
+                        'to cover fixed start production costs and edge propagation',
+                        warm_start_objective, self.big_m_cost_propagation)
         if self.use_warm_start_as_lower_bound:
             self.warm_start_objective_lower_bound = warm_start_objective
             logger.info('Calculated warm-start lower bound from route: %.6f',
                         self.warm_start_objective_lower_bound)
-        if self.use_warm_start_as_upper_bound:
-            self.warm_start_objective_upper_bound = warm_start_objective
-            logger.info('Calculated warm-start upper bound from route: %.6f',
-                        self.warm_start_objective_upper_bound)
+        self.warm_start_objective_upper_bound = warm_start_objective
+        logger.info('Calculated automatic warm-start upper bound from route: %.6f',
+                    self.warm_start_objective_upper_bound)
 
     def _estimate_transport_distance_km(self, edge):
         """Estimate route-section distance from the MIP transport cost definition."""
@@ -144,6 +176,12 @@ class FastOptimizationGurobiModel:
         """Log section-wise costs, losses and distances for a known route."""
         if not route:
             logger.warning('Cannot log %s because it is empty', route_name)
+            return
+        missing_edges = [edge for edge in route if edge not in self.edges]
+        if missing_edges:
+            logger.warning('Cannot log %s because %s route edges are absent from the current MIP graph. '
+                           'First missing edge: %s',
+                           route_name, len(missing_edges), missing_edges[0])
             return
 
         first_edge = self.edges[route[0]]
@@ -186,6 +224,12 @@ class FastOptimizationGurobiModel:
         """Calculate total route costs using the same edge propagation logic as the MIP."""
         if not route:
             raise ValueError('Cannot calculate warm-start lower bound for an empty route')
+        missing_edges = [edge for edge in route if edge not in self.edges]
+        if missing_edges:
+            raise ValueError('Cannot calculate warm-start objective because '
+                             + str(len(missing_edges))
+                             + ' route edges are absent from the current MIP graph. First missing edge: '
+                             + missing_edges[0])
 
         first_edge = self.edges[route[0]]
         start_commodity = first_edge[1].split('+', 1)[1]
@@ -198,6 +242,29 @@ class FastOptimizationGurobiModel:
             total_costs = (total_costs + edge_costs) / (1 - edge_loss)
 
         return total_costs
+
+    def _create_cost_start_values(self, route):
+        """Create continuous MIP-start values consistent with production and route propagation."""
+        cost_start_values = np.full(len(self.node_names), GRB.UNDEFINED, dtype=float)
+        for commodity, production_cost in self.production_costs.items():
+            node = 'start+' + commodity
+            if node in self.node_index:
+                cost_start_values[self.node_index[node]] = production_cost
+
+        if not route:
+            return cost_start_values
+
+        first_edge = self.edges[route[0]]
+        start_commodity = first_edge[1].split('+', 1)[1]
+        total_costs = self.production_costs[start_commodity]
+        cost_start_values[self.node_index[first_edge[1]]] = total_costs
+
+        for edge_key in route:
+            edge = self.edges[edge_key]
+            total_costs = (total_costs + edge[3]) / (1 - edge[4])
+            cost_start_values[self.node_index[edge[2]]] = total_costs
+
+        return cost_start_values
 
     def build_model(self):
         """Create variables and constraints using the Gurobi matrix API."""
@@ -213,9 +280,17 @@ class FastOptimizationGurobiModel:
             self.edge_scales * self.costs[self.start_indices] -
             self.costs[self.end_indices])
         propagation_rhs = -self.edge_scales * self.edge_costs
-        self.model.addGenConstrIndicator(
-            self.edge_binaries, True, propagation_lhs, GRB.LESS_EQUAL,
-            propagation_rhs, name='cost_propagation')
+        if self.use_big_m_constraints:
+            big_m = self.big_m_cost_propagation
+            self.model.addConstr(
+                propagation_lhs <= propagation_rhs + big_m * (1 - self.edge_binaries),
+                name='cost_propagation_big_m')
+            logger.info('Use Big-M cost propagation constraints with M=%.6f', big_m)
+        else:
+            self.model.addGenConstrIndicator(
+                self.edge_binaries, True, propagation_lhs, GRB.LESS_EQUAL,
+                propagation_rhs, name='cost_propagation')
+            logger.info('Use indicator cost propagation constraints because no warm-start objective is available')
 
         start_node_values = {
             self.node_index['start+' + commodity]: value
@@ -291,6 +366,7 @@ class FastOptimizationGurobiModel:
             for edge in self.solution_route:
                 start_values[self.edge_index[edge]] = 1
             self.edge_binaries.Start = start_values
+            self.costs.Start = self._create_cost_start_values(self.solution_route)
             logger.info('Applied warm-start route with %s active edges', len(self.solution_route))
 
         self.model.Params.IntFeasTol = 1e-9

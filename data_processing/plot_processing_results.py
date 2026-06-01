@@ -11,6 +11,18 @@ from data_processing.helpers_geometry import get_boundaries_from_config
 from data_processing.natural_earth_data import load_world_lowres
 
 
+def _read_csv_or_empty(path, columns=None, index_col=0):
+    if os.path.exists(path):
+        return pd.read_csv(path, index_col=index_col)
+    return pd.DataFrame(columns=columns or [])
+
+
+def _read_geodata_or_empty(path, columns=None):
+    if os.path.exists(path):
+        return gpd.read_file(path)
+    return gpd.GeoDataFrame(columns=columns or [], geometry='geometry', crs='EPSG:4326')
+
+
 def plot_original_pipeline_data():
 
     def plot_geometry_list():
@@ -147,44 +159,71 @@ def get_infrastructure_figure(sub_axes, boundaries, link_to_data, fig_title=''):
     data_pipeline_gas_nodes = 'gas_pipeline_node_locations.csv'
     data_pipeline_oil_nodes = 'oil_pipeline_node_locations.csv'
 
-    data_ports = pd.read_csv(link_to_data + data_ports, index_col=0)
-    data_pipeline_gas_lines = gpd.read_file(link_to_data + data_pipeline_gas_lines)
-    data_pipeline_oil_lines = gpd.read_file(link_to_data + data_pipeline_oil_lines)
-    data_pipeline_gas_nodes = gpd.read_file(link_to_data + data_pipeline_gas_nodes)
-    data_pipeline_oil_nodes = gpd.read_file(link_to_data + data_pipeline_oil_nodes)
+    node_columns = ['latitude', 'longitude', 'graph', 'geometry']
+    line_columns = ['graph', 'node_start', 'node_end', 'distance', 'line', 'geometry']
+    data_ports = _read_csv_or_empty(link_to_data + data_ports,
+                                    columns=['latitude', 'longitude', 'name', 'country', 'continent'])
+    data_pipeline_gas_lines = _read_geodata_or_empty(link_to_data + data_pipeline_gas_lines, columns=line_columns)
+    data_pipeline_oil_lines = _read_geodata_or_empty(link_to_data + data_pipeline_oil_lines, columns=line_columns)
+    data_pipeline_gas_nodes = _read_geodata_or_empty(link_to_data + data_pipeline_gas_nodes, columns=node_columns)
+    data_pipeline_oil_nodes = _read_geodata_or_empty(link_to_data + data_pipeline_oil_nodes, columns=node_columns)
 
-    for p in data_ports.index:
-        data_ports.loc[p, 'geometry'] = Point([data_ports.loc[p, 'longitude'], data_ports.loc[p, 'latitude']])
-    data_ports = gpd.GeoDataFrame(data_ports, geometry='geometry')
+    if data_ports.empty:
+        data_ports = gpd.GeoDataFrame(data_ports, geometry=[], crs='EPSG:4326')
+    else:
+        data_ports['geometry'] = [
+            Point([data_ports.loc[p, 'longitude'], data_ports.loc[p, 'latitude']])
+            for p in data_ports.index
+        ]
+        data_ports = gpd.GeoDataFrame(data_ports, geometry='geometry')
 
-    data_pipeline_gas_lines['line'] = data_pipeline_gas_lines['line'].apply(shapely.wkt.loads)
-    data_pipeline_gas_lines = data_pipeline_gas_lines.set_geometry('line')
+    if 'line' in data_pipeline_gas_lines.columns and not data_pipeline_gas_lines.empty:
+        data_pipeline_gas_lines['line'] = data_pipeline_gas_lines['line'].apply(shapely.wkt.loads)
+        data_pipeline_gas_lines = data_pipeline_gas_lines.set_geometry('line')
+    else:
+        data_pipeline_gas_lines = gpd.GeoDataFrame(columns=list(data_pipeline_gas_lines.columns) + ['geometry'],
+                                                   geometry='geometry', crs='EPSG:4326')
 
-    data_pipeline_oil_lines['line'] = data_pipeline_oil_lines['line'].apply(shapely.wkt.loads)
-    data_pipeline_oil_lines = data_pipeline_oil_lines.set_geometry('line')
+    if 'line' in data_pipeline_oil_lines.columns and not data_pipeline_oil_lines.empty:
+        data_pipeline_oil_lines['line'] = data_pipeline_oil_lines['line'].apply(shapely.wkt.loads)
+        data_pipeline_oil_lines = data_pipeline_oil_lines.set_geometry('line')
+    else:
+        data_pipeline_oil_lines = gpd.GeoDataFrame(columns=list(data_pipeline_oil_lines.columns) + ['geometry'],
+                                                   geometry='geometry', crs='EPSG:4326')
 
-    gas_nodes = []
-    for i in data_pipeline_gas_nodes.index:
-        gas_nodes.append(Point([data_pipeline_gas_nodes.at[i, 'longitude'], data_pipeline_gas_nodes.at[i, 'latitude']]))
-        # plt.text(x=float(data_pipeline_gas_nodes.at[i, 'longitude']), y=float(data_pipeline_gas_nodes.at[i, 'latitude']), s=data_pipeline_gas_nodes.at[i, 'field_1'])
-    data_pipeline_gas_nodes['geometry'] = gas_nodes
+    if {'longitude', 'latitude'}.issubset(data_pipeline_gas_nodes.columns) and not data_pipeline_gas_nodes.empty:
+        gas_nodes = []
+        for i in data_pipeline_gas_nodes.index:
+            gas_nodes.append(Point([data_pipeline_gas_nodes.at[i, 'longitude'],
+                                    data_pipeline_gas_nodes.at[i, 'latitude']]))
+            # plt.text(x=float(data_pipeline_gas_nodes.at[i, 'longitude']), y=float(data_pipeline_gas_nodes.at[i, 'latitude']), s=data_pipeline_gas_nodes.at[i, 'field_1'])
+        data_pipeline_gas_nodes['geometry'] = gas_nodes
+        data_pipeline_gas_nodes = gpd.GeoDataFrame(data_pipeline_gas_nodes, geometry='geometry')
 
-    oil_nodes = []
-    for i in data_pipeline_oil_nodes.index:
-        oil_nodes.append(Point([data_pipeline_oil_nodes.at[i, 'longitude'], data_pipeline_oil_nodes.at[i, 'latitude']]))
-    data_pipeline_oil_nodes['geometry'] = oil_nodes
+    if {'longitude', 'latitude'}.issubset(data_pipeline_oil_nodes.columns) and not data_pipeline_oil_nodes.empty:
+        oil_nodes = []
+        for i in data_pipeline_oil_nodes.index:
+            oil_nodes.append(Point([data_pipeline_oil_nodes.at[i, 'longitude'],
+                                    data_pipeline_oil_nodes.at[i, 'latitude']]))
+        data_pipeline_oil_nodes['geometry'] = oil_nodes
+        data_pipeline_oil_nodes = gpd.GeoDataFrame(data_pipeline_oil_nodes, geometry='geometry')
 
     # plot map on axis
     countries = load_world_lowres()
-    antarctica = countries[countries['continent'] == 'Antarctica'].index[0]
-    countries.drop([antarctica], inplace=True)
+    antarctica = countries[countries['continent'] == 'Antarctica'].index
+    countries.drop(antarctica, inplace=True)
     countries.plot(color="lightgrey", ax=sub_axes)
 
-    data_ports.plot(color="blue", ax=sub_axes, markersize=1, label='Port')
-    data_pipeline_gas_lines.plot(color="red", ax=sub_axes, linewidth=0.5, label='Gas Pipeline')
-    data_pipeline_oil_lines.plot(color="black", ax=sub_axes, linewidth=0.5, label='Oil Pipeline')
-    data_pipeline_gas_nodes.plot(color='orange', ax=sub_axes)
-    data_pipeline_oil_nodes.plot(color='grey', ax=sub_axes)
+    if not data_ports.empty:
+        data_ports.plot(color="blue", ax=sub_axes, markersize=1, label='Port')
+    if not data_pipeline_gas_lines.empty:
+        data_pipeline_gas_lines.plot(color="red", ax=sub_axes, linewidth=0.5, label='Gas Pipeline')
+    if not data_pipeline_oil_lines.empty:
+        data_pipeline_oil_lines.plot(color="black", ax=sub_axes, linewidth=0.5, label='Oil Pipeline')
+    if not data_pipeline_gas_nodes.empty:
+        data_pipeline_gas_nodes.plot(color='orange', ax=sub_axes)
+    if not data_pipeline_oil_nodes.empty:
+        data_pipeline_oil_nodes.plot(color='grey', ax=sub_axes)
 
     sub_axes.grid(visible=True, alpha=0.5)
     sub_axes.text(0.6, 0.05, fig_title, transform=sub_axes.transAxes, va='bottom', ha='left')

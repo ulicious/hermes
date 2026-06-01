@@ -3,6 +3,7 @@ import math
 import itertools
 import multiprocessing
 import ast
+import os
 
 import pandas as pd
 import geopandas as gpd
@@ -24,6 +25,13 @@ from plotting.get_figures import get_number_figure, get_routes_figure, get_energ
 from data_processing.helpers_geometry import get_destination
 
 
+def _read_csv_or_empty(path, columns=None, index_col=0, dtype=None):
+    """Read a CSV if available, otherwise return an empty frame with expected columns."""
+    if os.path.exists(path):
+        return pd.read_csv(path, index_col=index_col, dtype=dtype)
+    return pd.DataFrame(columns=columns or [])
+
+
 def get_geometry_plot_point(geometry):
     """Return a stable point for plotting infrastructure tables from point or area geometries."""
     if isinstance(geometry, Point):
@@ -36,13 +44,20 @@ def get_geometry_plot_point(geometry):
 
 
 def load_data(path_data, config_file):
-    pipeline_gas_node_locations = pd.read_csv(path_data + 'gas_pipeline_node_locations.csv', index_col=0,
-                                              dtype={'latitude': np.float16, 'longitude': np.float16})
-    pipeline_gas_graphs = pd.read_csv(path_data + 'gas_pipeline_graphs.csv', index_col=0)
-    pipeline_liquid_node_locations = pd.read_csv(path_data + 'oil_pipeline_node_locations.csv', index_col=0,
-                                                 dtype={'latitude': np.float16, 'longitude': np.float16})
-    pipeline_liquid_graphs = pd.read_csv(path_data + 'oil_pipeline_graphs.csv', index_col=0)
-    ports = pd.read_csv(path_data + 'ports.csv', index_col=0)
+    node_columns = ['latitude', 'longitude', 'graph']
+    graph_columns = ['graph', 'node_start', 'node_end', 'distance', 'line']
+    port_columns = ['latitude', 'longitude', 'name', 'country', 'continent',
+                    'longitude_on_coastline', 'latitude_on_coastline']
+
+    pipeline_gas_node_locations = _read_csv_or_empty(
+        path_data + 'gas_pipeline_node_locations.csv', columns=node_columns,
+        dtype={'latitude': np.float16, 'longitude': np.float16})
+    pipeline_gas_graphs = _read_csv_or_empty(path_data + 'gas_pipeline_graphs.csv', columns=graph_columns)
+    pipeline_liquid_node_locations = _read_csv_or_empty(
+        path_data + 'oil_pipeline_node_locations.csv', columns=node_columns,
+        dtype={'latitude': np.float16, 'longitude': np.float16})
+    pipeline_liquid_graphs = _read_csv_or_empty(path_data + 'oil_pipeline_graphs.csv', columns=graph_columns)
+    ports = _read_csv_or_empty(path_data + 'ports.csv', columns=port_columns)
 
     data = {'Shipping': {'ports': ports}}
 
@@ -68,6 +83,15 @@ def process_network_data(data, name, geo_data, graph_data):
     """
 
     data[name] = {}
+
+    if geo_data.empty or graph_data.empty:
+        return data
+    if 'graph' not in geo_data.columns or 'line' not in graph_data.columns:
+        return data
+
+    graph_data = graph_data[graph_data['line'].notna()].copy()
+    if graph_data.empty:
+        return data
 
     graph_data = gpd.GeoDataFrame(graph_data)
     graph_data['line'] = graph_data['line'].apply(shapely.wkt.loads)
@@ -112,6 +136,8 @@ def get_complete_infrastructure(data, final_destination):
 
             # get all options of current mean of transport
             options_shipping = data[m]['ports']
+            if options_shipping.empty:
+                continue
             options_shipping['graph'] = None
 
             options_to_concat.append(options_shipping)
@@ -120,9 +146,11 @@ def get_complete_infrastructure(data, final_destination):
             networks = data[m].keys()
             for n in networks:
                 options_network = data[m][n]['GeoData'].copy()
-                options_to_concat.append(options_network)
+                if not options_network.empty:
+                    options_to_concat.append(options_network)
 
-    options = pd.concat([options] + options_to_concat)
+    if options_to_concat:
+        options = pd.concat([options] + options_to_concat)
 
     # create common infrastructure column
     options['infrastructure'] = options.index

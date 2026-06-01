@@ -1,4 +1,5 @@
 import geojson
+import os
 
 import pandas as pd
 
@@ -21,12 +22,16 @@ def process_ports(path_data, coastlines, landmasses, boundaries, destination, us
     @return: dataframe containing all information on ports
     """
 
-    with open(path_data + 'seaports.geojson') as f:
+    ports = pd.DataFrame(columns=['latitude', 'longitude', 'name', 'country', 'continent',
+                                  'longitude_on_coastline', 'latitude_on_coastline'])
+    ports_file = path_data + 'seaports.geojson'
+    if not os.path.exists(ports_file):
+        return ports
+
+    with open(ports_file) as f:
         gj = geojson.load(f)
     features = gj['features']
 
-    ports = pd.DataFrame(columns=['latitude', 'longitude', 'name', 'country', 'continent',
-                                  'longitude_on_coastline', 'latitude_on_coastline'])
     ports.drop_duplicates(subset=['latitude', 'longitude'], keep='first')
 
     i = 0
@@ -58,9 +63,12 @@ def process_ports(path_data, coastlines, landmasses, boundaries, destination, us
 
         # add closest point to coastline --> necessary as some ports are not connected to land
         # new_port_location = nearest_points(coastlines, location)[0]
-        new_port_location = nearest_points(landmasses, location)[0]
-        index_closest = coastlines.distance(location).sort_values().index[0]
-        closest_point = new_port_location.loc[index_closest].values[0]
+        if coastlines.empty or landmasses.empty:
+            closest_point = location
+        else:
+            new_port_location = nearest_points(landmasses, location)[0]
+            index_closest = coastlines.distance(location).sort_values().index[0]
+            closest_point = new_port_location.loc[index_closest].values[0]
 
         ports.loc[index, 'longitude_on_coastline'] = closest_point.x
         ports.loc[index, 'latitude_on_coastline'] = closest_point.y

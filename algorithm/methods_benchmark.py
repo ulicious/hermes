@@ -1,4 +1,5 @@
 import math
+import os
 
 import pandas as pd
 from pandas.core.interchange import dataframe
@@ -9,6 +10,14 @@ from shapely.ops import nearest_points
 
 from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list, calc_distance_list_to_list, \
     check_if_reachable_on_land
+
+
+def _load_shipping_distances(path_processed_data):
+    path_file = path_processed_data + 'inner_infrastructure_distances/port_distances.csv'
+    if not os.path.exists(path_file):
+        return pd.DataFrame()
+    return pd.read_csv(path_file, index_col=0, header=0, dtype=str, sep=None, engine='python',
+                       keep_default_na=False)
 
 
 def check_if_benchmark_possible(data, configuration, complete_infrastructure):
@@ -200,8 +209,9 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
     port_index = [i for i in shipping_options.index if 'H' in i]
     shipping_options = shipping_options.loc[port_index, :]
 
-    shipping_distances = pd.read_csv(configuration['path_processed_data'] + 'inner_infrastructure_distances/port_distances.csv',
-                                 index_col=0, header=0, dtype=str, sep=None, engine='python', keep_default_na=False)
+    shipping_distances = _load_shipping_distances(configuration['path_processed_data'])
+    if shipping_options.empty or shipping_distances.empty:
+        return math.inf, [], None, None, None, None, None, None
 
     try:
         shipping_distances = np.ceil(shipping_distances.apply(pd.to_numeric, errors='raise'))
@@ -215,9 +225,6 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
                 print(f"Index: {idx}, Column: {col}, Value: {repr(shipping_distances.at[idx, col])}")
 
         raise
-
-    if shipping_options.empty:
-        return math.inf, [], None, None, None, None, None, None
 
     transportation_options = shipping_commodity.get_transportation_options()
     transportation_costs = shipping_commodity.get_transportation_costs()
@@ -684,7 +691,10 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
     used_nodes.append(closest_node_second_to_first)
 
     # now add shipping costs
-    shipping_distances = pd.read_csv(configuration['path_processed_data'] + 'inner_infrastructure_distances/port_distances.csv', index_col=0)
+    shipping_distances = _load_shipping_distances(configuration['path_processed_data'])
+    if shipping_distances.empty:
+        return math.inf, [], None, None, None, None, None, None
+    shipping_distances = np.ceil(shipping_distances.apply(pd.to_numeric, errors='raise'))
 
     destination_port = options_shipping_destination['distance_to_destination'].idxmin()
     to_destination_distance = options_shipping_destination['distance_to_destination'].min()
