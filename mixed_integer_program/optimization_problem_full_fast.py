@@ -41,6 +41,7 @@ class FastOptimizationGurobiModel:
                  filter_edges_above_warm_start=False,
                  filter_start_options_above_warm_start=False,
                  filter_unreachable_edges=False,
+                 destination_tolerance_nodes=None,
                  solve=False):
 
         self.config_file = config_file
@@ -70,7 +71,8 @@ class FastOptimizationGurobiModel:
                 self.warm_start_bound_route,
                 filter_edges_above_warm_start,
                 filter_start_options_above_warm_start,
-                filter_unreachable_edges)
+                filter_unreachable_edges,
+                destination_tolerance_nodes)
 
         logger.debug('Optimization graph contains %s nodes and %s edges (%s conversion, %s transport)',
                      len(self.all_nodes_adjusted), len(self.edges),

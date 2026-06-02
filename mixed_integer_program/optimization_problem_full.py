@@ -607,7 +607,8 @@ class OptimizationGurobiModel:
                  use_warm_start_as_upper_bound=False,
                  mip_gap=None, time_limit=None,
                  filter_edges_above_warm_start=False,
-                 filter_start_options_above_warm_start=False):
+                 filter_start_options_above_warm_start=False,
+                 destination_tolerance_nodes=None):
 
         # ----------------------------------
         # Set up problem
@@ -643,7 +644,9 @@ class OptimizationGurobiModel:
                          self.techno_economic_data_transport, self.techno_economic_data_conversion,
                          warm_start_bound_route,
                          filter_edges_above_warm_start,
-                         filter_start_options_above_warm_start)
+                         filter_start_options_above_warm_start,
+                         False,
+                         destination_tolerance_nodes)
         self.solution_route = self.validate_route_against_graph(self.solution_route, 'warm-start route')
         warm_start_bound_route = self.validate_route_against_graph(
             warm_start_bound_route, 'warm-start bound route')

@@ -53,6 +53,68 @@ def collect_mip_run_statistics(config_file, location, model):
     })
 
 
+def _format_filter_summary(filter_summary):
+    if not filter_summary:
+        return 'none'
+
+    formatted_filters = []
+    for name, details in filter_summary.items():
+        if not isinstance(details, dict):
+            formatted_filters.append(f'{name}: {details}')
+            continue
+
+        removed = details.get('removed', details.get('removed_edges', 0))
+        enabled = details.get('enabled')
+        reasons = details.get('reasons', details.get('removed_by_reason', {}))
+        parts = [f'removed {removed}']
+        if enabled is not None:
+            parts.append(f'enabled {enabled}')
+        if reasons:
+            parts.append(f'reasons {reasons}')
+        if 'removed_nodes' in details:
+            parts.append(f"removed_nodes {details['removed_nodes']}")
+        if 'removed_start_options' in details:
+            parts.append(f"removed_start_options {details['removed_start_options']}")
+        formatted_filters.append(f"{name}: " + ', '.join(parts))
+
+    return ' | '.join(formatted_filters)
+
+
+def append_mip_location_build_summary(config_file, location, model, solve):
+    """Append model-size diagnostics for every location, also for build-only runs."""
+    file_path = config_file.get('mip_incumbent_history_file')
+    if not file_path:
+        return
+
+    edge_summary = config_file.get('current_mip_edge_summary', {})
+    status = getattr(model, 'status', None) if solve else 'model_built'
+    lines = [
+        '',
+        '-' * 100,
+        f'MIP model summary for location {location}',
+        f'Status: {status}',
+        'Edges | static {static_edges} | before pruning {before_edges} | after pruning {after_edges}'.format(
+            static_edges=edge_summary.get('static_edges'),
+            before_edges=edge_summary.get('assembled_edges_before_filters'),
+            after_edges=edge_summary.get('final_edges')),
+        'Nodes | static {static_nodes} | final {final_nodes}'.format(
+            static_nodes=edge_summary.get('static_nodes'),
+            final_nodes=edge_summary.get('final_nodes')),
+        'Added edges | start {start_edges} | sink {sink_edges}'.format(
+            start_edges=edge_summary.get('start_edges_added'),
+            sink_edges=edge_summary.get('sink_edges_added')),
+        'Edge counts before pruning: {counts}'.format(
+            counts=edge_summary.get('assembled_edge_counts_before_filters')),
+        'Edge counts after pruning: {counts}'.format(
+            counts=edge_summary.get('final_edge_counts')),
+        'Filters: ' + _format_filter_summary(edge_summary.get('filters', {})),
+        ''
+    ]
+
+    with open(file_path, 'a', encoding='utf-8') as file:
+        file.write('\n'.join(lines))
+
+
 def finalize_mip_incumbent_history_file(config_file, solve=True):
     """Rename the shared incumbent file after the run based on whether any location improved."""
     file_path = config_file.get('mip_incumbent_history_file')
@@ -158,7 +220,8 @@ def create_model(static_graph, start_location_data, start_road_distances,
                  mip_gap=None, time_limit=None,
                  filter_edges_above_warm_start=False,
                  filter_start_options_above_warm_start=False,
-                 filter_unreachable_edges=False):
+                 filter_unreachable_edges=False,
+                 destination_tolerance_nodes=None):
     """Build one Gurobi MIP instance and optionally start its optimization."""
     return FastOptimizationGurobiModel(
         static_graph=static_graph,
@@ -177,6 +240,7 @@ def create_model(static_graph, start_location_data, start_road_distances,
         filter_edges_above_warm_start=filter_edges_above_warm_start,
         filter_start_options_above_warm_start=filter_start_options_above_warm_start,
         filter_unreachable_edges=filter_unreachable_edges,
+        destination_tolerance_nodes=destination_tolerance_nodes,
         solve=solve)
 
 
@@ -264,6 +328,23 @@ def load_warm_start_from_result_file(project_path, location):
     return create_warm_start_solution(result)
 
 
+def load_warm_start_total_costs(project_path, location):
+    """Read the heuristic total supply costs used to order MIP locations."""
+    result_file = os.path.join(
+        project_path, 'results', 'location_results', str(location) + '_final_solution.csv')
+    if not os.path.exists(result_file):
+        return math.inf
+
+    try:
+        result = pd.read_csv(result_file, index_col=0)
+        value = result.iloc[:, 0].get('current_total_costs')
+        return float(value) if value is not None and not pd.isna(value) else math.inf
+    except (OSError, ValueError, IndexError, KeyError):
+        logger.warning('Could not read warm-start total costs for location %s from %s',
+                       location, result_file)
+        return math.inf
+
+
 def read_distance_file_or_empty(path):
     """Load optional origin-specific distance data without failing on missing layers."""
     if os.path.exists(path):
@@ -309,8 +390,10 @@ def run_minimal_case(config_file, conversion_data, transport_data, solve,
         time_limit=time_limit,
         filter_edges_above_warm_start=filter_edges_above_warm_start,
         filter_start_options_above_warm_start=filter_start_options_above_warm_start,
-        filter_unreachable_edges=filter_unreachable_edges)
+        filter_unreachable_edges=filter_unreachable_edges,
+        destination_tolerance_nodes=case.get('end_location'))
     collect_mip_run_statistics(config_file, 'minimal', model)
+    append_mip_location_build_summary(config_file, 'minimal', model, solve)
     return model
 
 
@@ -351,8 +434,18 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
                  len(static_graph['nodes']), len(static_graph['edges']),
                  len(end_location), len(start_locations))
 
+    if needs_warm_start_route:
+        location_order = sorted(
+            start_locations.index,
+            key=lambda location: (load_warm_start_total_costs(project_path, location), location)
+        )
+        logger.info('Sort MIP locations by heuristic total supply costs; cheapest start solution first')
+    else:
+        location_order = start_locations.index
+
     results = []
-    for location in start_locations.index:
+    for location in location_order:
+
         logger.debug('Build MIP for origin %s', location)
         config_file['current_mip_location'] = location
         known_route = None
@@ -385,8 +478,10 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
             time_limit=time_limit,
             filter_edges_above_warm_start=filter_edges_above_warm_start,
             filter_start_options_above_warm_start=filter_start_options_above_warm_start,
-            filter_unreachable_edges=filter_unreachable_edges)
+            filter_unreachable_edges=filter_unreachable_edges,
+            destination_tolerance_nodes=end_location)
         collect_mip_run_statistics(config_file, location, model)
+        append_mip_location_build_summary(config_file, location, model, solve)
         if solve:
             results.append({
                 'location': location,
@@ -444,7 +539,7 @@ def run_mip_optimization(use_minimal_example=False, solve=True,
 
 if __name__ == '__main__':
     USE_MINIMAL_EXAMPLE = False
-    SOLVE = False
+    SOLVE = True
     USE_WARM_START = True
     USE_WARM_START_AS_LOWER_BOUND = False
     FILTER_EDGES_ABOVE_WARM_START = True

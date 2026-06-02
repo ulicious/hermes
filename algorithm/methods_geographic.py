@@ -6,6 +6,7 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import numpy as np
 import geopandas as gpd
+import pandas as pd
 
 from geopandas.tools import sjoin
 from math import cos, sin, asin, sqrt, radians
@@ -154,6 +155,74 @@ def get_continent_from_location(location, world=None):
     continent = str(result.at[result.index[0], 'CONTINENT'])
 
     return continent
+
+
+def _is_valid_continent(continent):
+    return continent is not None and pd.notna(continent) and str(continent).lower() != 'nan'
+
+
+def get_continent_from_location_robust(location, world=None, fallback_continent=None,
+                                       nearest_tolerance_m=100000):
+    """Resolve a continent from coordinates, using nearest land as fallback for offshore infrastructure nodes."""
+    continent = get_continent_from_location(location, world=world)
+    if _is_valid_continent(continent):
+        return continent
+
+    if world is None:
+        world = load_world()
+
+    point = gpd.GeoDataFrame(
+        geometry=gpd.points_from_xy([location[0]], [location[1]])
+    ).set_crs('EPSG:4326')
+
+    try:
+        nearest = gpd.sjoin_nearest(
+            point.to_crs('EPSG:3857'),
+            world.to_crs('EPSG:3857'),
+            how='left',
+            distance_col='distance_to_nearest_land',
+        )
+        distance = nearest.at[nearest.index[0], 'distance_to_nearest_land']
+        nearest_continent = nearest.at[nearest.index[0], 'CONTINENT']
+        if distance <= nearest_tolerance_m and _is_valid_continent(nearest_continent):
+            return str(nearest_continent)
+    except Exception:
+        pass
+
+    if _is_valid_continent(fallback_continent):
+        return str(fallback_continent)
+
+    return continent
+
+
+def update_branch_continents(branches, complete_infrastructure, world=None, fallback_column='current_continent'):
+    """Update branch continents from infrastructure metadata, then robust geographic lookup, then previous value."""
+    if branches.empty:
+        return branches
+
+    continents = []
+    for idx in branches.index:
+        node = branches.at[idx, 'current_node']
+        fallback_continent = branches.at[idx, fallback_column] if fallback_column in branches.columns else None
+
+        if (complete_infrastructure is not None and node in complete_infrastructure.index
+                and 'continent' in complete_infrastructure.columns):
+            infrastructure_continent = complete_infrastructure.at[node, 'continent']
+            if _is_valid_continent(infrastructure_continent):
+                continents.append(str(infrastructure_continent))
+                continue
+
+        location = (branches.at[idx, 'longitude'], branches.at[idx, 'latitude'])
+        continents.append(
+            get_continent_from_location_robust(
+                location,
+                world=world,
+                fallback_continent=fallback_continent,
+            )
+        )
+
+    branches.loc[:, 'current_continent'] = continents
+    return branches
 
 
 def check_if_reachable_on_land(target_location, list_longitude, list_latitude, coastline, get_only_availability=False,

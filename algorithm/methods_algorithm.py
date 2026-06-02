@@ -8,7 +8,7 @@ import numpy as np
 from shapely.geometry import Point
 from shapely.ops import nearest_points
 
-from algorithm.methods_geographic import calc_distance_single_to_single, calc_distance_list_to_single, get_continent_from_location
+from algorithm.methods_geographic import calc_distance_single_to_single, calc_distance_list_to_single, update_branch_continents
 from algorithm.object_commodity import create_commodity_objects
 
 
@@ -908,12 +908,9 @@ def compare_to_local_benchmark(data, branch_number, branches, local_benchmarks):
     # update information in dataframe
     branches['conversion_costs'] = 0
 
-    branches['longitude_latitude'] = [(branches.at[i, 'longitude'], branches.at[i, 'latitude'])
-                                      for i in branches.index]
-    branches['current_continent'] = branches['longitude_latitude'].apply(get_continent_from_location, world=data['world'])
-    # todo: takes quite some time --> could be improved
+    branches = update_branch_continents(branches, None, world=data['world'])
 
-    branches.drop(['minimal_total_costs', 'minimal_commodity', 'longitude_latitude'], axis=1, inplace=True)
+    branches.drop(['minimal_total_costs', 'minimal_commodity'], axis=1, inplace=True)
 
     return branches, branch_number, local_benchmarks
 

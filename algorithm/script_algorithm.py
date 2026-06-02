@@ -15,7 +15,7 @@ from algorithm.methods_algorithm import postprocessing_branches, create_branches
     check_for_inaccessibility_and_at_destination, prepare_commodities, assess_for_benchmark, compare_to_local_benchmark,\
     update_branch_comparison_index
 from algorithm.script_benchmark import calculate_benchmark
-from algorithm.methods_geographic import get_continent_from_location
+from algorithm.methods_geographic import update_branch_continents
 from algorithm.methods_conversion import apply_conversion
 from algorithm.methods_cost_approximations import calculate_minimal_costs_conversion_for_oil_and_gas_infrastructure
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure, calculate_conversion_costs_and_efficiencies_for_all_combinations
@@ -59,11 +59,9 @@ def _finalize_routing_branches(branches, old_branches, local_benchmarks, branch_
 
     branches['conversion_costs'] = 0
 
-    branches['longitude_latitude'] = [(branches.at[i, 'longitude'], branches.at[i, 'latitude'])
-                                      for i in branches.index]
-    branches['current_continent'] = branches['longitude_latitude'].apply(get_continent_from_location, world=data['world'])
+    branches = update_branch_continents(branches, complete_infrastructure, world=data['world'])
 
-    drop_columns = [c for c in ['minimal_total_costs', 'minimal_commodity', 'longitude_latitude'] if c in branches.columns]
+    drop_columns = [c for c in ['minimal_total_costs', 'minimal_commodity'] if c in branches.columns]
     if drop_columns:
         branches.drop(drop_columns, axis=1, inplace=True)
 
@@ -820,12 +818,9 @@ def run_algorithm(args):
             # update information in dataframe
             branches['conversion_costs'] = 0
 
-            branches['longitude_latitude'] = [(branches.at[i, 'longitude'], branches.at[i, 'latitude'])
-                                              for i in branches.index]
-            branches['current_continent'] = branches['longitude_latitude'].apply(get_continent_from_location, world=data['world'])
-            # todo: takes quite some time --> could be improved
+            branches = update_branch_continents(branches, complete_infrastructure, world=data['world'])
 
-            branches.drop(['minimal_total_costs', 'minimal_commodity', 'longitude_latitude'],
+            branches.drop(['minimal_total_costs', 'minimal_commodity'],
                           axis=1, inplace=True, errors='ignore')
 
             branches = postprocessing_branches(branches, old_branches)

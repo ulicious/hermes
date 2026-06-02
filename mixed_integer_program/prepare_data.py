@@ -31,7 +31,8 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
                  techno_economic_data_conversion=None,
                  warm_start_route=None, filter_edges_above_warm_start=False,
                  filter_start_options_above_warm_start=False,
-                 filter_unreachable_edges=False):
+                 filter_unreachable_edges=False,
+                 destination_tolerance_nodes=None):
     """
     Complete the commodity-expanded graph for one optimization location.
 
@@ -142,6 +143,16 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
     edge_summary['assembled_edge_counts_before_filters'] = _edge_type_counts(edges)
 
     before_filter = len(edges)
+    destination_tolerance_nodes = end_node if destination_tolerance_nodes is None else destination_tolerance_nodes
+    edges, conversion_edges, transport_edges, tolerance_summary = \
+        filter_transport_edges_between_destination_tolerance_nodes(
+            edges, conversion_edges, transport_edges, destination_tolerance_nodes)
+    edge_summary['filters']['destination_tolerance_transport'] = {
+        'removed_edges': before_filter - len(edges),
+        **tolerance_summary,
+    }
+
+    before_filter = len(edges)
     edges, conversion_edges, transport_edges = filter_edges_by_configuration(
         edges, conversion_edges, transport_edges, config_file,
         techno_economic_data_transport, techno_economic_data_conversion)
@@ -205,6 +216,41 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
     config_file['current_mip_edge_summary'] = edge_summary
 
     return all_nodes_adjusted, target_nodes, edges, production_costs, transport_means, max_costs, conversion_edges, transport_edges
+
+
+def _physical_node(model_node):
+    if not isinstance(model_node, str):
+        return model_node
+    return model_node.split('+', 1)[0]
+
+
+def filter_transport_edges_between_destination_tolerance_nodes(
+        edges, conversion_edges, transport_edges, destination_tolerance_nodes):
+    """Remove transport between nodes that are both already accepted as destination nodes."""
+    tolerance_nodes = set(destination_tolerance_nodes or [])
+    if not tolerance_nodes:
+        return edges, conversion_edges, transport_edges, {'enabled': False, 'tolerance_nodes': 0}
+
+    removed_edges = {
+        key for key, edge in edges.items()
+        if edge[0] == 'transport'
+        and edge[6] != 'Destination'
+        and _physical_node(edge[1]) in tolerance_nodes
+        and _physical_node(edge[2]) in tolerance_nodes
+    }
+    if not removed_edges:
+        return edges, conversion_edges, transport_edges, {
+            'enabled': True,
+            'tolerance_nodes': len(tolerance_nodes),
+        }
+
+    edges = {key: edge for key, edge in edges.items() if key not in removed_edges}
+    transport_edges = transport_edges.drop(
+        index=transport_edges.index.intersection(removed_edges))
+    return edges, conversion_edges, transport_edges, {
+        'enabled': True,
+        'tolerance_nodes': len(tolerance_nodes),
+    }
 
 
 def filter_edges_by_start_end_reachability(all_nodes_adjusted, edges, conversion_edges, transport_edges):
