@@ -12,6 +12,7 @@ from shapely.geometry import Point
 from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list
 from algorithm.methods_cost_approximations import calculate_cheapest_option_to_closest_infrastructure, \
     calculate_cheapest_option_to_final_destination
+from algorithm.methods_algorithm import update_branch_comparison_index
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -233,6 +234,7 @@ def create_branches_from_in_tolerance_locations(data, branches, complete_infrast
     direct_branches['longitude'] = complete_infrastructure.loc[nodes_list, 'longitude'].tolist()
 
     direct_branches.sort_values(['current_total_costs'], inplace=True)
+    direct_branches = update_branch_comparison_index(direct_branches)
     direct_branches = direct_branches.drop_duplicates(subset=['comparison_index'], keep='first')
 
     final_destination = data['destination']['location']
@@ -300,23 +302,36 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         # only use options which are actually reachable from start
         complete_infrastructure = complete_infrastructure[complete_infrastructure['reachable_from_start']]
 
+        # always consider infrastructure in destination
+        in_tolerance_to_destination_infrastructure = complete_infrastructure[complete_infrastructure['distance_to_destination'] < configuration['to_final_destination_tolerance']].index.tolist()
+
         if limitation == 'no_pipeline_gas':
             reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'PG' not in i]
+            reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
             distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                    complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                    branches['latitude'], branches['longitude'])
 
         elif limitation == 'no_pipeline_liquid':
             reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'PL' not in i]
+            reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
             distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                    complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                    branches['latitude'], branches['longitude'])
 
         elif limitation == 'no_pipelines':
             reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'H' in i]
+            reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
             distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                    complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                    branches['latitude'], branches['longitude'])
+
+        elif limitation == 'only_in_tolerance':  # these will immediately terminate since destinations are in tolerance
+            reduced_infrastructure_index = in_tolerance_to_destination_infrastructure
+            distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
+                                                   complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
+                                                   branches['latitude'], branches['longitude'])
+
 
         else:  # don't limit infrastructure at all
             reduced_infrastructure_index = complete_infrastructure.index
@@ -414,8 +429,13 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             # location only once. Therefore, remove duplicates
             branches_no_duplicates = branches.drop_duplicates(subset=['current_node'], keep='first')
 
+            in_tolerance_to_destination_infrastructure = complete_infrastructure[
+                complete_infrastructure['distance_to_destination'] < configuration[
+                    'to_final_destination_tolerance']].index.tolist()
+
             if limitation == 'no_pipeline_gas':
                 reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'PG' not in i]
+                reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
 
                 if configuration['destination_type'] == 'country':  # destination not necessary with polygons
                     reduced_infrastructure_index = [i for i in reduced_infrastructure_index if i != 'Destination']
@@ -427,6 +447,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
             elif limitation == 'no_pipeline_liquid':
                 reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'PL' not in i]
+                reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
 
                 if configuration['destination_type'] == 'country':  # destination not necessary with polygons
                     reduced_infrastructure_index = [i for i in reduced_infrastructure_index if i != 'Destination']
@@ -442,15 +463,27 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 else:
                     reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'H' in i]
 
+                reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
+
                 distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                        complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                        branches_no_duplicates['latitude'],
                                                        branches_no_duplicates['longitude'])
 
+            elif limitation == 'only_in_tolerance':  # these will immediately terminate since destinations are in tolerance
+                reduced_infrastructure_index = in_tolerance_to_destination_infrastructure
+
+                distances = calc_distance_list_to_list(
+                    complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
+                    complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
+                    branches_no_duplicates['latitude'], branches_no_duplicates['longitude'])
+
             else:
-                reduced_infrastructure_index = complete_infrastructure.index
+                reduced_infrastructure_index = complete_infrastructure.index.tolist()
                 if configuration['destination_type'] == 'country':  # destination not necessary with polygons
                     reduced_infrastructure_index = [i for i in complete_infrastructure.index if i != 'Destination']
+
+                reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
 
                 distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                        complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
@@ -644,8 +677,11 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         road_options['comparison_index'] = [road_options.at[ind, 'current_node'] + '-'
                                             + road_options.at[ind, 'current_commodity']
                                             for ind in road_options.index]
+        road_options = update_branch_comparison_index(road_options, branches)
         road_options.sort_values(['current_total_costs'], inplace=True)
-        road_options = road_options.drop_duplicates(subset=['comparison_index'], keep='first')
+
+        if not use_minimal_distance:
+            road_options = road_options.drop_duplicates(subset=['comparison_index'], keep='first')
 
     else:
         road_options = pd.DataFrame()
@@ -709,8 +745,11 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         new_infrastructure_options['comparison_index'] = [new_infrastructure_options.at[ind, 'current_node'] + '-'
                                                           + new_infrastructure_options.at[ind, 'current_commodity']
                                                           for ind in new_infrastructure_options.index]
+        new_infrastructure_options = update_branch_comparison_index(new_infrastructure_options, branches)
         new_infrastructure_options.sort_values(['current_total_costs'], inplace=True)
-        new_infrastructure_options = new_infrastructure_options.drop_duplicates(subset=['comparison_index'], keep='first')
+
+        if not use_minimal_distance:
+            new_infrastructure_options = new_infrastructure_options.drop_duplicates(subset=['comparison_index'], keep='first')
     else:
         new_infrastructure_options = pd.DataFrame()
 
@@ -850,6 +889,11 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                     continue
 
                 distances = shipping_distances.loc[start_infrastructure, shipping_infrastructure.index]
+
+                distances = distances[distances.index != start_infrastructure]  # remove transport between same node
+                if distances.empty:
+                    continue
+
                 durations = distances / 1000 / current_commodity_object.get_shipping_speed()
 
                 efficiency, current_total_costs_distances \
@@ -937,6 +981,10 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                 else:
                     distances = graph_distances[start_infrastructure]
 
+                distances = distances[distances.index != start_infrastructure]
+                if distances.empty:
+                    continue
+
                 current_total_costs_distances = distances / 1000 * transportation_costs + current_total_costs
 
                 # assess for benchmark
@@ -982,6 +1030,7 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
 
         # remove duplicates
         all_infrastructures.sort_values(['current_total_costs'], inplace=True)
+        all_infrastructures = update_branch_comparison_index(all_infrastructures, branches)
         all_infrastructures = all_infrastructures.drop_duplicates(subset=['comparison_index'], keep='first')
 
         # costs assessment for benchmark comparing and anticipation of costs to the closest infrastructure
@@ -1102,6 +1151,9 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
                 continue
 
             distances = shipping_distances.loc[start_infrastructure, :]
+            distances = distances[distances.index != start_infrastructure]
+            if distances.empty:
+                continue
             durations = distances / 1000 / current_commodity_object.get_shipping_speed()
 
             efficiency, current_total_costs_distances \
@@ -1160,6 +1212,9 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
                 graph = data[mot][graph_id]['Graph']
                 distances = nx.single_source_dijkstra_path_length(graph, start_infrastructure)
                 distances = pd.Series(distances)  # todo: check how it looks like
+            distances = distances[distances.index != start_infrastructure]
+            if distances.empty:
+                continue
 
             current_total_costs_distances = distances / 1000 * transportation_costs + current_total_costs
 
@@ -1204,6 +1259,7 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
 
         # remove duplicates
         infrastructure.sort_values(['current_total_costs'], inplace=True)
+        infrastructure = update_branch_comparison_index(infrastructure, branches)
         infrastructure = infrastructure.drop_duplicates(subset=['comparison_index'], keep='first')
 
         # costs assessment for benchmark comparing and anticipation of costs to the closest infrastructure

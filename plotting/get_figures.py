@@ -1804,9 +1804,10 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
 
 def get_tight_boundaries_for_start_locations_infrastructure_destination(start_locations, infrastructure_boundaries,
                                                                         destination_location,
-                                                                        padding_fraction=0.05,
-                                                                        min_padding=1.0):
-    """Create tight map boundaries around starts, infrastructure bounds and destination."""
+                                                                        padding=0.1,
+                                                                        padding_fraction=None,
+                                                                        min_padding=None):
+    """Create tight map boundaries with an absolute degree padding around all input geometries."""
     bounds = []
 
     if 'geometry' not in start_locations.columns:
@@ -1835,13 +1836,10 @@ def get_tight_boundaries_for_start_locations_infrastructure_destination(start_lo
     max_longitude = max(bound[2] for bound in bounds)
     max_latitude = max(bound[3] for bound in bounds)
 
-    longitude_padding = max((max_longitude - min_longitude) * padding_fraction, min_padding)
-    latitude_padding = max((max_latitude - min_latitude) * padding_fraction, min_padding)
-
-    return {'min_latitude': max(min_latitude - latitude_padding, -90),
-            'max_latitude': min(max_latitude + latitude_padding, 90),
-            'min_longitude': max(min_longitude - longitude_padding, -180),
-            'max_longitude': min(max_longitude + longitude_padding, 180)}
+    return {'min_latitude': max(min_latitude - padding, -90),
+            'max_latitude': min(max_latitude + padding, 90),
+            'min_longitude': max(min_longitude - padding, -180),
+            'max_longitude': min(max_longitude + padding, 180)}
 
 
 def get_start_locations_infrastructure_destination_figure(start_locations, boundaries, path_data, destination_location,

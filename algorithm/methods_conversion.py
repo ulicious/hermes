@@ -2,7 +2,8 @@ import time
 
 import pandas as pd
 
-from algorithm.methods_algorithm import create_new_branches_based_on_conversion, postprocessing_branches, assess_for_benchmark
+from algorithm.methods_algorithm import create_new_branches_based_on_conversion, postprocessing_branches, assess_for_benchmark, \
+    update_branch_comparison_index
 from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list
 from algorithm.methods_cost_approximations import calculate_cheapest_option_to_final_destination
 
@@ -90,6 +91,7 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
     conversion_branches['comparison_index'] = conversion_branches.apply(
         lambda row: f"{row['current_node']}-{row['current_commodity']}",
         axis=1)
+    conversion_branches = update_branch_comparison_index(conversion_branches)
     conversion_branches.sort_values(['current_total_costs'], inplace=True)
     conversion_branches = conversion_branches.drop_duplicates(subset=['comparison_index'], keep='first')
 
@@ -97,6 +99,7 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
         # assessment via local benchmarks makes only sense as soon as iteration has moved at least once
 
         # use local benchmark to remove branches
+        conversion_branches = update_branch_comparison_index(conversion_branches)
         merged_df = pd.merge(conversion_branches, local_benchmarks, on='comparison_index',
                              suffixes=('_branch', '_benchmark'))
 
@@ -108,11 +111,12 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
         indices_to_remove = filtered_df['comparison_index']
 
         # Remove rows from df1
-        branches = branches[~branches['comparison_index'].isin(indices_to_remove)]
+        conversion_branches = conversion_branches[~conversion_branches['comparison_index'].isin(indices_to_remove)]
 
         # add remaining branches to local benchmark
-        new_benchmarks = branches[['comparison_index', 'current_total_costs',
-                                   'current_commodity', 'current_node']]
+        conversion_branches = update_branch_comparison_index(conversion_branches)
+        new_benchmarks = conversion_branches[['comparison_index', 'current_total_costs',
+                                              'current_commodity', 'current_node']]
 
         # remove duplicates and keep only cheapest
         local_benchmarks = pd.concat([local_benchmarks, new_benchmarks])
@@ -127,6 +131,7 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
     branches = pd.concat([no_conversion_branches, conversion_branches])
 
     branches.sort_values(['current_total_costs'], inplace=True)
+    branches = update_branch_comparison_index(branches)
     branches = branches.drop_duplicates(subset=['comparison_index'], keep='first')
 
     # check if branches are at destination

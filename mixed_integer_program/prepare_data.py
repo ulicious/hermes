@@ -1,6 +1,7 @@
 import ast
 import logging
 import math
+from collections import defaultdict, deque
 
 import pandas as pd
 import networkx as nx
@@ -11,10 +12,26 @@ from mixed_integer_program.mip_data_helpers import create_transport_edges
 logger = logging.getLogger(__name__)
 
 
+def _edge_type_counts(edges):
+    """Count conversion and transport edges for compact diagnostics."""
+    counts = {'conversion': 0, 'transport': 0}
+    transport_means = {}
+    for edge in edges.values():
+        edge_type = edge[0]
+        counts[edge_type] = counts.get(edge_type, 0) + 1
+        if edge_type == 'transport':
+            transport_mean = edge[6]
+            transport_means[transport_mean] = transport_means.get(transport_mean, 0) + 1
+    counts['transport_means'] = transport_means
+    return counts
+
+
 def prepare_data(start_location_data, static_graph, start_road_distances, start_new_pipeline_distances,
                  end_node, config_file, techno_economic_data_transport,
+                 techno_economic_data_conversion=None,
                  warm_start_route=None, filter_edges_above_warm_start=False,
-                 filter_start_options_above_warm_start=False):
+                 filter_start_options_above_warm_start=False,
+                 filter_unreachable_edges=False):
     """
     Complete the commodity-expanded graph for one optimization location.
 
@@ -72,6 +89,14 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
     conversion_edges = static_graph['conversion_edges'].copy()
     transport_edges = static_graph['transport_edges'].copy()
     max_costs = static_graph['max_costs']
+    edge_summary = {
+        'static_nodes': len(static_graph['nodes']),
+        'start_nodes_added': len(start_commodities),
+        'target_nodes_added': len(target_nodes),
+        'static_edges': len(edges),
+        'static_edge_counts': _edge_type_counts(edges),
+        'filters': {},
+    }
 
     # START-SPECIFIC TRANSPORT EDGES
     # Only these physical segments depend on the selected origin.
@@ -88,6 +113,7 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
     start_edges_df = pd.DataFrame.from_dict(
         {key: value[1:] for key, value in start_edges.items()}, orient='index', columns=columns)
     transport_edges = pd.concat([transport_edges, start_edges_df], axis=0)
+    edge_summary['start_edges_added'] = len(start_edges)
 
     # DESTINATION-SPECIFIC SINK EDGES
     # The selected destination is represented only by terminal connections;
@@ -111,20 +137,143 @@ def prepare_data(start_location_data, static_graph, start_road_distances, start_
     sink_edges_df = pd.DataFrame.from_dict(
         {key: value[1:] for key, value in sink_edges.items()}, orient='index', columns=columns)
     transport_edges = pd.concat([transport_edges, sink_edges_df], axis=0)
+    edge_summary['sink_edges_added'] = len(sink_edges)
+    edge_summary['assembled_edges_before_filters'] = len(edges)
+    edge_summary['assembled_edge_counts_before_filters'] = _edge_type_counts(edges)
 
-    edges, transport_edges = filter_transport_edges_by_configuration(
-        edges, transport_edges, config_file, techno_economic_data_transport)
+    before_filter = len(edges)
+    edges, conversion_edges, transport_edges = filter_edges_by_configuration(
+        edges, conversion_edges, transport_edges, config_file,
+        techno_economic_data_transport, techno_economic_data_conversion)
+    edge_summary['filters']['configuration'] = config_file.pop(
+        '_current_mip_configuration_filter', {
+            'removed': before_filter - len(edges),
+            'reasons': {},
+        })
 
     if filter_edges_above_warm_start:
+        before_filter = len(edges)
         edges, conversion_edges, transport_edges = filter_edges_by_warm_start_costs(
             edges, conversion_edges, transport_edges, production_costs, warm_start_route)
+        edge_summary['filters']['warm_start_edge_cost'] = {
+            'removed': before_filter - len(edges),
+            'enabled': True,
+        }
+    else:
+        edge_summary['filters']['warm_start_edge_cost'] = {'removed': 0, 'enabled': False}
 
     if filter_start_options_above_warm_start:
+        before_filter = len(edges)
+        before_start_options = len(production_costs)
         all_nodes_adjusted, edges, transport_edges, production_costs = \
             filter_start_options_by_warm_start_costs(
                 all_nodes_adjusted, edges, transport_edges, production_costs, warm_start_route)
+        edge_summary['filters']['warm_start_start_option'] = {
+            'removed_edges': before_filter - len(edges),
+            'removed_start_options': before_start_options - len(production_costs),
+            'enabled': True,
+        }
+    else:
+        edge_summary['filters']['warm_start_start_option'] = {
+            'removed_edges': 0,
+            'removed_start_options': 0,
+            'enabled': False,
+        }
+
+    if filter_unreachable_edges:
+        before_filter = len(edges)
+        before_nodes = len(all_nodes_adjusted)
+        all_nodes_adjusted, edges, conversion_edges, transport_edges, reachability_summary = \
+            filter_edges_by_start_end_reachability(
+                all_nodes_adjusted, edges, conversion_edges, transport_edges)
+        edge_summary['filters']['start_end_reachability'] = {
+            'enabled': True,
+            'removed_edges': before_filter - len(edges),
+            'removed_nodes': before_nodes - len(all_nodes_adjusted),
+            **reachability_summary,
+        }
+    else:
+        edge_summary['filters']['start_end_reachability'] = {
+            'enabled': False,
+            'removed_edges': 0,
+            'removed_nodes': 0,
+        }
+
+    edge_summary['final_nodes'] = len(all_nodes_adjusted)
+    edge_summary['final_edges'] = len(edges)
+    edge_summary['final_edge_counts'] = _edge_type_counts(edges)
+    config_file['current_mip_edge_summary'] = edge_summary
 
     return all_nodes_adjusted, target_nodes, edges, production_costs, transport_means, max_costs, conversion_edges, transport_edges
+
+
+def filter_edges_by_start_end_reachability(all_nodes_adjusted, edges, conversion_edges, transport_edges):
+    """Remove edges that cannot lie on any path from a start node to the technical end node."""
+    outgoing = defaultdict(list)
+    incoming = defaultdict(list)
+    for key, edge in edges.items():
+        start = edge[1]
+        end = edge[2]
+        outgoing[start].append((end, key))
+        incoming[end].append((start, key))
+
+    start_nodes = [node for node in all_nodes_adjusted if node.startswith('start+')]
+    end_nodes = ['end'] if 'end' in all_nodes_adjusted else []
+
+    reachable_from_start = set(start_nodes)
+    queue = deque(start_nodes)
+    while queue:
+        node = queue.popleft()
+        for next_node, _ in outgoing.get(node, []):
+            if next_node not in reachable_from_start:
+                reachable_from_start.add(next_node)
+                queue.append(next_node)
+
+    can_reach_end = set(end_nodes)
+    queue = deque(end_nodes)
+    while queue:
+        node = queue.popleft()
+        for previous_node, _ in incoming.get(node, []):
+            if previous_node not in can_reach_end:
+                can_reach_end.add(previous_node)
+                queue.append(previous_node)
+
+    removed_edges = {
+        key for key, edge in edges.items()
+        if edge[1] not in reachable_from_start or edge[2] not in can_reach_end
+    }
+    removed_by_reason = {'start_not_reachable': 0, 'end_not_reachable': 0, 'both': 0}
+    for key in removed_edges:
+        edge = edges[key]
+        start_not_reachable = edge[1] not in reachable_from_start
+        end_not_reachable = edge[2] not in can_reach_end
+        if start_not_reachable and end_not_reachable:
+            removed_by_reason['both'] += 1
+        elif start_not_reachable:
+            removed_by_reason['start_not_reachable'] += 1
+        else:
+            removed_by_reason['end_not_reachable'] += 1
+
+    if removed_edges:
+        edges = {key: edge for key, edge in edges.items() if key not in removed_edges}
+        conversion_edges = conversion_edges.drop(
+            index=conversion_edges.index.intersection(removed_edges))
+        transport_edges = transport_edges.drop(
+            index=transport_edges.index.intersection(removed_edges))
+
+    used_nodes = {'end'}
+    for edge in edges.values():
+        used_nodes.add(edge[1])
+        used_nodes.add(edge[2])
+    all_nodes_adjusted = [node for node in all_nodes_adjusted if node in used_nodes]
+
+    logger.debug('Reachability filter removed %s edges and kept %s nodes',
+                 len(removed_edges), len(all_nodes_adjusted))
+    return all_nodes_adjusted, edges, conversion_edges, transport_edges, {
+        'removed_by_reason': removed_by_reason,
+        'reachable_nodes_from_start': len(reachable_from_start),
+        'nodes_that_can_reach_end': len(can_reach_end),
+    }
 
 
 def _as_float_config(value):
@@ -155,8 +304,22 @@ def _estimate_transport_distance(edge, techno_economic_data_transport):
     return edge[3] * 1000000 / cost_rate
 
 
-def transport_edge_forbidden_reason(edge, config_file, techno_economic_data_transport):
-    """Return why a transport edge is not allowed in this run, or None."""
+def edge_forbidden_reason(edge, config_file, techno_economic_data_transport,
+                          techno_economic_data_conversion=None):
+    """Return why an edge is not allowed in this run, or None."""
+    if edge[0] == 'conversion':
+        if techno_economic_data_conversion is None:
+            return None
+        start_commodity = edge[1].split('+', 1)[1]
+        end_commodity = edge[2].split('+', 1)[1]
+        conversion_options = techno_economic_data_conversion.get(
+            start_commodity, {}).get('potential_conversions', [])
+        if end_commodity not in conversion_options:
+            return 'conversion_not_allowed'
+        if not math.isfinite(edge[3]) or not math.isfinite(edge[4]):
+            return 'conversion_cost_or_loss_not_finite'
+        return None
+
     if edge[0] != 'transport':
         return None
 
@@ -200,27 +363,37 @@ def transport_edge_forbidden_reason(edge, config_file, techno_economic_data_tran
     return None
 
 
-def filter_transport_edges_by_configuration(edges, transport_edges, config_file, techno_economic_data_transport):
-    """Remove run-specific infeasible transport edges before building the MIP."""
+def filter_edges_by_configuration(edges, conversion_edges, transport_edges, config_file,
+                                  techno_economic_data_transport,
+                                  techno_economic_data_conversion=None):
+    """Remove run-specific infeasible edges before building the MIP."""
     removed_edges = []
     removed_by_reason = {}
     for key, edge in list(edges.items()):
-        reason = transport_edge_forbidden_reason(edge, config_file, techno_economic_data_transport)
+        reason = edge_forbidden_reason(
+            edge, config_file, techno_economic_data_transport,
+            techno_economic_data_conversion)
         if reason is None:
             continue
         removed_edges.append(key)
         removed_by_reason[reason] = removed_by_reason.get(reason, 0) + 1
         edges.pop(key, None)
 
+    config_file['_current_mip_configuration_filter'] = {
+        'removed': len(removed_edges),
+        'reasons': removed_by_reason,
+    }
     if not removed_edges:
-        logger.info('Configuration transport filter removed no edges')
-        return edges, transport_edges
+        logger.debug('Configuration filter removed no edges')
+        return edges, conversion_edges, transport_edges
 
+    conversion_edges = conversion_edges.drop(
+        index=conversion_edges.index.intersection(removed_edges))
     transport_edges = transport_edges.drop(
         index=transport_edges.index.intersection(removed_edges))
-    logger.info('Configuration transport filter removed %s edges before model build: %s',
-                len(removed_edges), removed_by_reason)
-    return edges, transport_edges
+    logger.debug('Configuration filter removed %s edges before model build: %s',
+                 len(removed_edges), removed_by_reason)
+    return edges, conversion_edges, transport_edges
 
 
 def calculate_route_objective(edges, production_costs, route):
@@ -296,9 +469,9 @@ def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
             removed_edges.add(key)
 
     if not removed_edges:
-        logger.info('Warm-start edge filter removed no edges; route costs %.6f, '
-                    'minimal production costs %.6f',
-                    warm_start_costs, minimal_production_costs)
+        logger.debug('Warm-start edge filter removed no edges; route costs %.6f, '
+                     'minimal production costs %.6f',
+                     warm_start_costs, minimal_production_costs)
         return edges, conversion_edges, transport_edges
 
     for key in removed_edges:
@@ -307,9 +480,9 @@ def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
         index=conversion_edges.index.intersection(removed_edges))
     transport_edges = transport_edges.drop(
         index=transport_edges.index.intersection(removed_edges))
-    logger.info('Warm-start edge filter removed %s edges with edge lower bound above %.6f; '
-                'minimal production costs %.6f',
-                len(removed_edges), warm_start_costs, minimal_production_costs)
+    logger.debug('Warm-start edge filter removed %s edges with edge lower bound above %.6f; '
+                 'minimal production costs %.6f',
+                 len(removed_edges), warm_start_costs, minimal_production_costs)
     return edges, conversion_edges, transport_edges
 
 
@@ -348,8 +521,8 @@ def filter_start_options_by_warm_start_costs(all_nodes_adjusted, edges, transpor
         if production_cost > warm_start_costs
     }
     if not removed_start_options:
-        logger.info('Start-option warm-start filter removed no start options; route costs %.6f',
-                    warm_start_costs)
+        logger.debug('Start-option warm-start filter removed no start options; route costs %.6f',
+                     warm_start_costs)
         return all_nodes_adjusted, edges, transport_edges, production_costs
 
     removed_start_nodes = {'start+' + commodity for commodity in removed_start_options}
@@ -370,9 +543,9 @@ def filter_start_options_by_warm_start_costs(all_nodes_adjusted, edges, transpor
         commodity: production_cost for commodity, production_cost in production_costs.items()
         if commodity not in removed_start_options
     }
-    logger.info('Start-option warm-start filter removed %s start options and %s start edges above %.6f: %s',
-                len(removed_start_options), len(removed_edges), warm_start_costs,
-                sorted(removed_start_options))
+    logger.debug('Start-option warm-start filter removed %s start options and %s start edges above %.6f: %s',
+                 len(removed_start_options), len(removed_edges), warm_start_costs,
+                 sorted(removed_start_options))
     return all_nodes_adjusted, edges, transport_edges, production_costs
 
 

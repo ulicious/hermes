@@ -23,6 +23,101 @@ logging.getLogger('gurobipy').setLevel(logging.WARNING)
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
+def initialize_mip_incumbent_history_file(config_file):
+    """Create one shared incumbent history file for the current optimization run."""
+    path_results = os.path.join(config_file['project_folder_path'], 'results')
+    os.makedirs(path_results, exist_ok=True)
+    file_path = os.path.join(path_results, 'mip_incumbents_all_locations_running.txt')
+    with open(file_path, 'w', encoding='utf-8') as file:
+        file.write('MIP incumbent history for all locations\n')
+    config_file['mip_incumbent_history_file'] = file_path
+    config_file['mip_optimization_run_statistics'] = []
+    return file_path
+
+
+def collect_mip_run_statistics(config_file, location, model):
+    """Store compact per-location statistics for the shared optimization info file."""
+    edge_summary = config_file.get('current_mip_edge_summary', {})
+    edges_before = edge_summary.get('assembled_edges_before_filters')
+    edges_after = edge_summary.get('final_edges')
+    edge_difference = None
+    if edges_before is not None and edges_after is not None:
+        edge_difference = edges_before - edges_after
+
+    config_file.setdefault('mip_optimization_run_statistics', []).append({
+        'location': location,
+        'solve_time': getattr(model, 'solve_time', None),
+        'edges_before_filter': edges_before,
+        'edges_after_filter': edges_after,
+        'edge_filter_difference': edge_difference,
+    })
+
+
+def finalize_mip_incumbent_history_file(config_file, solve=True):
+    """Rename the shared incumbent file after the run based on whether any location improved."""
+    file_path = config_file.get('mip_incumbent_history_file')
+    if not file_path or not os.path.exists(file_path):
+        return None
+
+    run_statistics = config_file.get('mip_optimization_run_statistics', [])
+    solve_times = [
+        entry['solve_time'] for entry in run_statistics
+        if entry.get('solve_time') is not None
+    ]
+    edge_differences = [
+        entry['edge_filter_difference'] for entry in run_statistics
+        if entry.get('edge_filter_difference') is not None
+    ]
+    edges_before_filters = [
+        entry['edges_before_filter'] for entry in run_statistics
+        if entry.get('edges_before_filter') is not None
+    ]
+    if solve_times or edge_differences or edges_before_filters:
+        with open(file_path, 'a', encoding='utf-8') as file:
+            file.write('\n' + '=' * 100 + '\n')
+            file.write('Run summary\n')
+            if solve_times:
+                file.write(
+                    'Solving time | shortest %.2f s | longest %.2f s | average %.2f s\n'
+                    % (min(solve_times), max(solve_times), sum(solve_times) / len(solve_times)))
+            if edge_differences:
+                min_entry = min(
+                    (entry for entry in run_statistics if entry.get('edge_filter_difference') is not None),
+                    key=lambda entry: entry['edge_filter_difference'])
+                max_entry = max(
+                    (entry for entry in run_statistics if entry.get('edge_filter_difference') is not None),
+                    key=lambda entry: entry['edge_filter_difference'])
+                file.write(
+                    'Edge filter difference | lowest %s at location %s | highest %s at location %s\n'
+                    % (min_entry['edge_filter_difference'], min_entry['location'],
+                       max_entry['edge_filter_difference'], max_entry['location']))
+            if edges_before_filters:
+                min_entry = min(
+                    (entry for entry in run_statistics if entry.get('edges_before_filter') is not None),
+                    key=lambda entry: entry['edges_before_filter'])
+                max_entry = max(
+                    (entry for entry in run_statistics if entry.get('edges_before_filter') is not None),
+                    key=lambda entry: entry['edges_before_filter'])
+                file.write(
+                    'Model size before pruning | smallest %s edges at location %s | largest %s edges at location %s\n'
+                    % (min_entry['edges_before_filter'], min_entry['location'],
+                       max_entry['edges_before_filter'], max_entry['location']))
+
+    with open(file_path, 'r', encoding='utf-8') as file:
+        has_improvement = 'Improved objective: True' in file.read()
+
+    path_results = os.path.dirname(file_path)
+    if solve:
+        improvement_label = 'improved' if has_improvement else 'no_improvement'
+    else:
+        improvement_label = 'built_only'
+    final_path = os.path.join(
+        path_results, f'mip_incumbents_all_locations_{improvement_label}.txt')
+    os.replace(file_path, final_path)
+    config_file['mip_incumbent_history_file'] = final_path
+    return final_path
+
+
 def configure_mip_logging(show_mip_logs=True):
     """Keep optional MIP progress logs quiet while preserving incumbent updates."""
     incumbent_logger = logging.getLogger(
@@ -62,7 +157,8 @@ def create_model(static_graph, start_location_data, start_road_distances,
                  warm_start_bound_route=None,
                  mip_gap=None, time_limit=None,
                  filter_edges_above_warm_start=False,
-                 filter_start_options_above_warm_start=False):
+                 filter_start_options_above_warm_start=False,
+                 filter_unreachable_edges=False):
     """Build one Gurobi MIP instance and optionally start its optimization."""
     return FastOptimizationGurobiModel(
         static_graph=static_graph,
@@ -80,6 +176,7 @@ def create_model(static_graph, start_location_data, start_road_distances,
         time_limit=time_limit,
         filter_edges_above_warm_start=filter_edges_above_warm_start,
         filter_start_options_above_warm_start=filter_start_options_above_warm_start,
+        filter_unreachable_edges=filter_unreachable_edges,
         solve=solve)
 
 
@@ -126,8 +223,11 @@ def create_warm_start_solution(result):
                     transport_mean = result.get('current_transport_mean')
                     if pd.isna(transport_mean):
                         transport_mean = 'Road'
-                logger.info('Warm-start route segment has no transport mean; inferred %s for %s -> %s',
-                            transport_mean, start, end)
+                logger.debug('Warm-start route segment has no transport mean; inferred %s for %s -> %s',
+                             transport_mean, start, end)
+            if start == end:
+                logger.debug('Skip warm-start transport self-loop %s via %s', start, transport_mean)
+                continue
             solution_route.append(
                 start + '+' + commodity + '-' + end + '+' + commodity + '-' + transport_mean)
             start = end
@@ -141,8 +241,8 @@ def create_warm_start_solution(result):
             commodity = segment[1]
 
     if commodity is not None and not solution_route:
-        logger.info('Warm-start route for commodity %s is already complete at the start location',
-                    commodity)
+        logger.debug('Warm-start route for commodity %s is already complete at the start location',
+                     commodity)
         return ['start+' + commodity + '-end']
 
     if end is None or commodity is None:
@@ -177,10 +277,12 @@ def run_minimal_case(config_file, conversion_data, transport_data, solve,
                      use_warm_start=False,
                      mip_gap=None, time_limit=None,
                      filter_edges_above_warm_start=False,
-                     filter_start_options_above_warm_start=False):
+                     filter_start_options_above_warm_start=False,
+                     filter_unreachable_edges=False):
     """Build or solve the preprocessed diagnostic example."""
     processed_path = os.path.join(config_file['project_folder_path'], 'processed_data') + os.sep
-    logger.info('Run preprocessed minimal MIP infrastructure case')
+    logger.debug('Run preprocessed minimal MIP infrastructure case')
+    config_file['current_mip_location'] = 'minimal'
     case = load_minimal_mip_case(processed_path)
     known_route = case['warm_start_route']
     warm_start_route = known_route if use_warm_start else None
@@ -190,7 +292,7 @@ def run_minimal_case(config_file, conversion_data, transport_data, solve,
         or filter_edges_above_warm_start
         or filter_start_options_above_warm_start
     ) else None
-    return create_model(
+    model = create_model(
         static_graph=case['static_graph'],
         start_location_data=case['start_location_data'],
         start_road_distances=case['start_road_distances'],
@@ -206,7 +308,10 @@ def run_minimal_case(config_file, conversion_data, transport_data, solve,
         mip_gap=mip_gap,
         time_limit=time_limit,
         filter_edges_above_warm_start=filter_edges_above_warm_start,
-        filter_start_options_above_warm_start=filter_start_options_above_warm_start)
+        filter_start_options_above_warm_start=filter_start_options_above_warm_start,
+        filter_unreachable_edges=filter_unreachable_edges)
+    collect_mip_run_statistics(config_file, 'minimal', model)
+    return model
 
 
 def run_real_locations(config_file, conversion_data, transport_data, solve,
@@ -214,7 +319,8 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
                        use_warm_start_as_lower_bound=False,
                        mip_gap=None, time_limit=None,
                        filter_edges_above_warm_start=False,
-                       filter_start_options_above_warm_start=False):
+                       filter_start_options_above_warm_start=False,
+                       filter_unreachable_edges=False):
     """
     Build or solve one MIP per real origin.
 
@@ -231,7 +337,7 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
 
     processed_path = os.path.join(project_path, 'processed_data')
     mip_path = os.path.join(processed_path, 'mip_data')
-    logger.info('Load preprocessed static MIP graph for real locations')
+    logger.debug('Load preprocessed static MIP graph for real locations')
     static_graph = load_static_mip_graph(mip_path + os.sep)
     options = pd.read_csv(os.path.join(mip_path, 'options.csv'), index_col=0)
     start_locations = pd.read_csv(
@@ -241,13 +347,13 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
         options, destination,
         destination_tolerance=config_file['to_final_destination_tolerance']
     )['destination_infrastructure'].tolist()
-    logger.info('Loaded %s static nodes, %s static edges, %s destinations and %s origins',
-                len(static_graph['nodes']), len(static_graph['edges']),
-                len(end_location), len(start_locations))
+    logger.debug('Loaded %s static nodes, %s static edges, %s destinations and %s origins',
+                 len(static_graph['nodes']), len(static_graph['edges']),
+                 len(end_location), len(start_locations))
 
     results = []
     for location in start_locations.index:
-        logger.info('Build MIP for origin %s', location)
+        logger.debug('Build MIP for origin %s', location)
         config_file['current_mip_location'] = location
         known_route = None
         if needs_warm_start_route:
@@ -278,7 +384,9 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
             mip_gap=mip_gap,
             time_limit=time_limit,
             filter_edges_above_warm_start=filter_edges_above_warm_start,
-            filter_start_options_above_warm_start=filter_start_options_above_warm_start)
+            filter_start_options_above_warm_start=filter_start_options_above_warm_start,
+            filter_unreachable_edges=filter_unreachable_edges)
+        collect_mip_run_statistics(config_file, location, model)
         if solve:
             results.append({
                 'location': location,
@@ -288,7 +396,13 @@ def run_real_locations(config_file, conversion_data, transport_data, solve,
             })
             model.model.dispose()
         else:
-            results.append(model)
+            results.append({
+                'location': location,
+                'status': 'model_built',
+                'objective': None,
+                'chosen_edges': None,
+            })
+            model.model.dispose()
     return results
 
 
@@ -298,10 +412,12 @@ def run_mip_optimization(use_minimal_example=False, solve=True,
                          mip_gap=None, time_limit=None,
                          filter_edges_above_warm_start=False,
                          filter_start_options_above_warm_start=False,
+                         filter_unreachable_edges=False,
                          show_mip_logs=True):
     """Central entry point for both the diagnostic example and real MIP runs."""
     configure_mip_logging(show_mip_logs)
     config_file, conversion_data, transport_data = load_configuration_and_technology_data()
+    initialize_mip_incumbent_history_file(config_file)
     start = time.time()
     if use_minimal_example:
         result = run_minimal_case(
@@ -309,28 +425,34 @@ def run_mip_optimization(use_minimal_example=False, solve=True,
             use_warm_start_as_lower_bound, use_warm_start,
             mip_gap, time_limit,
             filter_edges_above_warm_start,
-            filter_start_options_above_warm_start)
+            filter_start_options_above_warm_start,
+            filter_unreachable_edges)
     else:
         result = run_real_locations(
             config_file, conversion_data, transport_data, solve,
             use_warm_start, use_warm_start_as_lower_bound,
             mip_gap, time_limit,
             filter_edges_above_warm_start,
-            filter_start_options_above_warm_start)
+            filter_start_options_above_warm_start,
+            filter_unreachable_edges)
     logger.info('MIP run completed in %.2f s', time.time() - start)
+    final_history_file = finalize_mip_incumbent_history_file(config_file, solve=solve)
+    if final_history_file is not None:
+        logger.info('Wrote shared MIP incumbent history to %s', final_history_file)
     return result
 
 
 if __name__ == '__main__':
     USE_MINIMAL_EXAMPLE = False
-    SOLVE = True
+    SOLVE = False
     USE_WARM_START = True
     USE_WARM_START_AS_LOWER_BOUND = False
     FILTER_EDGES_ABOVE_WARM_START = True
     FILTER_START_OPTIONS_ABOVE_WARM_START = True
+    FILTER_UNREACHABLE_EDGES = True
     MIP_GAP = None
     TIME_LIMIT = None
-    SHOW_MIP_LOGS = False
+    SHOW_MIP_LOGS = True
 
     run_mip_optimization(
         use_minimal_example=USE_MINIMAL_EXAMPLE,
@@ -341,4 +463,5 @@ if __name__ == '__main__':
         time_limit=TIME_LIMIT,
         filter_edges_above_warm_start=FILTER_EDGES_ABOVE_WARM_START,
         filter_start_options_above_warm_start=FILTER_START_OPTIONS_ABOVE_WARM_START,
+        filter_unreachable_edges=FILTER_UNREACHABLE_EDGES,
         show_mip_logs=SHOW_MIP_LOGS)

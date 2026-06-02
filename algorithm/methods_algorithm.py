@@ -12,6 +12,118 @@ from algorithm.methods_geographic import calc_distance_single_to_single, calc_di
 from algorithm.object_commodity import create_commodity_objects
 
 
+def _is_missing_state_value(value):
+    if value is None:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _as_state_list(value):
+    if _is_missing_state_value(value):
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, set):
+        return list(value)
+    return [value]
+
+
+def _normalise_infrastructure_state(values):
+    clean_values = []
+    for value in _as_state_list(values):
+        if _is_missing_state_value(value):
+            continue
+        value = str(value)
+        if value in {'None', 'nan'}:
+            continue
+        clean_values.append(value)
+    return tuple(sorted(set(clean_values)))
+
+
+def _normalise_transport_state(current_transport_mean):
+    if _is_missing_state_value(current_transport_mean):
+        return 'initial'
+    if current_transport_mean in ['Road', 'New_Pipeline_Gas', 'New_Pipeline_Liquid']:
+        return 'needs_inner_infrastructure_transport'
+    return 'can_use_connector_transport'
+
+
+def _has_used_shipping(row, previous_by_branch=None):
+    previous_transport_means = _as_state_list(row.get('all_previous_transport_means'))
+    previous_branch = row.get('previous_branch')
+    if (not previous_transport_means and previous_by_branch is not None and previous_branch in previous_by_branch.index
+            and 'all_previous_transport_means' in previous_by_branch.columns):
+        previous_transport_means = _as_state_list(previous_by_branch.at[previous_branch, 'all_previous_transport_means'])
+
+    current_transport_mean = row.get('current_transport_mean')
+    transport_means = previous_transport_means + _as_state_list(current_transport_mean)
+    return any(transport_mean == 'Shipping' for transport_mean in transport_means)
+
+
+def update_branch_comparison_index(branches, previous_branches=None):
+    """Use a state key that preserves future-relevant path dependencies.
+
+    Branches at the same node with the same commodity are only comparable if
+    they also have the same next transport state and the same set of already
+    used infrastructures. Road and new pipelines are treated as the same state,
+    because both require an inner-infrastructure transport next. The
+    infrastructure set is intentionally unordered:
+    using PG and PL in either order blocks the same future graph reuse.
+    """
+    if branches.empty or not {'current_node', 'current_commodity'}.issubset(branches.columns):
+        return branches
+
+    previous_by_branch = None
+    if previous_branches is not None and not previous_branches.empty and 'branch_index' in previous_branches.columns:
+        previous_by_branch = previous_branches.drop_duplicates(subset=['branch_index']).set_index('branch_index')
+
+    comparison_index = []
+    for _, row in branches.iterrows():
+        previous_infrastructure = []
+        if 'all_previous_infrastructure' in branches.columns:
+            previous_infrastructure = _as_state_list(row.get('all_previous_infrastructure'))
+        elif previous_by_branch is not None and 'previous_branch' in branches.columns:
+            previous_branch = row.get('previous_branch')
+            if previous_branch in previous_by_branch.index and 'all_previous_infrastructure' in previous_by_branch.columns:
+                previous_infrastructure = _as_state_list(
+                    previous_by_branch.at[previous_branch, 'all_previous_infrastructure'])
+
+        current_infrastructure = row.get('current_infrastructure') if 'current_infrastructure' in branches.columns else None
+        used_infrastructure = _normalise_infrastructure_state(
+            previous_infrastructure + _as_state_list(current_infrastructure))
+
+        current_transport_mean = row.get('current_transport_mean') if 'current_transport_mean' in branches.columns else None
+        transport_state = _normalise_transport_state(current_transport_mean)
+        shipping_used = _has_used_shipping(row, previous_by_branch)
+
+        comparison_index.append(
+            str(row['current_node']) + '-' + str(row['current_commodity'])
+            + '|transport_state=' + transport_state
+            + '|shipping_used=' + str(shipping_used)
+            + '|infra=' + ';'.join(used_infrastructure)
+        )
+
+    branches.loc[:, 'comparison_index'] = comparison_index
+    return branches
+
+
+def get_destination_infrastructure_index(data, complete_infrastructure):
+    """Return the strict destination infrastructure, without tolerance-expanded nodes."""
+    destination_infrastructure = data['destination']['infrastructure']
+    if hasattr(destination_infrastructure, 'index'):
+        destination_index = destination_infrastructure.index
+    elif destination_infrastructure is None:
+        destination_index = pd.Index([])
+    else:
+        destination_index = pd.Index(destination_infrastructure)
+    return destination_index.intersection(complete_infrastructure.index)
+
+
 def prepare_commodities(config_file, location_data, data):
     """
     This method loads the techno economic data and calculates conversion costs and conversion efficiencies for each
@@ -133,6 +245,7 @@ def create_branches_based_on_commodities_at_start(data):
     branches['all_previous_nodes'] = [['Start'] for b in branches.index]
     branches['all_previous_distances'] = [[0] for b in branches.index]
     branches['distance_to_final_destination'] = [distance_to_final_destination for b in branches.index]
+    branches = update_branch_comparison_index(branches)
 
     return branches, branch_number
 
@@ -439,6 +552,7 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
                      # 'destination': all_destinations}
 
     branches = pd.DataFrame(branches_dict, index=index)
+    branches = update_branch_comparison_index(branches)
 
     return branches, branch_number
 
@@ -508,6 +622,7 @@ def postprocessing_branches(branches, old_branches):
         if '_y' not in c:
             columns_to_keep.append(c)
     branches = branches[columns_to_keep]
+    branches = update_branch_comparison_index(branches)
 
     return branches
 
@@ -530,6 +645,7 @@ def apply_local_benchmark(branches, local_benchmarks, branches_to_remove, update
     """
 
     # update existing benchmarks
+    branches = update_branch_comparison_index(branches)
     branches['old_index'] = branches.index
     branches.index = branches['comparison_index']
     common_index = branches.index.intersection(local_benchmarks.index)
@@ -626,7 +742,7 @@ def assess_for_benchmark(data, configuration, benchmark, benchmarks, benchmark_l
             # check which of the branches at destination and with right commodity can be removed and which one should be kept since
             # conversion at another infrastructure might be possible
             index_to_remove = at_destination_and_correct_commodity.index
-            at_destination_locations = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= configuration['to_final_destination_tolerance']].index
+            at_destination_locations = get_destination_infrastructure_index(data, complete_infrastructure)
 
             for commodity_start in at_destination_and_correct_commodity['current_commodity'].unique():
                 for commodity_target in data['commodities']['final_commodities']:
@@ -663,8 +779,7 @@ def assess_for_benchmark(data, configuration, benchmark, benchmarks, benchmark_l
 
                         # based on current benchmark, we can calculate for each branch if they can achieve this benchmark at all
                         index_to_remove = at_destination_and_correct_commodity.index
-                        at_destination_locations \
-                            = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= configuration[ 'to_final_destination_tolerance']].index
+                        at_destination_locations = get_destination_infrastructure_index(data, complete_infrastructure)
 
                         for commodity_start in at_destination_and_correct_commodity['current_commodity'].unique():
                             commodity_target = final_solution.at['current_commodity']
@@ -763,6 +878,7 @@ def compare_to_local_benchmark(data, branch_number, branches, local_benchmarks):
     # use local benchmark to remove branches
     # todo genau nachprüfen was hier passiert weil local benchmark und branches unterschiedlich groß sein können
     #  und deshalb die frage ist was mit merge passiert
+    branches = update_branch_comparison_index(branches)
     merged_df = pd.merge(branches, local_benchmarks, on='comparison_index',
                          suffixes=('_branch', '_benchmark'))
 

@@ -12,6 +12,18 @@ from algorithm.methods_geographic import calc_distance_list_to_single, calc_dist
     check_if_reachable_on_land
 
 
+def get_strict_destination_infrastructure_index(data, complete_infrastructure):
+    """Return infrastructure physically assigned to the destination, without tolerance expansion."""
+    destination_infrastructure = data['destination']['infrastructure']
+    if hasattr(destination_infrastructure, 'index'):
+        destination_index = destination_infrastructure.index
+    elif destination_infrastructure is None:
+        destination_index = pd.Index([])
+    else:
+        destination_index = pd.Index(destination_infrastructure)
+    return destination_index.intersection(complete_infrastructure.index)
+
+
 def _load_shipping_distances(path_processed_data):
     path_file = path_processed_data + 'inner_infrastructure_distances/port_distances.csv'
     if not os.path.exists(path_file):
@@ -77,10 +89,11 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
 
         complete_infrastructure.loc[infrastructure_not_in_destination, 'distance_to_destination'] = other_distances.min(axis='columns')
 
-    # consider tolerance when looking at infrastructure_in_destination
+    # Consider tolerance for final-distance costs, but do not expand the
+    # destination infrastructure set itself. That set must remain the
+    # infrastructure physically located inside the destination polygon.
     index_in_tolerance = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= to_destination_tolerance].index
     complete_infrastructure.loc[index_in_tolerance, 'distance_to_destination'] = 0
-    data['destination']['infrastructure'] = complete_infrastructure.loc[index_in_tolerance, :]
 
     # now check which infrastructure can reach start / destination based on distances
     max_length = max(max_length_road, max_length_new_segment) / no_road_multiplier
@@ -97,21 +110,21 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
             if len(first_ten_harbours) == 10:
                 break
 
-    # get all locations in destination (if polygon)
+    # Get all strict destination locations. Do not use the tolerance-expanded
+    # zero-distance set here; benchmark and routing must share the same
+    # destination infrastructure definition.
     complete_infrastructure.sort_values(['distance_to_destination'], inplace=True)
-    distance_to_destination = complete_infrastructure[complete_infrastructure['distance_to_destination'] == 0].index.tolist()
-    if len(distance_to_destination) < 1000:
-        # if less than 1000 locations within 0 distance to destination, add more locations
-        additional_locations = complete_infrastructure[(complete_infrastructure['distance_to_destination'] <= max_length) & (complete_infrastructure['distance_to_destination'] > 0)].index.tolist()
-        distance_to_destination = list(set(distance_to_destination + additional_locations[:1000 - len(distance_to_destination)]))
+    if configuration['destination_type'] == 'location':
+        distance_to_destination = ['Destination'] if 'Destination' in complete_infrastructure.index else []
+    else:
+        distance_to_destination = get_strict_destination_infrastructure_index(
+            data, complete_infrastructure).tolist()
 
     if 'Destination' in distance_to_destination:
         distance_to_destination.remove('Destination')
 
     if configuration['destination_type'] == 'location':
         distance_to_destination = ['Destination'] + distance_to_destination + first_ten_harbours
-    else:
-        distance_to_destination += first_ten_harbours
 
     distance_to_destination = list(set(distance_to_destination))
 
@@ -1194,7 +1207,7 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
     if distance_pipeline_to_destination == 0:
         nodes_at_destination = [node_end_g_start]
     else:
-        nodes_at_destination = complete_infrastructure[complete_infrastructure['distance_to_destination'] <= configuration['to_final_destination_tolerance']].index
+        nodes_at_destination = get_strict_destination_infrastructure_index(data, complete_infrastructure)
 
     if used_commodities[-1] not in final_commodities:
         cheapest_conversion = math.inf

@@ -12,7 +12,8 @@ from algorithm.methods_benchmark import check_if_benchmark_possible
 from algorithm.methods_routing import process_out_tolerance_branches, process_in_tolerance_branches_high_memory,\
     process_in_tolerance_branches_low_memory, get_complete_infrastructure, create_branches_from_in_tolerance_locations
 from algorithm.methods_algorithm import postprocessing_branches, create_branches_based_on_commodities_at_start,\
-    check_for_inaccessibility_and_at_destination, prepare_commodities, assess_for_benchmark, compare_to_local_benchmark
+    check_for_inaccessibility_and_at_destination, prepare_commodities, assess_for_benchmark, compare_to_local_benchmark,\
+    update_branch_comparison_index
 from algorithm.script_benchmark import calculate_benchmark
 from algorithm.methods_geographic import get_continent_from_location
 from algorithm.methods_conversion import apply_conversion
@@ -32,6 +33,7 @@ def _finalize_routing_branches(branches, old_branches, local_benchmarks, branch_
 
     branches = branches.copy()
     branches['current_conversion_costs'] = 0
+    branches = update_branch_comparison_index(branches, old_branches)
     branches.sort_values(['current_total_costs'], inplace=True)
     branches = branches.groupby('comparison_index').first().reset_index()
     branches.reset_index(drop=True, inplace=True)
@@ -155,6 +157,7 @@ def _prepare_infrastructure_branches_for_routing(infrastructure_branches, comple
                                                 for ind in preselection.index]
 
             prepared_branches = pd.concat([prepared_branches, preselection])
+            prepared_branches = update_branch_comparison_index(prepared_branches)
             prepared_branches.sort_values(['current_total_costs'], inplace=True)
             prepared_branches = prepared_branches.drop_duplicates(subset=['comparison_index'], keep='first')
 
@@ -713,8 +716,27 @@ def run_algorithm(args):
                 else:
                     outside_options_no_limitation = pd.DataFrame()
 
+                # always process all options without limitation if they only aim at in tolerance solutions
+                outside_options_in_tolerance \
+                    = process_out_tolerance_branches(complete_infrastructure,
+                                                     out_infrastructure_branches,
+                                                     configuration, iteration, data, benchmarks,
+                                                     use_minimal_distance=True, limitation='only_in_tolerance')
+
+                if not outside_options_in_tolerance.empty:
+                    options_to_consider = outside_options_in_tolerance['previous_branch'].unique().tolist()
+
+                    outside_options_in_tolerance \
+                        = process_out_tolerance_branches(complete_infrastructure,
+                                                         out_infrastructure_branches.loc[options_to_consider],
+                                                         configuration, iteration, data, benchmarks,
+                                                         limitation='only_in_tolerance')
+                else:
+                    outside_options_in_tolerance = pd.DataFrame()
+
                 outside_options = pd.concat([outside_options_no_gas, outside_options_no_liquid,
-                                             outside_options_only_shipping, outside_options_no_limitation])
+                                             outside_options_only_shipping, outside_options_no_limitation,
+                                             outside_options_in_tolerance])
 
             else:
                 outside_options = pd.DataFrame()
@@ -739,6 +761,7 @@ def run_algorithm(args):
             routing_results = [df for df in [in_tolerance_options, processed_outside_options] if not df.empty]
             if routing_results:
                 branches = pd.concat(routing_results, ignore_index=False)
+                branches = update_branch_comparison_index(branches)
                 branches.sort_values(['current_total_costs'], inplace=True)
                 branches = branches.drop_duplicates(subset=['comparison_index'], keep='first')
             else:

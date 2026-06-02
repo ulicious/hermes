@@ -159,13 +159,12 @@ class OptimizationGurobiModel:
 
         forbidden_edges, forbidden_by_reason = self.configuration_forbidden_edges()
         if forbidden_edges:
-            self.model.addConstrs(
-                (self.edge_binaries[edge] == 0 for edge in forbidden_edges),
-                name='configuration_forbidden_edges')
-            logger.info('Added %s configuration feasibility constraints for forbidden edges: %s',
-                        len(forbidden_edges), forbidden_by_reason)
+            logger.warning(
+                '%s configuration-forbidden edges reached the OR model although they should '
+                'have been removed before model construction: %s',
+                len(forbidden_edges), forbidden_by_reason)
         else:
-            logger.info('No edges forbidden by configuration feasibility constraints')
+            logger.debug('No edges forbidden by configuration feasibility constraints')
 
         now = time.time()
         # for row in self.conversion_edges.itertuples():
@@ -496,7 +495,11 @@ class OptimizationGurobiModel:
         continuous = [v for v in self.model.getVars() if v.VType == gp.GRB.CONTINUOUS]
         self.model._continuous = continuous
 
-        self.model._best_incumbent = float('inf')  # keep track of improvement
+        self.model._best_incumbent = (
+            self.warm_start_objective if self.solution_route is not None
+            and self.warm_start_objective is not None
+            else float('inf')
+        )  # keep track of improvement
 
         def incumbent_callback(model, where):
             if where == gp.GRB.Callback.MIPSOL:
@@ -504,7 +507,7 @@ class OptimizationGurobiModel:
                 obj = model.cbGet(gp.GRB.Callback.MIPSOL_OBJ)
 
                 # Check if it's strictly better than the previous one
-                if obj + 1e-12 < model._best_incumbent:
+                if obj < model._best_incumbent - 1e-9:
                     model._best_incumbent = obj
 
                     # Extract binary solution values
@@ -637,7 +640,8 @@ class OptimizationGurobiModel:
             self.max_costs, self.conversion_edges, self.transport_edges = \
             prepare_data(start_location_data, static_graph, start_road_distances,
                          start_new_pipeline_distances, end_location, config_file,
-                         self.techno_economic_data_transport, warm_start_bound_route,
+                         self.techno_economic_data_transport, self.techno_economic_data_conversion,
+                         warm_start_bound_route,
                          filter_edges_above_warm_start,
                          filter_start_options_above_warm_start)
         self.solution_route = self.validate_route_against_graph(self.solution_route, 'warm-start route')

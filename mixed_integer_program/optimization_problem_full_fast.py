@@ -40,6 +40,7 @@ class FastOptimizationGurobiModel:
                  mip_gap=None, time_limit=None,
                  filter_edges_above_warm_start=False,
                  filter_start_options_above_warm_start=False,
+                 filter_unreachable_edges=False,
                  solve=False):
 
         self.config_file = config_file
@@ -57,20 +58,23 @@ class FastOptimizationGurobiModel:
         self.time_limit = time_limit
         self.filter_edges_above_warm_start = filter_edges_above_warm_start
         self.filter_start_options_above_warm_start = filter_start_options_above_warm_start
+        self.filter_unreachable_edges = filter_unreachable_edges
 
-        logger.info('Add origin- and destination-specific graph data')
+        logger.debug('Add origin- and destination-specific graph data')
         self.all_nodes_adjusted, self.target_nodes, self.edges, self.production_costs, \
             self.transport_means, self.max_costs, \
             self.conversion_edges, self.transport_edges = prepare_data(
                 start_location_data, static_graph, start_road_distances,
                 start_new_pipeline_distances, end_location, config_file,
-                techno_economic_data_transport, self.warm_start_bound_route,
+                techno_economic_data_transport, techno_economic_data_conversion,
+                self.warm_start_bound_route,
                 filter_edges_above_warm_start,
-                filter_start_options_above_warm_start)
+                filter_start_options_above_warm_start,
+                filter_unreachable_edges)
 
-        logger.info('Optimization graph contains %s nodes and %s edges (%s conversion, %s transport)',
-                    len(self.all_nodes_adjusted), len(self.edges),
-                    len(self.conversion_edges), len(self.transport_edges))
+        logger.debug('Optimization graph contains %s nodes and %s edges (%s conversion, %s transport)',
+                     len(self.all_nodes_adjusted), len(self.edges),
+                     len(self.conversion_edges), len(self.transport_edges))
         self.solution_route = self._validate_route_against_graph(self.solution_route, 'warm-start route')
         self.warm_start_bound_route = self._validate_route_against_graph(
             self.warm_start_bound_route, 'warm-start bound route')
@@ -87,6 +91,7 @@ class FastOptimizationGurobiModel:
         self._prepare_warm_start_objective_bounds()
         self.use_big_m_constraints = self.warm_start_objective is not None
         self.build_model()
+        self._log_setup_summary()
         if solve:
             self.optimize()
 
@@ -158,6 +163,31 @@ class FastOptimizationGurobiModel:
 
         return incoming, outgoing
 
+    @staticmethod
+    def _pipeline_graph_name_from_node(node):
+        """Return the physical pipeline graph id, e.g. PG_Graph_5, from a commodity-expanded node."""
+        physical_node = FastOptimizationGurobiModel._physical_node_name(node)
+        if '_Node_' not in physical_node:
+            return None
+        return physical_node.rsplit('_Node_', 1)[0]
+
+    def _existing_pipeline_edge_indices_by_graph(self):
+        """Collect existing pipeline edges by physical graph to prevent repeated graph use."""
+        edges_by_graph = {}
+        for edge_index, edge_key in enumerate(self.edge_names):
+            edge = self.edges[edge_key]
+            if edge[0] != 'transport':
+                continue
+            if edge[6] not in {'Pipeline_Gas', 'Pipeline_Liquid'}:
+                continue
+
+            start_graph = self._pipeline_graph_name_from_node(edge[1])
+            end_graph = self._pipeline_graph_name_from_node(edge[2])
+            if start_graph is None or start_graph != end_graph:
+                continue
+            edges_by_graph.setdefault(start_graph, []).append(edge_index)
+        return edges_by_graph
+
     def _prepare_warm_start_objective_bounds(self):
         """Calculate warm-start objective value and derive optional model bounds."""
         if self.warm_start_bound_route is None:
@@ -176,16 +206,16 @@ class FastOptimizationGurobiModel:
             max_edge_requirement = 0
         self.big_m_cost_propagation = max(warm_start_objective, max_production_costs, max_edge_requirement)
         if self.big_m_cost_propagation > warm_start_objective:
-            logger.info('Increase effective Big-M from warm-start objective %.6f to %.6f '
-                        'to cover fixed start production costs and edge propagation',
-                        warm_start_objective, self.big_m_cost_propagation)
+            logger.debug('Increase effective Big-M from warm-start objective %.6f to %.6f '
+                         'to cover fixed start production costs and edge propagation',
+                         warm_start_objective, self.big_m_cost_propagation)
         if self.use_warm_start_as_lower_bound:
             self.warm_start_objective_lower_bound = warm_start_objective
-            logger.info('Calculated warm-start lower bound from route: %.6f',
-                        self.warm_start_objective_lower_bound)
+            logger.debug('Calculated warm-start lower bound from route: %.6f',
+                         self.warm_start_objective_lower_bound)
         self.warm_start_objective_upper_bound = warm_start_objective
-        logger.info('Calculated automatic warm-start upper bound from route: %.6f',
-                    self.warm_start_objective_upper_bound)
+        logger.debug('Calculated automatic warm-start upper bound from route: %.6f',
+                     self.warm_start_objective_upper_bound)
 
     def _estimate_transport_distance_km(self, edge):
         """Estimate route-section distance from the MIP transport cost definition."""
@@ -492,7 +522,7 @@ class FastOptimizationGurobiModel:
                                      len(extra_edges), extra_edges[:10])
 
     def _write_incumbent_history_file(self):
-        """Write warm-start and incumbent routes to a readable text file."""
+        """Append warm-start and incumbent routes to the shared run diagnostic file."""
         if not self.incumbent_history:
             return
 
@@ -512,11 +542,13 @@ class FastOptimizationGurobiModel:
             and bool(incumbent_objectives)
             and min(incumbent_objectives) < warm_start_objectives[0] - 1e-9
         )
-        improvement_label = 'improved' if has_improvement else 'no_improvement'
-        file_path = os.path.join(
-            path_results, f'mip_incumbents_location_{location}_{improvement_label}.txt')
+        file_path = self.config_file.get(
+            'mip_incumbent_history_file',
+            os.path.join(path_results, 'mip_incumbents_all_locations_running.txt')
+        )
 
-        lines = [f'MIP incumbent history for location {location}',
+        lines = ['', '=' * 100,
+                 f'MIP incumbent history for location {location}',
                  f'Improved objective: {has_improvement}', '']
         for number, entry in enumerate(self.incumbent_history, start=1):
             runtime = ''
@@ -527,16 +559,16 @@ class FastOptimizationGurobiModel:
             lines.append(f"   route: {entry['route']}")
             lines.append('')
 
-        with open(file_path, 'w', encoding='utf-8') as file:
+        with open(file_path, 'a', encoding='utf-8') as file:
             file.write('\n'.join(lines))
 
     def _incumbent_callback(self, model, where):
-        """Gurobi callback that logs every strict incumbent improvement."""
+        """Gurobi callback that logs every strict improvement over the current incumbent."""
         if where != GRB.Callback.MIPSOL:
             return
 
         objective_value = model.cbGet(GRB.Callback.MIPSOL_OBJ)
-        if objective_value + 1e-12 >= model._best_incumbent:
+        if objective_value >= model._best_incumbent - 1e-9:
             return
 
         model._best_incumbent = objective_value
@@ -569,25 +601,90 @@ class FastOptimizationGurobiModel:
 
         return cost_start_values
 
+    def _log_setup_summary(self):
+        """Log compact grouped information for one MIP location."""
+        location = self.config_file.get('current_mip_location', 'unknown')
+        config_summary = {
+            'available_transport_means': self.config_file.get('available_transport_means'),
+            'build_new_infrastructure': self.config_file.get('build_new_infrastructure'),
+            'H2_ready_infrastructure': self.config_file.get('H2_ready_infrastructure'),
+            'max_length_road': self.config_file.get('max_length_road'),
+            'max_length_new_segment': self.config_file.get('max_length_new_segment'),
+            'target_commodity': self.config_file.get('target_commodity'),
+            'filter_edges_above_warm_start': self.filter_edges_above_warm_start,
+            'filter_start_options_above_warm_start': self.filter_start_options_above_warm_start,
+            'filter_unreachable_edges': self.filter_unreachable_edges,
+        }
+        logger.info('MIP config | location %s | %s', location, config_summary)
+
+        edge_summary = self.config_file.get('current_mip_edge_summary', {})
+        filters = edge_summary.get('filters', {})
+        logger.info(
+            'MIP edges | location %s | static %s -> assembled %s -> final %s | '
+            'start added %s | destination added %s | final by type %s',
+            location,
+            edge_summary.get('static_edges'),
+            edge_summary.get('assembled_edges_before_filters'),
+            edge_summary.get('final_edges'),
+            edge_summary.get('start_edges_added'),
+            edge_summary.get('sink_edges_added'),
+            edge_summary.get('final_edge_counts'),
+        )
+        logger.info(
+            'MIP edge filters | location %s | configuration %s | warm-start edge-cost %s | '
+            'warm-start start-option %s | start-end reachability %s | '
+            'backup forbidden constraints %s',
+            location,
+            filters.get('configuration'),
+            filters.get('warm_start_edge_cost'),
+            filters.get('warm_start_start_option'),
+            filters.get('start_end_reachability'),
+            getattr(self, 'forbidden_edge_summary', {'removed': 0, 'reasons': {}}),
+        )
+
+        cost_propagation = (
+            f'Big-M M={self.big_m_cost_propagation:.6f}'
+            if self.use_big_m_constraints
+            else 'indicator constraints'
+        )
+        logger.info(
+            'MIP optimization setup | location %s | warm start %s | warm-start objective %s | '
+            'cost propagation %s | lower bound %s | upper bound %s | connector constraints %s | '
+            'pipeline graph constraints %s | MIPGap %s | TimeLimit %s',
+            location,
+            self.solution_route is not None,
+            self.warm_start_objective,
+            cost_propagation,
+            self.warm_start_objective_lower_bound,
+            self.warm_start_objective_upper_bound,
+            getattr(self, 'connector_constraints', 0),
+            getattr(self, 'pipeline_graph_constraints', 0),
+            self.mip_gap,
+            self.time_limit,
+        )
+
     def build_model(self):
         """Create variables and constraints using the Gurobi matrix API."""
         now = time.time()
         node_count = len(self.node_names)
         edge_count = len(self.edge_names)
-        logger.info('Create matrix model for %s nodes and %s edges', node_count, edge_count)
+        logger.debug('Create matrix model for %s nodes and %s edges', node_count, edge_count)
 
         self.costs = self.model.addMVar(node_count, lb=0.0, name='cost')
         self.edge_binaries = self.model.addMVar(edge_count, vtype=GRB.BINARY, name='use')
 
         forbidden_edge_indices, forbidden_by_reason = self._configuration_forbidden_edge_indices()
         if forbidden_edge_indices:
-            self.model.addConstr(
-                self.edge_binaries[np.array(forbidden_edge_indices, dtype=np.int64)] == 0,
-                name='configuration_forbidden_edges')
-            logger.info('Added %s configuration feasibility constraints for forbidden edges: %s',
-                        len(forbidden_edge_indices), forbidden_by_reason)
+            logger.warning(
+                '%s configuration-forbidden edges reached the OR model although they should '
+                'have been removed before model construction: %s',
+                len(forbidden_edge_indices), forbidden_by_reason)
         else:
-            logger.info('No edges forbidden by configuration feasibility constraints')
+            logger.debug('No edges forbidden by configuration feasibility constraints')
+        self.forbidden_edge_summary = {
+            'removed': len(forbidden_edge_indices),
+            'reasons': forbidden_by_reason,
+        }
 
         propagation_lhs = (
             self.edge_scales * self.costs[self.start_indices] -
@@ -598,12 +695,12 @@ class FastOptimizationGurobiModel:
             self.model.addConstr(
                 propagation_lhs <= propagation_rhs + big_m * (1 - self.edge_binaries),
                 name='cost_propagation_big_m')
-            logger.info('Use Big-M cost propagation constraints with M=%.6f', big_m)
+            logger.debug('Use Big-M cost propagation constraints with M=%.6f', big_m)
         else:
             self.model.addGenConstrIndicator(
                 self.edge_binaries, True, propagation_lhs, GRB.LESS_EQUAL,
                 propagation_rhs, name='cost_propagation')
-            logger.info('Use indicator cost propagation constraints because no warm-start objective is available')
+            logger.debug('Use indicator cost propagation constraints because no warm-start objective is available')
 
         start_node_values = {
             self.node_index['start+' + commodity]: value
@@ -670,62 +767,82 @@ class FastOptimizationGurobiModel:
                 self.edge_binaries[connector_indices].sum() <= 1,
                 name='no_consecutive_connector_edges[' + node + ']')
             connector_constraints += 1
-        logger.info('Attached %s physical-node connector sequencing constraints for Road/New Pipeline edges',
-                    connector_constraints)
+        self.connector_constraints = connector_constraints
+        logger.debug('Attached %s physical-node connector sequencing constraints for Road/New Pipeline edges',
+                     connector_constraints)
+
+        pipeline_graph_constraints = 0
+        for graph_name, graph_edge_indices in self._existing_pipeline_edge_indices_by_graph().items():
+            if len(graph_edge_indices) <= 1:
+                continue
+            self.model.addConstr(
+                self.edge_binaries[np.array(graph_edge_indices, dtype=np.int64)].sum() <= 1,
+                name='use_existing_pipeline_graph_once[' + graph_name + ']')
+            pipeline_graph_constraints += 1
+        self.pipeline_graph_constraints = pipeline_graph_constraints
+        logger.debug('Attached %s existing-pipeline graph usage constraints',
+                     pipeline_graph_constraints)
 
         self.objective_expr = self.costs[target_indices].sum()
         if self.warm_start_objective_lower_bound is not None:
             self.model.addConstr(
                 self.objective_expr >= self.warm_start_objective_lower_bound,
                 name='warm_start_objective_lower_bound')
-            logger.info('Added objective lower bound from warm-start value: %.6f',
-                        self.warm_start_objective_lower_bound)
+            logger.debug('Added objective lower bound from warm-start value: %.6f',
+                         self.warm_start_objective_lower_bound)
         if self.warm_start_objective_upper_bound is not None:
             self.model.addConstr(
                 self.objective_expr <= self.warm_start_objective_upper_bound,
                 name='warm_start_objective_upper_bound')
-            logger.info('Added objective upper bound from warm-start value: %.6f',
-                        self.warm_start_objective_upper_bound)
+            logger.debug('Added objective upper bound from warm-start value: %.6f',
+                         self.warm_start_objective_upper_bound)
         self.model.setObjective(self.objective_expr, GRB.MINIMIZE)
         self.model.update()
-        logger.info('Finished matrix model construction in %.2f s', time.time() - now)
+        self.model_build_time = time.time() - now
+        logger.debug('Finished matrix model construction in %.2f s', self.model_build_time)
 
     def optimize(self):
         if self.solution_route is not None:
             warm_start_objective, warm_start_text = self._route_summary(self.solution_route)
             self._append_route_history('warm_start', warm_start_objective, warm_start_text)
-            self.log_warm_start_route_details(self.solution_route)
             start_values = np.zeros(len(self.edge_names))
             for edge in self.solution_route:
                 start_values[self.edge_index[edge]] = 1
             self.edge_binaries.Start = start_values
             self.costs.Start = self._create_cost_start_values(self.solution_route)
-            logger.info('Applied warm-start route with %s active edges', len(self.solution_route))
+            logger.debug('Applied warm-start route with %s active edges', len(self.solution_route))
 
-        self.model.Params.IntFeasTol = 1e-9
-        self.model.Params.FeasibilityTol = 1e-9
-        self.model.Params.OptimalityTol = 1e-9
-        self.model.Params.Method = 2
-        self.model.Params.Crossover = 0
-        self.model.Params.BarHomogeneous = 1
-        self.model.Params.MIPFocus = 3
-        self.model.Params.Heuristics = 0
-        self.model.Params.Cuts = 3
-        self.model.Params.Presolve = 2
-        self.model.Params.PoolSearchMode = 0
-        self.model.Params.Threads = 1
+        # self.model.Params.IntFeasTol = 1e-9
+        # self.model.Params.FeasibilityTol = 1e-9
+        # self.model.Params.OptimalityTol = 1e-9
+        # self.model.Params.Method = 2
+        # self.model.Params.Crossover = 0
+        # self.model.Params.BarHomogeneous = 1
+        # self.model.Params.MIPFocus = 3
+        # self.model.Params.Heuristics = 0
+        # self.model.Params.Cuts = 3
+        # self.model.Params.Presolve = 1
+        # self.model.Params.PoolSearchMode = 0
+        # self.model.Params.Threads = 1
+
         if self.mip_gap is not None:
             self.model.Params.MIPGap = self.mip_gap
-            logger.info('Set Gurobi MIPGap to %s', self.mip_gap)
+            logger.debug('Set Gurobi MIPGap to %s', self.mip_gap)
         if self.time_limit is not None:
             self.model.Params.TimeLimit = self.time_limit
-            logger.info('Set Gurobi TimeLimit to %s seconds', self.time_limit)
+            logger.debug('Set Gurobi TimeLimit to %s seconds', self.time_limit)
 
-        logger.info('Start optimization')
-        self.model._best_incumbent = float('inf')
+        logger.debug('Start optimization')
+        self.model._best_incumbent = (
+            self.warm_start_objective if self.solution_route is not None
+            and self.warm_start_objective is not None
+            else float('inf')
+        )
         self.model._edge_binary_vars = self.edge_binaries.tolist()
         self.model._cost_vars = self.costs.tolist()
+        solve_start = time.time()
         self.model.optimize(self._incumbent_callback)
+        self.solve_time = time.time() - solve_start
         self.status = self.model.Status
         if self.model.SolCount > 0:
             self.objective_function_value = self.model.ObjVal
