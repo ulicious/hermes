@@ -13,6 +13,7 @@ from algorithm.methods_geographic import calc_distance_list_to_single, calc_dist
 from algorithm.methods_cost_approximations import calculate_cheapest_option_to_closest_infrastructure, \
     calculate_cheapest_option_to_final_destination
 from algorithm.methods_algorithm import update_branch_comparison_index
+from algorithm.tracking import branch_count, get_tracker
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -294,6 +295,13 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
     max_length_new_segment = configuration['max_length_new_segment']
     max_length_road = configuration['max_length_road']
     no_road_multiplier = configuration['no_road_multiplier']
+    tracker = get_tracker(data)
+    method = 'process_out_tolerance_branches'
+    if tracker is not None:
+        tracker.event(iteration=iteration, phase='routing_out', method=method,
+                      event='input', before=branch_count(branches),
+                      details={'use_minimal_distance': use_minimal_distance,
+                               'limitation': limitation})
 
     if iteration == 0:
         # if iteration is 0, we don't make any preselection since we have only a very limited amount of branches
@@ -499,6 +507,13 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             distances \
                 = branches_no_duplicates.set_index([branches_no_duplicates['current_node'],
                                                     branches_no_duplicates['closest_node']])['minimal_distance'].unstack().transpose()
+        if tracker is not None:
+            tracker.event(iteration=iteration, phase='routing_out', method=method,
+                          event='distance_matrix_created',
+                          details={'rows': len(distances.index) if hasattr(distances, 'index') else 0,
+                                   'columns': len(distances.columns) if hasattr(distances, 'columns') else 0,
+                                   'use_minimal_distance': use_minimal_distance,
+                                   'limitation': limitation})
 
         # Instead of iterating over all visited infrastructure for all branches, we iterate over each visited
         # infrastructure once and check which branch has been there
@@ -622,6 +637,15 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         else:
             new_infrastructure_options = pd.DataFrame()
 
+        if tracker is not None:
+            tracker.event(iteration=iteration, phase='routing_out', method=method,
+                          event='raw_candidates_created',
+                          created=branch_count(road_options) + branch_count(new_infrastructure_options),
+                          details={'road_candidates': branch_count(road_options),
+                                   'new_pipeline_candidates': branch_count(new_infrastructure_options),
+                                   'use_minimal_distance': use_minimal_distance,
+                                   'limitation': limitation})
+
     # Create new branches for road options
     if not road_options.empty:  # todo: Man könnte noch alle optionen entfernen, die gleiche start und end node haben (--> kein transport)
 
@@ -660,7 +684,15 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         # compare to total costs minus fuel price
         # to compare the different commodities, the benchmark is adjusted by the fuel price
         road_options['benchmark'] = road_options['current_commodity'].map(benchmarks)
+        before_road_benchmark = branch_count(road_options)
         road_options = road_options[road_options['current_total_costs'] <= road_options['benchmark']]
+        if tracker is not None:
+            tracker.event(iteration=iteration, phase='routing_out', method=method,
+                          event='filter_road_costs_vs_benchmark',
+                          before=before_road_benchmark, after=branch_count(road_options),
+                          removed=before_road_benchmark - branch_count(road_options),
+                          details={'use_minimal_distance': use_minimal_distance,
+                                   'limitation': limitation})
 
         road_options['distance_type'] = 'road'
 
@@ -672,7 +704,14 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         road_options.sort_values(['current_total_costs'], inplace=True)
 
         if not use_minimal_distance:
+            before_road_dedup = branch_count(road_options)
             road_options = road_options.drop_duplicates(subset=['comparison_index'], keep='first')
+            if tracker is not None:
+                tracker.event(iteration=iteration, phase='routing_out', method=method,
+                              event='deduplicate_road',
+                              before=before_road_dedup, after=branch_count(road_options),
+                              removed=before_road_dedup - branch_count(road_options),
+                              details={'limitation': limitation})
 
     else:
         road_options = pd.DataFrame()
@@ -728,7 +767,15 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         # compare to total costs minus fuel price
         # to compare the different commodities, the benchmark is adjusted by the fuel price
         new_infrastructure_options['benchmark'] = new_infrastructure_options['current_commodity'].map(benchmarks)
+        before_new_benchmark = branch_count(new_infrastructure_options)
         new_infrastructure_options = new_infrastructure_options[new_infrastructure_options['current_total_costs'] <= new_infrastructure_options['benchmark']]
+        if tracker is not None:
+            tracker.event(iteration=iteration, phase='routing_out', method=method,
+                          event='filter_new_pipeline_costs_vs_benchmark',
+                          before=before_new_benchmark, after=branch_count(new_infrastructure_options),
+                          removed=before_new_benchmark - branch_count(new_infrastructure_options),
+                          details={'use_minimal_distance': use_minimal_distance,
+                                   'limitation': limitation})
 
         new_infrastructure_options['distance_type'] = 'new'
 
@@ -740,12 +787,27 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         new_infrastructure_options.sort_values(['current_total_costs'], inplace=True)
 
         if not use_minimal_distance:
+            before_new_dedup = branch_count(new_infrastructure_options)
             new_infrastructure_options = new_infrastructure_options.drop_duplicates(subset=['comparison_index'], keep='first')
+            if tracker is not None:
+                tracker.event(iteration=iteration, phase='routing_out', method=method,
+                              event='deduplicate_new_pipeline',
+                              before=before_new_dedup, after=branch_count(new_infrastructure_options),
+                              removed=before_new_dedup - branch_count(new_infrastructure_options),
+                              details={'limitation': limitation})
     else:
         new_infrastructure_options = pd.DataFrame()
 
     # Concatenate all options
     outside_options = pd.concat([road_options, new_infrastructure_options], ignore_index=True)
+    if tracker is not None:
+        tracker.event(iteration=iteration, phase='routing_out', method=method,
+                      event='combined_transport_options',
+                      after=branch_count(outside_options),
+                      details={'road_options': branch_count(road_options),
+                               'new_pipeline_options': branch_count(new_infrastructure_options),
+                               'use_minimal_distance': use_minimal_distance,
+                               'limitation': limitation})
 
     if not outside_options.empty:
 
@@ -807,13 +869,27 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
         # throw out options to expensive
         outside_options['benchmark'] = outside_options['minimal_commodity'].map(benchmarks)
+        before_final_cost_filter = branch_count(outside_options)
         outside_options = outside_options[outside_options['minimal_total_costs'] <= outside_options['benchmark']]
+        if tracker is not None:
+            tracker.event(iteration=iteration, phase='routing_out', method=method,
+                          event='filter_minimal_total_vs_benchmark',
+                          before=before_final_cost_filter, after=branch_count(outside_options),
+                          removed=before_final_cost_filter - branch_count(outside_options),
+                          details={'use_minimal_distance': use_minimal_distance,
+                                   'limitation': limitation})
 
         # print('after')
         # print(outside_options[['current_node', 'distance_to_final_destination']])
 
         # add further information
         outside_options['current_infrastructure'] = None
+
+    if tracker is not None:
+        tracker.event(iteration=iteration, phase='routing_out', method=method,
+                      event='output', after=branch_count(outside_options),
+                      details={'use_minimal_distance': use_minimal_distance,
+                               'limitation': limitation})
 
     return outside_options
 
@@ -836,6 +912,13 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
     """
 
     destination_continents = data['destination']['continent']
+    tracker = get_tracker(data)
+    iteration = data.get('current_iteration') if isinstance(data, dict) else None
+    method = 'process_in_tolerance_branches_high_memory'
+    if tracker is not None:
+        tracker.event(iteration=iteration, phase='routing_in', method=method,
+                      event='input', before=branch_count(branches),
+                      details={'with_assessment': with_assessment})
 
     infrastructure_chunks = []
 
@@ -1011,8 +1094,18 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
         all_infrastructures = pd.concat(infrastructure_chunks, ignore_index=True)
         del infrastructure_chunks
         gc.collect()
+        if tracker is not None:
+            tracker.event(iteration=iteration, phase='routing_in', method=method,
+                          event='raw_candidates_created',
+                          created=branch_count(all_infrastructures),
+                          after=branch_count(all_infrastructures),
+                          details={'with_assessment': with_assessment})
 
         if all_infrastructures.empty:
+            if tracker is not None:
+                tracker.event(iteration=iteration, phase='routing_in', method=method,
+                              event='output', after=0,
+                              details={'with_assessment': with_assessment})
             return pd.DataFrame()
 
         nodes_list = all_infrastructures['current_node'].tolist()
@@ -1022,7 +1115,14 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
         # remove duplicates
         all_infrastructures.sort_values(['current_total_costs'], inplace=True)
         all_infrastructures = update_branch_comparison_index(all_infrastructures, branches)
+        before_dedup = branch_count(all_infrastructures)
         all_infrastructures = all_infrastructures.drop_duplicates(subset=['comparison_index'], keep='first')
+        if tracker is not None:
+            tracker.event(iteration=iteration, phase='routing_in', method=method,
+                          event='deduplicate_comparison_index',
+                          before=before_dedup, after=branch_count(all_infrastructures),
+                          removed=before_dedup - branch_count(all_infrastructures),
+                          details={'with_assessment': with_assessment})
 
         # costs assessment for benchmark comparing and anticipation of costs to the closest infrastructure
         if with_assessment:
@@ -1064,7 +1164,14 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
 
             # throw out options to expensive
             all_infrastructures['benchmark'] = all_infrastructures['minimal_commodity'].map(benchmarks)
+            before_benchmark = branch_count(all_infrastructures)
             all_infrastructures = all_infrastructures[all_infrastructures['minimal_total_costs'] <= all_infrastructures['benchmark']]
+            if tracker is not None:
+                tracker.event(iteration=iteration, phase='routing_in', method=method,
+                              event='filter_minimal_total_vs_benchmark',
+                              before=before_benchmark, after=branch_count(all_infrastructures),
+                              removed=before_benchmark - branch_count(all_infrastructures),
+                              details={'with_assessment': with_assessment})
 
             # next iteration either uses road or new pipeline. Remove options where the closest infrastructure is already
             # further away than this distance
@@ -1074,11 +1181,26 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
             all_infrastructures['minimal_distances'] \
                 = minimal_distances.loc[all_infrastructures['current_node'].tolist(), 'minimal_distance'].tolist()
 
+            before_minimal_distance = branch_count(all_infrastructures)
             all_infrastructures = all_infrastructures[all_infrastructures['minimal_distances'] <= max_length]
             all_infrastructures.drop(['minimal_distances'], axis=1, inplace=True)
+            if tracker is not None:
+                tracker.event(iteration=iteration, phase='routing_in', method=method,
+                              event='filter_minimal_distance_to_next_connector',
+                              before=before_minimal_distance, after=branch_count(all_infrastructures),
+                              removed=before_minimal_distance - branch_count(all_infrastructures),
+                              details={'with_assessment': with_assessment})
 
+        if tracker is not None:
+            tracker.event(iteration=iteration, phase='routing_in', method=method,
+                          event='output', after=branch_count(all_infrastructures),
+                          details={'with_assessment': with_assessment})
         return all_infrastructures
     else:
+        if tracker is not None:
+            tracker.event(iteration=iteration, phase='routing_in', method=method,
+                          event='output', after=0,
+                          details={'with_assessment': with_assessment})
         return pd.DataFrame()
 
 
@@ -1100,6 +1222,13 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
     """
 
     destination_continents = data['destination']['continent']
+    tracker = get_tracker(data)
+    iteration = data.get('current_iteration') if isinstance(data, dict) else None
+    method = 'process_in_tolerance_branches_low_memory'
+    if tracker is not None:
+        tracker.event(iteration=iteration, phase='routing_in', method=method,
+                      event='input', before=branch_count(branches),
+                      details={'with_assessment': with_assessment})
     infrastructure_chunks = []
 
     for o in branches.index:
@@ -1231,7 +1360,14 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
         infrastructure['taken_route'] = taken_route
 
         infrastructure['benchmark'] = benchmarks[current_commodity_object.get_name()]
+        before_benchmark_direct = branch_count(infrastructure)
         infrastructure = infrastructure[infrastructure['current_total_costs'] <= infrastructure['benchmark']]
+        if tracker is not None:
+            tracker.event(iteration=iteration, phase='routing_in', method=method,
+                          event='filter_transport_costs_vs_benchmark',
+                          before=before_benchmark_direct, after=branch_count(infrastructure),
+                          removed=before_benchmark_direct - branch_count(infrastructure),
+                          details={'branch': o, 'transport_mean': mot})
 
         nodes_list = infrastructure['current_node'].tolist()
 
@@ -1251,7 +1387,14 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
         # remove duplicates
         infrastructure.sort_values(['current_total_costs'], inplace=True)
         infrastructure = update_branch_comparison_index(infrastructure, branches)
+        before_dedup = branch_count(infrastructure)
         infrastructure = infrastructure.drop_duplicates(subset=['comparison_index'], keep='first')
+        if tracker is not None:
+            tracker.event(iteration=iteration, phase='routing_in', method=method,
+                          event='deduplicate_comparison_index',
+                          before=before_dedup, after=branch_count(infrastructure),
+                          removed=before_dedup - branch_count(infrastructure),
+                          details={'branch': o, 'transport_mean': mot})
 
         # costs assessment for benchmark comparing and anticipation of costs to the closest infrastructure
         if with_assessment:
@@ -1293,7 +1436,14 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
 
             # throws out options to expensive
             infrastructure['benchmark'] = infrastructure['minimal_commodity'].map(benchmarks)
+            before_benchmark = branch_count(infrastructure)
             infrastructure = infrastructure[infrastructure['minimal_total_costs'] <= infrastructure['benchmark']]
+            if tracker is not None:
+                tracker.event(iteration=iteration, phase='routing_in', method=method,
+                              event='filter_minimal_total_vs_benchmark',
+                              before=before_benchmark, after=branch_count(infrastructure),
+                              removed=before_benchmark - branch_count(infrastructure),
+                              details={'branch': o, 'transport_mean': mot})
 
             # next iteration either uses road or new pipeline. Remove options where the closest infrastructure is already
             # further away than this distance
@@ -1303,12 +1453,28 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
             infrastructure['minimal_distances'] \
                 = minimal_distances.loc[infrastructure['current_node'].tolist(), 'minimal_distance'].tolist()
 
+            before_minimal_distance = branch_count(infrastructure)
             infrastructure = infrastructure[infrastructure['minimal_distances'] <= max_length]
             infrastructure.drop(['minimal_distances'], axis=1, inplace=True)
+            if tracker is not None:
+                tracker.event(iteration=iteration, phase='routing_in', method=method,
+                              event='filter_minimal_distance_to_next_connector',
+                              before=before_minimal_distance, after=branch_count(infrastructure),
+                              removed=before_minimal_distance - branch_count(infrastructure),
+                              details={'branch': o, 'transport_mean': mot})
 
         if not infrastructure.empty:
             infrastructure_chunks.append(infrastructure)
 
     if infrastructure_chunks:
-        return pd.concat(infrastructure_chunks, ignore_index=False)
+        all_infrastructures = pd.concat(infrastructure_chunks, ignore_index=False)
+        if tracker is not None:
+            tracker.event(iteration=iteration, phase='routing_in', method=method,
+                          event='output', after=branch_count(all_infrastructures),
+                          details={'with_assessment': with_assessment})
+        return all_infrastructures
+    if tracker is not None:
+        tracker.event(iteration=iteration, phase='routing_in', method=method,
+                      event='output', after=0,
+                      details={'with_assessment': with_assessment})
     return pd.DataFrame()

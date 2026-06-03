@@ -10,6 +10,7 @@ from shapely.ops import nearest_points
 
 from algorithm.methods_geographic import calc_distance_single_to_single, calc_distance_list_to_single, update_branch_continents
 from algorithm.object_commodity import create_commodity_objects
+from algorithm.tracking import branch_count, get_tracker
 
 
 def _is_missing_state_value(value):
@@ -372,6 +373,9 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
     @return: dataframe with new branches based on conversion and new branch number
     """
 
+    tracker = get_tracker(data)
+    iteration = data.get('current_iteration') if isinstance(data, dict) else None
+    input_branches = branch_count(branches)
     index = []
 
     total_costs = []
@@ -553,6 +557,13 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
 
     branches = pd.DataFrame(branches_dict, index=index)
     branches = update_branch_comparison_index(branches)
+    if tracker is not None:
+        tracker.event(iteration=iteration, phase='conversion',
+                      method='create_new_branches_based_on_conversion',
+                      event='created_conversion_branches',
+                      before=input_branches, after=branch_count(branches),
+                      created=branch_count(branches),
+                      details={'branch_number': branch_number})
 
     return branches, branch_number
 
