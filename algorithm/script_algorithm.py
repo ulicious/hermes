@@ -628,6 +628,9 @@ def run_algorithm(args):
                     = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] <= out_infrastructure_branches['benchmark'])
                                               & (out_infrastructure_branches['min_costs_pipeline_liquid'] <= out_infrastructure_branches['benchmark'])].index.tolist()
 
+                covered_branches = no_pipeline_gas_branches + no_pipeline_liquid_branches + only_shipping_branches + no_limitation
+                only_tolerance_branches = [i for i in out_infrastructure_branches.index if i not in covered_branches]
+
                 # process all branches twice:
                 # 1: use minimal distances as road distances are quite expensive and transporting to the closest
                 # infrastructure can already be too expensive. Branches where it is too expensive are removed
@@ -717,7 +720,7 @@ def run_algorithm(args):
                 # always process all options without limitation if they only aim at in tolerance solutions
                 outside_options_in_tolerance \
                     = process_out_tolerance_branches(complete_infrastructure,
-                                                     out_infrastructure_branches,
+                                                     out_infrastructure_branches.loc[only_tolerance_branches],
                                                      configuration, iteration, data, benchmarks,
                                                      use_minimal_distance=True, limitation='only_in_tolerance')
 
