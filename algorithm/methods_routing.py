@@ -307,21 +307,18 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
         if limitation == 'no_pipeline_gas':
             reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'PG' not in i]
-            reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
             distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                    complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                    branches['latitude'], branches['longitude'])
 
         elif limitation == 'no_pipeline_liquid':
             reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'PL' not in i]
-            reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
             distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                    complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                    branches['latitude'], branches['longitude'])
 
         elif limitation == 'no_pipelines':
             reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'H' in i]
-            reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
             distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                    complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                    branches['latitude'], branches['longitude'])
@@ -435,7 +432,6 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
             if limitation == 'no_pipeline_gas':
                 reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'PG' not in i]
-                reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
 
                 if configuration['destination_type'] == 'country':  # destination not necessary with polygons
                     reduced_infrastructure_index = [i for i in reduced_infrastructure_index if i != 'Destination']
@@ -447,7 +443,6 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
             elif limitation == 'no_pipeline_liquid':
                 reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'PL' not in i]
-                reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
 
                 if configuration['destination_type'] == 'country':  # destination not necessary with polygons
                     reduced_infrastructure_index = [i for i in reduced_infrastructure_index if i != 'Destination']
@@ -462,8 +457,6 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                     reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'H' in i] + ['Destination']
                 else:
                     reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'H' in i]
-
-                reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
 
                 distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                        complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
@@ -482,8 +475,6 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 reduced_infrastructure_index = complete_infrastructure.index.tolist()
                 if configuration['destination_type'] == 'country':  # destination not necessary with polygons
                     reduced_infrastructure_index = [i for i in complete_infrastructure.index if i != 'Destination']
-
-                reduced_infrastructure_index = list(set(reduced_infrastructure_index + in_tolerance_to_destination_infrastructure))
 
                 distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                        complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],

@@ -546,7 +546,7 @@ if __name__ == '__main__':
     FILTER_START_OPTIONS_ABOVE_WARM_START = True
     FILTER_UNREACHABLE_EDGES = True
     MIP_GAP = None
-    TIME_LIMIT = None
+    TIME_LIMIT = 3600
     SHOW_MIP_LOGS = True
 
     run_mip_optimization(
