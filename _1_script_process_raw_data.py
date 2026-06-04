@@ -23,7 +23,11 @@ try:
 except ImportError:
     prepare_minimal_mip_case = None
 from data_processing.helpers_geometry import get_destination, get_boundaries_from_config
-from data_processing.helpers_continent_connections import build_continent_connectivity, save_continent_connectivity
+from data_processing.helpers_continent_connections import (
+    add_continents_to_pipeline_nodes,
+    build_continent_connectivity,
+    save_continent_connectivity,
+)
 from data_processing.natural_earth_data import download_natural_earth_data
 
 import warnings
@@ -34,7 +38,7 @@ logging.basicConfig(level=logging.INFO)
 time_start = time.time()
 
 PIPELINE_GRAPH_COLUMNS = ['graph', 'node_start', 'node_end', 'distance', 'line']
-PIPELINE_NODE_COLUMNS = ['longitude', 'latitude', 'graph']
+PIPELINE_NODE_COLUMNS = ['longitude', 'latitude', 'graph', 'continent']
 PORT_COLUMNS = ['latitude', 'longitude', 'name', 'country', 'continent',
                 'longitude_on_coastline', 'latitude_on_coastline']
 MINIMAL_DISTANCE_COLUMNS = ['minimal_distance', 'closest_node']
@@ -70,6 +74,14 @@ def csv_has_rows(path_file):
         return not pd.read_csv(path_file, index_col=0).empty
     except pd.errors.EmptyDataError:
         return False
+
+
+def pipeline_nodes_need_continent_update(nodes):
+    if nodes is None or nodes.empty:
+        return False
+    if 'continent' not in nodes.columns:
+        return True
+    return nodes['continent'].isna().any() or (nodes['continent'].astype(str).str.lower() == 'nan').any()
 
 
 def ensure_processed_infrastructure_files(path_processed):
@@ -249,12 +261,18 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
 
         gas_graph = write_csv_with_schema(
             gas_graph, path_processed_data + 'gas_pipeline_graphs.csv', PIPELINE_GRAPH_COLUMNS)
+        gas_nodes = add_continents_to_pipeline_nodes(gas_nodes, path_raw_data=path_raw_data)
         gas_nodes = write_csv_with_schema(
             gas_nodes, path_processed_data + 'gas_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
 
     else:
         gas_graph = read_csv_or_empty(path_processed_data + 'gas_pipeline_graphs.csv', PIPELINE_GRAPH_COLUMNS)
         gas_nodes = read_csv_or_empty(path_processed_data + 'gas_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
+        if pipeline_nodes_need_continent_update(gas_nodes):
+            logging.info('Attach continents to existing gas pipeline nodes')
+            gas_nodes = add_continents_to_pipeline_nodes(gas_nodes, path_raw_data=path_raw_data)
+            gas_nodes = write_csv_with_schema(
+                gas_nodes, path_processed_data + 'gas_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
 
     if not (oil_pipeline_files_have_data & (not infrastructure_enforce_update_of_data)):
         if use_minimal_example:
@@ -269,12 +287,18 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
 
         oil_graph = write_csv_with_schema(
             oil_graph, path_processed_data + 'oil_pipeline_graphs.csv', PIPELINE_GRAPH_COLUMNS)
+        oil_nodes = add_continents_to_pipeline_nodes(oil_nodes, path_raw_data=path_raw_data)
         oil_nodes = write_csv_with_schema(
             oil_nodes, path_processed_data + 'oil_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
 
     else:
         oil_graph = read_csv_or_empty(path_processed_data + 'oil_pipeline_graphs.csv', PIPELINE_GRAPH_COLUMNS)
         oil_nodes = read_csv_or_empty(path_processed_data + 'oil_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
+        if pipeline_nodes_need_continent_update(oil_nodes):
+            logging.info('Attach continents to existing oil pipeline nodes')
+            oil_nodes = add_continents_to_pipeline_nodes(oil_nodes, path_raw_data=path_raw_data)
+            oil_nodes = write_csv_with_schema(
+                oil_nodes, path_processed_data + 'oil_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
 
     # process ports
     logging.info('Processing ports')
@@ -315,6 +339,16 @@ else:
     ports = read_csv_or_empty(path_processed_data + 'ports.csv', PORT_COLUMNS)
     gas_nodes = read_csv_or_empty(path_processed_data + 'gas_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
     oil_nodes = read_csv_or_empty(path_processed_data + 'oil_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
+    if pipeline_nodes_need_continent_update(gas_nodes):
+        logging.info('Attach continents to existing gas pipeline nodes')
+        gas_nodes = add_continents_to_pipeline_nodes(gas_nodes, path_raw_data=path_raw_data)
+        gas_nodes = write_csv_with_schema(
+            gas_nodes, path_processed_data + 'gas_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
+    if pipeline_nodes_need_continent_update(oil_nodes):
+        logging.info('Attach continents to existing oil pipeline nodes')
+        oil_nodes = add_continents_to_pipeline_nodes(oil_nodes, path_raw_data=path_raw_data)
+        oil_nodes = write_csv_with_schema(
+            oil_nodes, path_processed_data + 'oil_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
     if os.path.exists(path_processed_data + 'landmasses.csv'):
         landmasses = pd.read_csv(path_processed_data + 'landmasses.csv')
         landmasses = gpd.GeoDataFrame(geometry=landmasses['geometry'].apply(shapely.wkt.loads))

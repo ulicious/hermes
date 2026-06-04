@@ -44,7 +44,7 @@ def get_geometry_plot_point(geometry):
 
 
 def load_data(path_data, config_file):
-    node_columns = ['latitude', 'longitude', 'graph']
+    node_columns = ['latitude', 'longitude', 'graph', 'continent']
     graph_columns = ['graph', 'node_start', 'node_end', 'distance', 'line']
     port_columns = ['latitude', 'longitude', 'name', 'country', 'continent',
                     'longitude_on_coastline', 'latitude_on_coastline']

@@ -159,7 +159,7 @@ def get_infrastructure_figure(sub_axes, boundaries, link_to_data, fig_title=''):
     data_pipeline_gas_nodes = 'gas_pipeline_node_locations.csv'
     data_pipeline_oil_nodes = 'oil_pipeline_node_locations.csv'
 
-    node_columns = ['latitude', 'longitude', 'graph', 'geometry']
+    node_columns = ['latitude', 'longitude', 'graph', 'continent', 'geometry']
     line_columns = ['graph', 'node_start', 'node_end', 'distance', 'line', 'geometry']
     data_ports = _read_csv_or_empty(link_to_data + data_ports,
                                     columns=['latitude', 'longitude', 'name', 'country', 'continent'])

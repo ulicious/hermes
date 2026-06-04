@@ -97,7 +97,7 @@ def prepare_data_and_configuration_dictionary(config_file):
     # load input data
     location_data = pd.read_csv(path_project_folder + 'start_destination_combinations.csv', index_col=0)
 
-    node_columns = ['latitude', 'longitude', 'graph']
+    node_columns = ['latitude', 'longitude', 'graph', 'continent']
     graph_columns = ['graph', 'node_start', 'node_end', 'distance', 'line']
     port_columns = ['latitude', 'longitude', 'name', 'country', 'continent',
                     'longitude_on_coastline', 'latitude_on_coastline']
