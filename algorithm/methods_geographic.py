@@ -200,28 +200,109 @@ def update_branch_continents(branches, complete_infrastructure, world=None, fall
     if branches.empty:
         return branches
 
-    continents = []
-    for idx in branches.index:
-        node = branches.at[idx, 'current_node']
-        fallback_continent = branches.at[idx, fallback_column] if fallback_column in branches.columns else None
+    continents = pd.Series(index=branches.index, dtype=object)
 
-        if (complete_infrastructure is not None and node in complete_infrastructure.index
-                and 'continent' in complete_infrastructure.columns):
-            infrastructure_continent = complete_infrastructure.at[node, 'continent']
-            if _is_valid_continent(infrastructure_continent):
-                continents.append(str(infrastructure_continent))
-                continue
+    if (complete_infrastructure is not None
+            and 'continent' in complete_infrastructure.columns
+            and 'current_node' in branches.columns):
+        infrastructure_continents = complete_infrastructure['continent']
+        valid_infrastructure_continents = infrastructure_continents[
+            infrastructure_continents.apply(_is_valid_continent)
+        ].astype(str)
+        if valid_infrastructure_continents.index.has_duplicates:
+            valid_infrastructure_continents = valid_infrastructure_continents[
+                ~valid_infrastructure_continents.index.duplicated(keep='first')
+            ]
 
-        location = (branches.at[idx, 'longitude'], branches.at[idx, 'latitude'])
-        continents.append(
-            get_continent_from_location_robust(
-                location,
-                world=world,
-                fallback_continent=fallback_continent,
-            )
-        )
+        if not valid_infrastructure_continents.empty:
+            continents = branches['current_node'].map(valid_infrastructure_continents)
 
-    branches.loc[:, 'current_continent'] = continents
+    missing_continent = ~continents.apply(_is_valid_continent)
+    if missing_continent.any():
+        coordinate_columns_available = {'longitude', 'latitude'}.issubset(branches.columns)
+        if coordinate_columns_available:
+            missing_branches = branches.loc[missing_continent].copy()
+            lookup_columns = ['current_node', 'longitude', 'latitude']
+            lookup_ids = pd.Series(index=missing_branches.index, dtype=int)
+            unique_location_records = []
+
+            for lookup_id, (key, group) in enumerate(missing_branches.groupby(lookup_columns, dropna=False)):
+                fallback_continent = None
+                if fallback_column in group.columns:
+                    valid_fallbacks = group[fallback_column][group[fallback_column].apply(_is_valid_continent)]
+                    if not valid_fallbacks.empty:
+                        fallback_continent = str(valid_fallbacks.iloc[0])
+
+                unique_location_records.append({
+                    '_lookup_id': lookup_id,
+                    'current_node': key[0],
+                    'longitude': key[1],
+                    'latitude': key[2],
+                    'fallback_continent': fallback_continent,
+                    'resolved_continent': None,
+                })
+                lookup_ids.loc[group.index] = lookup_id
+
+            unique_locations = pd.DataFrame(unique_location_records)
+
+            coordinate_is_valid = unique_locations['longitude'].notna() & unique_locations['latitude'].notna()
+            if coordinate_is_valid.any():
+                if world is None:
+                    world = load_world()
+
+                world_continents = world[['CONTINENT', 'geometry']].copy()
+                points = gpd.GeoDataFrame(
+                    unique_locations.loc[coordinate_is_valid, ['_lookup_id', 'longitude', 'latitude']].copy(),
+                    geometry=gpd.points_from_xy(
+                        unique_locations.loc[coordinate_is_valid, 'longitude'],
+                        unique_locations.loc[coordinate_is_valid, 'latitude'],
+                    ),
+                    crs='EPSG:4326',
+                )
+
+                joined = gpd.sjoin(points, world_continents, how='left', predicate='within')
+                joined = joined[joined['CONTINENT'].apply(_is_valid_continent)]
+                if not joined.empty:
+                    joined = joined[~joined['_lookup_id'].duplicated(keep='first')]
+                    continent_by_lookup = joined.set_index('_lookup_id')['CONTINENT'].astype(str)
+                    unique_locations.loc[continent_by_lookup.index, 'resolved_continent'] = continent_by_lookup
+
+                unresolved = unique_locations[
+                    coordinate_is_valid & ~unique_locations['resolved_continent'].apply(_is_valid_continent)
+                ]
+                if not unresolved.empty:
+                    try:
+                        nearest_points = gpd.GeoDataFrame(
+                            unresolved[['_lookup_id', 'longitude', 'latitude']].copy(),
+                            geometry=gpd.points_from_xy(unresolved['longitude'], unresolved['latitude']),
+                            crs='EPSG:4326',
+                        )
+                        nearest = gpd.sjoin_nearest(
+                            nearest_points.to_crs('EPSG:3857'),
+                            world_continents.to_crs('EPSG:3857'),
+                            how='left',
+                            distance_col='distance_to_nearest_land',
+                        )
+                        nearest = nearest[
+                            (nearest['distance_to_nearest_land'] <= 100000)
+                            & nearest['CONTINENT'].apply(_is_valid_continent)
+                        ]
+                        if not nearest.empty:
+                            nearest = nearest[~nearest['_lookup_id'].duplicated(keep='first')]
+                            continent_by_lookup = nearest.set_index('_lookup_id')['CONTINENT'].astype(str)
+                            unique_locations.loc[continent_by_lookup.index, 'resolved_continent'] = continent_by_lookup
+                    except Exception:
+                        pass
+
+            unresolved = ~unique_locations['resolved_continent'].apply(_is_valid_continent)
+            fallback_is_valid = unique_locations['fallback_continent'].apply(_is_valid_continent)
+            unique_locations.loc[unresolved & fallback_is_valid, 'resolved_continent'] \
+                = unique_locations.loc[unresolved & fallback_is_valid, 'fallback_continent'].astype(str)
+
+            continent_by_lookup = unique_locations.set_index('_lookup_id')['resolved_continent']
+            continents.loc[lookup_ids.index] = lookup_ids.map(continent_by_lookup).tolist()
+
+    branches.loc[:, 'current_continent'] = continents.tolist()
     return branches
 
 
