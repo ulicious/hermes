@@ -60,6 +60,49 @@ def extend_line_in_both_directions(coord1, coord2, extension_percentage):
     return extended_linestring
 
 
+def get_points_from_intersection(intersection):
+    """
+    Convert a shapely intersection result into points which can be used to build connecting LineStrings.
+    """
+
+    if intersection.is_empty:
+        return []
+
+    if isinstance(intersection, Point):
+        return [intersection]
+
+    if isinstance(intersection, LineString):
+        coords = list(intersection.coords)
+        if not coords:
+            return []
+
+        points = [Point(coords[0])]
+        if coords[-1] != coords[0]:
+            points.append(Point(coords[-1]))
+
+        return points
+
+    if hasattr(intersection, 'geoms'):
+        points = []
+        for geom in intersection.geoms:
+            points += get_points_from_intersection(geom)
+
+        return points
+
+    return []
+
+
+def add_unique_points(points, new_points):
+    existing_coordinates = {(round(point.x, 12), round(point.y, 12)) for point in points}
+    for point in new_points:
+        coordinates = (round(point.x, 12), round(point.y, 12))
+        if coordinates not in existing_coordinates:
+            points.append(point)
+            existing_coordinates.add(coordinates)
+
+    return points
+
+
 def close_gaps(line_combinations, existing_lines, gap_distance, apply_duplicate_removing=False,
                min_distance=0, extend_lines=False):
 
@@ -111,30 +154,16 @@ def close_gaps(line_combinations, existing_lines, gap_distance, apply_duplicate_
                     l2_intersects = False
                     for e in exterior:
                         if e.intersects(l1):
-
-                            if isinstance(e.intersection(l1), LineString):
-                                continue
-
-                            l1_intersects = True
-
-                            if isinstance(e.intersection(l1), Point):
-                                points.append(e.intersection(l1))
-                            else:
-                                for p in e.intersection(l1).geoms:
-                                    points.append(p)
+                            new_points = get_points_from_intersection(e.intersection(l1))
+                            if new_points:
+                                l1_intersects = True
+                                points = add_unique_points(points, new_points)
 
                         if e.intersects(l2):
-
-                            if isinstance(e.intersection(l2), LineString):
-                                continue
-
-                            l2_intersects = True
-
-                            if isinstance(e.intersection(l2), Point):
-                                points.append(e.intersection(l2))
-                            else:
-                                for p in e.intersection(l2).geoms:
-                                    points.append(p)
+                            new_points = get_points_from_intersection(e.intersection(l2))
+                            if new_points:
+                                l2_intersects = True
+                                points = add_unique_points(points, new_points)
 
                     if not l1_intersects:
                         lines_to_remove.append(l1)
