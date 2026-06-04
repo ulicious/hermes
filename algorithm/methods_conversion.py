@@ -39,12 +39,14 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
     if tracker is not None:
         tracker.event(iteration=iteration, phase='conversion', method=method,
                       event='input', before=branch_count(branches),
+                      runtime_s=0.0,
                       details={'benchmark': benchmark, 'branch_number': branch_number})
 
     # save current branches as old branches to allow comparison
     old_branches = branches.copy()
 
     # branches with distance 0 from previous iteration will not be conversed
+    time_split = time.perf_counter()
     no_conversion_branches = branches[branches['current_distance'] == 0].copy()
 
     # others will
@@ -52,9 +54,11 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
     if tracker is not None:
         tracker.event(iteration=iteration, phase='conversion', method=method,
                       event='split_distance_zero', before=branch_count(branches),
+                      runtime_s=time.perf_counter() - time_split,
                       details={'no_conversion_branches': branch_count(no_conversion_branches),
                                'conversion_input_branches': branch_count(conversion_branches)})
     before_create_conversion = branch_count(conversion_branches)
+    time_create_conversion = time.perf_counter()
     conversion_branches, branch_number \
         = create_new_branches_based_on_conversion(conversion_branches, data, branch_number, benchmarks)
     if tracker is not None:
@@ -62,17 +66,20 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
                       event='create_new_branches_based_on_conversion',
                       before=before_create_conversion, after=branch_count(conversion_branches),
                       created=branch_count(conversion_branches),
+                      runtime_s=time.perf_counter() - time_create_conversion,
                       details={'branch_number': branch_number})
 
     # assess for benchmark
     conversion_branches['benchmark'] = conversion_branches['current_commodity'].map(benchmarks)
     before_current_benchmark = branch_count(conversion_branches)
+    time_current_benchmark = time.perf_counter()
     conversion_branches = conversion_branches[conversion_branches['current_total_costs'] <= conversion_branches['benchmark']]
     if tracker is not None:
         tracker.event(iteration=iteration, phase='conversion', method=method,
                       event='filter_current_total_vs_benchmark',
                       before=before_current_benchmark, after=branch_count(conversion_branches),
-                      removed=before_current_benchmark - branch_count(conversion_branches))
+                      removed=before_current_benchmark - branch_count(conversion_branches),
+                      runtime_s=time.perf_counter() - time_current_benchmark)
 
     final_destination = data['destination']['location']
 
@@ -111,14 +118,17 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
     # to compare the different commodities, the benchmark is adjusted by the fuel price
     conversion_branches['benchmark'] = conversion_branches['minimal_commodity'].map(benchmarks)
     before_minimal_benchmark = branch_count(conversion_branches)
+    time_minimal_benchmark = time.perf_counter()
     conversion_branches = conversion_branches[conversion_branches['minimal_total_costs'] <= conversion_branches['benchmark']]
     if tracker is not None:
         tracker.event(iteration=iteration, phase='conversion', method=method,
                       event='filter_minimal_total_vs_benchmark',
                       before=before_minimal_benchmark, after=branch_count(conversion_branches),
-                      removed=before_minimal_benchmark - branch_count(conversion_branches))
+                      removed=before_minimal_benchmark - branch_count(conversion_branches),
+                      runtime_s=time.perf_counter() - time_minimal_benchmark)
 
     # remove duplicates
+    time_deduplicate = time.perf_counter()
     conversion_branches['comparison_index'] = conversion_branches.apply(
         lambda row: f"{row['current_node']}-{row['current_commodity']}",
         axis=1)
@@ -130,12 +140,14 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
         tracker.event(iteration=iteration, phase='conversion', method=method,
                       event='deduplicate_comparison_index',
                       before=before_dedup, after=branch_count(conversion_branches),
-                      removed=before_dedup - branch_count(conversion_branches))
+                      removed=before_dedup - branch_count(conversion_branches),
+                      runtime_s=time.perf_counter() - time_deduplicate)
 
     if iteration > 0:
         # assessment via local benchmarks makes only sense as soon as iteration has moved at least once
 
         # use local benchmark to remove branches
+        time_local_benchmark = time.perf_counter()
         conversion_branches = update_branch_comparison_index(conversion_branches)
         before_local_benchmark = branch_count(conversion_branches)
         merged_df = pd.merge(conversion_branches, local_benchmarks, on='comparison_index',
@@ -154,7 +166,8 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
             tracker.event(iteration=iteration, phase='conversion', method=method,
                           event='filter_local_benchmark',
                           before=before_local_benchmark, after=branch_count(conversion_branches),
-                          removed=before_local_benchmark - branch_count(conversion_branches))
+                          removed=before_local_benchmark - branch_count(conversion_branches),
+                          runtime_s=time.perf_counter() - time_local_benchmark)
 
         # add remaining branches to local benchmark
         conversion_branches = update_branch_comparison_index(conversion_branches)
@@ -173,6 +186,7 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
 
     branches = pd.concat([no_conversion_branches, conversion_branches])
 
+    time_final_dedup = time.perf_counter()
     branches.sort_values(['current_total_costs'], inplace=True)
     branches = update_branch_comparison_index(branches)
     before_final_dedup = branch_count(branches)
@@ -181,32 +195,38 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
         tracker.event(iteration=iteration, phase='conversion', method=method,
                       event='deduplicate_output',
                       before=before_final_dedup, after=branch_count(branches),
-                      removed=before_final_dedup - branch_count(branches))
+                      removed=before_final_dedup - branch_count(branches),
+                      runtime_s=time.perf_counter() - time_final_dedup)
 
     # check if branches are at destination
+    time_assess_for_benchmark = time.perf_counter()
     final_solution, benchmark, benchmarks, benchmark_locations, branches \
         = assess_for_benchmark(data, configuration, benchmark, benchmarks, benchmark_locations, final_commodities, branches,
                                final_solution, complete_infrastructure)
     if tracker is not None:
         tracker.event(iteration=iteration, phase='conversion', method=method,
                       event='after_assess_for_benchmark', after=branch_count(branches),
+                      runtime_s=time.perf_counter() - time_assess_for_benchmark,
                       details={'benchmark': benchmark, 'final_solution_exists': final_solution is not None})
 
     # check again all branches because benchmark might have changed
     # to compare the different commodities, the benchmark is adjusted by the fuel price
     if not branches.empty:
         before_final_filter = branch_count(branches)
+        time_final_filter = time.perf_counter()
         branches['benchmark'] = branches['current_commodity'].map(benchmarks)
         branches = branches[branches['current_total_costs'] <= branches['benchmark']]
         if tracker is not None:
             tracker.event(iteration=iteration, phase='conversion', method=method,
                           event='filter_updated_benchmark',
                           before=before_final_filter, after=branch_count(branches),
-                          removed=before_final_filter - branch_count(branches))
+                          removed=before_final_filter - branch_count(branches),
+                          runtime_s=time.perf_counter() - time_final_filter)
 
     if tracker is not None:
         tracker.event(iteration=iteration, phase='conversion', method=method,
                       event='output', after=branch_count(branches),
+                      runtime_s=0.0,
                       details={'branch_number': branch_number})
 
     return branches, final_solution, branch_number, benchmark, benchmarks, benchmark_locations, local_benchmarks

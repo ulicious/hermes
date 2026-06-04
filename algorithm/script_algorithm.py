@@ -38,10 +38,12 @@ def _finalize_routing_branches(branches, old_branches, local_benchmarks, branch_
     if tracker is not None:
         tracker.event(iteration=iteration, phase='routing_finalize', method=method,
                       event='input', before=branch_count(branches),
+                      runtime_s=0.0,
                       details={'local_benchmarks': branch_count(local_benchmarks)})
 
     branches = branches.copy()
     branches['current_conversion_costs'] = 0
+    time_deduplicate = time.perf_counter()
     branches = update_branch_comparison_index(branches, old_branches)
     branches.sort_values(['current_total_costs'], inplace=True)
     before_dedup = branch_count(branches)
@@ -51,9 +53,11 @@ def _finalize_routing_branches(branches, old_branches, local_benchmarks, branch_
         tracker.event(iteration=iteration, phase='routing_finalize', method=method,
                       event='deduplicate_comparison_index', before=before_dedup,
                       after=branch_count(branches),
-                      removed=before_dedup - branch_count(branches))
+                      removed=before_dedup - branch_count(branches),
+                      runtime_s=time.perf_counter() - time_deduplicate)
 
     if not local_benchmarks.empty:
+        time_local_benchmark = time.perf_counter()
         before_local_benchmark = branch_count(branches)
         merged_df = pd.merge(branches, local_benchmarks, on='comparison_index',
                              suffixes=('_branch', '_benchmark'))
@@ -64,7 +68,8 @@ def _finalize_routing_branches(branches, old_branches, local_benchmarks, branch_
             tracker.event(iteration=iteration, phase='routing_finalize', method=method,
                           event='filter_local_benchmark', before=before_local_benchmark,
                           after=branch_count(branches),
-                          removed=before_local_benchmark - branch_count(branches))
+                          removed=before_local_benchmark - branch_count(branches),
+                          runtime_s=time.perf_counter() - time_local_benchmark)
 
     if branches.empty:
         return branches, local_benchmarks, branch_number, final_solution, benchmark, benchmarks, benchmark_locations
@@ -88,15 +93,18 @@ def _finalize_routing_branches(branches, old_branches, local_benchmarks, branch_
 
     branches = postprocessing_branches(branches, old_branches)
 
+    time_assess_for_benchmark = time.perf_counter()
     final_solution, benchmark, benchmarks, benchmark_locations, branches \
         = assess_for_benchmark(data, configuration, benchmark, benchmarks, benchmark_locations, final_commodities, branches,
                                final_solution, complete_infrastructure)
     if tracker is not None:
         tracker.event(iteration=iteration, phase='routing_finalize', method=method,
                       event='after_assess_for_benchmark', after=branch_count(branches),
+                      runtime_s=time.perf_counter() - time_assess_for_benchmark,
                       details={'benchmark': benchmark, 'final_solution_exists': final_solution is not None})
 
     if not branches.empty:
+        time_final_benchmark = time.perf_counter()
         before_final_benchmark = branch_count(branches)
         branches['benchmark'] = branches['current_commodity'].map(benchmarks)
         branches = branches[branches['current_total_costs'] <= branches['benchmark']]
@@ -104,11 +112,12 @@ def _finalize_routing_branches(branches, old_branches, local_benchmarks, branch_
             tracker.event(iteration=iteration, phase='routing_finalize', method=method,
                           event='filter_updated_benchmark', before=before_final_benchmark,
                           after=branch_count(branches),
-                          removed=before_final_benchmark - branch_count(branches))
+                          removed=before_final_benchmark - branch_count(branches),
+                          runtime_s=time.perf_counter() - time_final_benchmark)
 
     if tracker is not None:
         tracker.event(iteration=iteration, phase='routing_finalize', method=method,
-                      event='output', after=branch_count(branches))
+                      event='output', after=branch_count(branches), runtime_s=0.0)
 
     return branches, local_benchmarks, branch_number, final_solution, benchmark, benchmarks, benchmark_locations
 
@@ -295,11 +304,13 @@ def run_algorithm(args):
     final_commodities = data['commodities']['final_commodities']
 
     # create branches based on commodities
+    time_create_start_branches = time.perf_counter()
     branches, branch_number = create_branches_based_on_commodities_at_start(data)
     new_approach_branches_created = 0
     tracker.event(phase='initialization', method='create_branches_based_on_commodities_at_start',
                   event='created_start_branches', created=branch_count(branches),
-                  after=branch_count(branches), details={'branch_number': branch_number})
+                  after=branch_count(branches), runtime_s=time.perf_counter() - time_create_start_branches,
+                  details={'branch_number': branch_number})
 
     if not check_for_inaccessibility_and_at_destination(data, configuration, complete_infrastructure, location_index, branches):
         tracker.event(phase='location', method='run_algorithm', event='stop_inaccessible',
@@ -347,6 +358,7 @@ def run_algorithm(args):
         time_iteration = time.time()
         tracker.event(iteration=iteration, phase='iteration', method='run_algorithm',
                       event='start', before=len_start_branches,
+                      runtime_s=0.0,
                       details={'benchmark': benchmark, 'branch_number': branch_number})
 
         benchmark_old = benchmark
@@ -366,11 +378,13 @@ def run_algorithm(args):
 
             no_conversion_possible_branches = branches[branches['current_node'].isin(no_conversion_possible_locations)]
 
+            time_split_conversion = time.perf_counter()
             conversion_possible_locations = [i for i in all_locations.index if i not in no_conversion_possible_locations]
             conversion_possible_branches = branches[branches['current_node'].isin(conversion_possible_locations)]
             tracker.event(iteration=iteration, phase='conversion', method='run_algorithm',
                           event='split_conversion_possible', before=branch_count(branches),
                           after=branch_count(conversion_possible_branches),
+                          runtime_s=time.perf_counter() - time_split_conversion,
                           details={'no_conversion_possible_branches': branch_count(no_conversion_possible_branches)})
 
             branches, potential_final_solution, branch_number, benchmark, benchmarks, benchmark_locations, local_benchmarks = \
@@ -399,11 +413,13 @@ def run_algorithm(args):
 
             # merge all processed and not processed branches
             before_merge_no_conversion = branch_count(branches)
+            time_merge_no_conversion = time.perf_counter()
             branches = pd.concat([branches, no_conversion_possible_branches])
             tracker.event(iteration=iteration, phase='conversion', method='run_algorithm',
                           event='merge_no_conversion_possible', before=before_merge_no_conversion,
                           after=branch_count(branches),
-                          created=branch_count(branches) - before_merge_no_conversion)
+                          created=branch_count(branches) - before_merge_no_conversion,
+                          runtime_s=time.perf_counter() - time_merge_no_conversion)
 
         # check if benchmark solution is still in branches
         if not branches.empty:
@@ -545,6 +561,7 @@ def run_algorithm(args):
             # 1 all branches which used new infrastructure / road previously are now at an infrastructure
             # --> use infrastructure
             # 2 all other options search for next infrastructure and use road / new pipeline
+            time_split_routing = time.perf_counter()
             in_infrastructure_branches \
                 = branches[branches['current_transport_mean'].isin(['Road', 'New_Pipeline_Gas', 'New_Pipeline_Liquid'])]
 
@@ -556,6 +573,7 @@ def run_algorithm(args):
                                               | out_infrastructure_branches['Pipeline_Liquid_applicable']]
             tracker.event(iteration=iteration, phase='routing', method='run_algorithm',
                           event='split_routing_inputs', before=branch_count(branches),
+                          runtime_s=time.perf_counter() - time_split_routing,
                           details={'in_infrastructure_branches': branch_count(in_infrastructure_branches),
                                    'out_infrastructure_branches': branch_count(out_infrastructure_branches)})
 
@@ -804,12 +822,14 @@ def run_algorithm(args):
                 else:
                     outside_options_in_tolerance = pd.DataFrame()
 
+                time_combine_outside_options = time.perf_counter()
                 outside_options = pd.concat([outside_options_no_gas, outside_options_no_liquid,
                                              outside_options_only_shipping, outside_options_no_limitation,
                                              outside_options_in_tolerance])
                 tracker.event(iteration=iteration, phase='routing', method='run_algorithm',
                               event='out_routing_options_combined',
                               after=branch_count(outside_options),
+                              runtime_s=time.perf_counter() - time_combine_outside_options,
                               details={'no_gas': branch_count(outside_options_no_gas),
                                        'no_liquid': branch_count(outside_options_no_liquid),
                                        'only_shipping': branch_count(outside_options_only_shipping),
@@ -839,13 +859,15 @@ def run_algorithm(args):
             routing_results = [df for df in [in_tolerance_options, processed_outside_options] if not df.empty]
             if routing_results:
                 before_combine = sum(branch_count(df) for df in routing_results)
+                time_combine_routing = time.perf_counter()
                 branches = pd.concat(routing_results, ignore_index=False)
                 branches = update_branch_comparison_index(branches)
                 branches.sort_values(['current_total_costs'], inplace=True)
                 branches = branches.drop_duplicates(subset=['comparison_index'], keep='first')
                 tracker.event(iteration=iteration, phase='routing', method='run_algorithm',
                               event='combine_in_and_out_routing', before=before_combine,
-                              after=branch_count(branches), removed=before_combine - branch_count(branches))
+                              after=branch_count(branches), removed=before_combine - branch_count(branches),
+                              runtime_s=time.perf_counter() - time_combine_routing)
             else:
                 branches = pd.DataFrame()
 

@@ -1,5 +1,6 @@
 import math
 import os
+import time
 import yaml
 
 import pandas as pd
@@ -555,6 +556,7 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
 
                      # 'destination': all_destinations}
 
+    time_create_dataframe = time.perf_counter()
     branches = pd.DataFrame(branches_dict, index=index)
     branches = update_branch_comparison_index(branches)
     if tracker is not None:
@@ -563,6 +565,7 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
                       event='created_conversion_branches',
                       before=input_branches, after=branch_count(branches),
                       created=branch_count(branches),
+                      runtime_s=time.perf_counter() - time_create_dataframe,
                       details={'branch_number': branch_number})
 
     return branches, branch_number
