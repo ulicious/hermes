@@ -74,24 +74,64 @@ def _finalize_routing_branches(branches, old_branches, local_benchmarks, branch_
     if branches.empty:
         return branches, local_benchmarks, branch_number, final_solution, benchmark, benchmarks, benchmark_locations
 
+    time_update_local_benchmarks = time.perf_counter()
+    before_local_benchmarks = branch_count(local_benchmarks)
+    before_branch_count = branch_count(branches)
     new_benchmarks = branches[['comparison_index', 'current_total_costs', 'current_commodity', 'current_node']]
     local_benchmarks = pd.concat([local_benchmarks, new_benchmarks])
     local_benchmarks.sort_values(['current_total_costs'], inplace=True)
     local_benchmarks = local_benchmarks.drop_duplicates(subset=['comparison_index'], keep='first')
+    if tracker is not None:
+        tracker.event(iteration=iteration, phase='routing_finalize', method=method,
+                      event='update_local_benchmarks',
+                      before=before_local_benchmarks, after=branch_count(local_benchmarks),
+                      created=branch_count(local_benchmarks) - before_local_benchmarks,
+                      runtime_s=time.perf_counter() - time_update_local_benchmarks,
+                      details={'branches_used': before_branch_count})
 
+    time_reindex_branches = time.perf_counter()
+    before_reindex = branch_count(branches)
     branches['branch_index'] = ['S' + str(branch_number + i) for i in range(len(branches.index))]
     branches.index = branches['branch_index'].tolist()
     branch_number += len(branches.index)
 
     branches['conversion_costs'] = 0
+    if tracker is not None:
+        tracker.event(iteration=iteration, phase='routing_finalize', method=method,
+                      event='reindex_branches',
+                      before=before_reindex, after=branch_count(branches),
+                      runtime_s=time.perf_counter() - time_reindex_branches,
+                      details={'branch_number': branch_number})
 
+    time_update_continents = time.perf_counter()
+    before_update_continents = branch_count(branches)
     branches = update_branch_continents(branches, complete_infrastructure, world=data['world'])
+    if tracker is not None:
+        tracker.event(iteration=iteration, phase='routing_finalize', method=method,
+                      event='update_branch_continents',
+                      before=before_update_continents, after=branch_count(branches),
+                      runtime_s=time.perf_counter() - time_update_continents)
 
+    time_drop_columns = time.perf_counter()
+    before_drop_columns = branch_count(branches)
     drop_columns = [c for c in ['minimal_total_costs', 'minimal_commodity'] if c in branches.columns]
     if drop_columns:
         branches.drop(drop_columns, axis=1, inplace=True)
+    if tracker is not None:
+        tracker.event(iteration=iteration, phase='routing_finalize', method=method,
+                      event='drop_temporary_columns',
+                      before=before_drop_columns, after=branch_count(branches),
+                      runtime_s=time.perf_counter() - time_drop_columns,
+                      details={'columns': drop_columns})
 
+    time_postprocessing = time.perf_counter()
+    before_postprocessing = branch_count(branches)
     branches = postprocessing_branches(branches, old_branches)
+    if tracker is not None:
+        tracker.event(iteration=iteration, phase='routing_finalize', method=method,
+                      event='postprocessing_branches',
+                      before=before_postprocessing, after=branch_count(branches),
+                      runtime_s=time.perf_counter() - time_postprocessing)
 
     time_assess_for_benchmark = time.perf_counter()
     final_solution, benchmark, benchmarks, benchmark_locations, branches \
