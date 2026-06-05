@@ -3,7 +3,7 @@ import time
 import pandas as pd
 
 from algorithm.methods_algorithm import create_new_branches_based_on_conversion, postprocessing_branches, assess_for_benchmark, \
-    update_branch_comparison_index
+    drop_branch_comparison_columns, remove_duplicate_branches, update_branch_comparison_index
 from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list
 from algorithm.methods_cost_approximations import calculate_cheapest_option_to_final_destination
 from algorithm.tracking import branch_count, get_tracker
@@ -129,13 +129,9 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
 
     # remove duplicates
     time_deduplicate = time.perf_counter()
-    conversion_branches['comparison_index'] = conversion_branches.apply(
-        lambda row: f"{row['current_node']}-{row['current_commodity']}",
-        axis=1)
-    conversion_branches = update_branch_comparison_index(conversion_branches)
     conversion_branches.sort_values(['current_total_costs'], inplace=True)
     before_dedup = branch_count(conversion_branches)
-    conversion_branches = conversion_branches.drop_duplicates(subset=['comparison_index'], keep='first')
+    conversion_branches = remove_duplicate_branches(conversion_branches)
     if tracker is not None:
         tracker.event(iteration=iteration, phase='conversion', method=method,
                       event='deduplicate_comparison_index',
@@ -178,6 +174,7 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
         local_benchmarks = pd.concat([local_benchmarks, new_benchmarks])
         local_benchmarks.sort_values(['current_total_costs'], inplace=True)
         local_benchmarks = local_benchmarks.drop_duplicates(subset=['comparison_index'], keep='first')
+        conversion_branches = drop_branch_comparison_columns(conversion_branches)
 
     if no_conversion_branches.empty & conversion_branches.empty:
         return pd.DataFrame(), final_solution, branch_number, benchmark, benchmarks, benchmark_locations, local_benchmarks
@@ -188,9 +185,8 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
 
     time_final_dedup = time.perf_counter()
     branches.sort_values(['current_total_costs'], inplace=True)
-    branches = update_branch_comparison_index(branches)
     before_final_dedup = branch_count(branches)
-    branches = branches.drop_duplicates(subset=['comparison_index'], keep='first')
+    branches = remove_duplicate_branches(branches)
     if tracker is not None:
         tracker.event(iteration=iteration, phase='conversion', method=method,
                       event='deduplicate_output',

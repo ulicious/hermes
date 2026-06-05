@@ -13,7 +13,7 @@ from algorithm.methods_routing import process_out_tolerance_branches, process_in
     process_in_tolerance_branches_low_memory, get_complete_infrastructure, create_branches_from_in_tolerance_locations
 from algorithm.methods_algorithm import postprocessing_branches, create_branches_based_on_commodities_at_start,\
     check_for_inaccessibility_and_at_destination, prepare_commodities, assess_for_benchmark, compare_to_local_benchmark,\
-    update_branch_comparison_index
+    drop_branch_comparison_columns, remove_duplicate_branches, update_branch_comparison_index
 from algorithm.script_benchmark import calculate_benchmark
 from algorithm.methods_geographic import update_branch_continents
 from algorithm.methods_conversion import apply_conversion
@@ -30,7 +30,7 @@ def _finalize_routing_branches(branches, old_branches, local_benchmarks, branch_
                                complete_infrastructure):
 
     if branches.empty:
-        return branches, local_benchmarks, branch_number, final_solution, benchmark, benchmarks, benchmark_locations
+        return drop_branch_comparison_columns(branches), local_benchmarks, branch_number, final_solution, benchmark, benchmarks, benchmark_locations
 
     tracker = data.get('tracker')
     iteration = data.get('current_iteration')
@@ -47,8 +47,7 @@ def _finalize_routing_branches(branches, old_branches, local_benchmarks, branch_
     branches = update_branch_comparison_index(branches, old_branches)
     branches.sort_values(['current_total_costs'], inplace=True)
     before_dedup = branch_count(branches)
-    branches = branches.groupby('comparison_index').first().reset_index()
-    branches.reset_index(drop=True, inplace=True)
+    branches = branches.drop_duplicates(subset=['comparison_index'], keep='first').reset_index(drop=True)
     if tracker is not None:
         tracker.event(iteration=iteration, phase='routing_finalize', method=method,
                       event='deduplicate_comparison_index', before=before_dedup,
@@ -72,7 +71,7 @@ def _finalize_routing_branches(branches, old_branches, local_benchmarks, branch_
                           runtime_s=time.perf_counter() - time_local_benchmark)
 
     if branches.empty:
-        return branches, local_benchmarks, branch_number, final_solution, benchmark, benchmarks, benchmark_locations
+        return drop_branch_comparison_columns(branches), local_benchmarks, branch_number, final_solution, benchmark, benchmarks, benchmark_locations
 
     time_update_local_benchmarks = time.perf_counter()
     before_local_benchmarks = branch_count(local_benchmarks)
@@ -81,6 +80,7 @@ def _finalize_routing_branches(branches, old_branches, local_benchmarks, branch_
     local_benchmarks = pd.concat([local_benchmarks, new_benchmarks])
     local_benchmarks.sort_values(['current_total_costs'], inplace=True)
     local_benchmarks = local_benchmarks.drop_duplicates(subset=['comparison_index'], keep='first')
+    branches = drop_branch_comparison_columns(branches)
     if tracker is not None:
         tracker.event(iteration=iteration, phase='routing_finalize', method=method,
                       event='update_local_benchmarks',
@@ -234,14 +234,10 @@ def _prepare_infrastructure_branches_for_routing(infrastructure_branches, comple
         if not preselection.empty:
             preselection['current_total_costs'] = preselection['current_total_costs'] * 1.00001
             preselection.index = ['Z' + str(i) for i in range(len(preselection.index))]
-            preselection['comparison_index'] = [preselection.at[ind, 'current_node']
-                                                + '-' + preselection.at[ind, 'current_commodity']
-                                                for ind in preselection.index]
 
             prepared_branches = pd.concat([prepared_branches, preselection])
-            prepared_branches = update_branch_comparison_index(prepared_branches)
             prepared_branches.sort_values(['current_total_costs'], inplace=True)
-            prepared_branches = prepared_branches.drop_duplicates(subset=['comparison_index'], keep='first')
+            prepared_branches = remove_duplicate_branches(prepared_branches)
 
             index_to_drop = [i for i in prepared_branches.index if 'Z' in str(i)]
             if index_to_drop:
@@ -901,9 +897,8 @@ def run_algorithm(args):
                 before_combine = sum(branch_count(df) for df in routing_results)
                 time_combine_routing = time.perf_counter()
                 branches = pd.concat(routing_results, ignore_index=False)
-                branches = update_branch_comparison_index(branches)
                 branches.sort_values(['current_total_costs'], inplace=True)
-                branches = branches.drop_duplicates(subset=['comparison_index'], keep='first')
+                branches = remove_duplicate_branches(branches)
                 tracker.event(iteration=iteration, phase='routing', method='run_algorithm',
                               event='combine_in_and_out_routing', before=before_combine,
                               after=branch_count(branches), removed=before_combine - branch_count(branches),
@@ -924,10 +919,7 @@ def run_algorithm(args):
             # branches['comparison_index'] = [branches.at[ind, 'current_node'] + '-'
             #                                  + branches.at[ind, 'current_commodity']
             #                                  for ind in branches.index]
-            branches = branches.groupby('comparison_index').first().reset_index()
-
-            # Reset the index if needed
-            branches.reset_index(drop=True, inplace=True)
+            branches = remove_duplicate_branches(branches, reset_index=True)
 
         # process all options
         if False and not branches.empty:

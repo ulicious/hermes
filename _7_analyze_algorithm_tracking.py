@@ -5,27 +5,38 @@ import pandas as pd
 import yaml
 
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-
-# Set the location number you want to inspect here.
-LOCATION = 12
-
-# Number of largest single filter/removal events shown in the text summary.
-TOP_EVENTS = 20
-
-
 def load_configuration():
     path_config = os.path.join(PROJECT_ROOT, '_1_algorithm_configuration.yaml')
     with open(path_config, encoding='utf-8') as file:
         return yaml.load(file, Loader=yaml.FullLoader)
 
 
-def get_tracking_paths(config_file, location):
+def get_default_tracking_folder(config_file):
     path_results = os.path.join(config_file['project_folder_path'], 'results')
-    path_tracking = os.path.join(path_results, 'algorithm_tracking')
-    path_input = os.path.join(path_tracking, f'{location}_tracking.jsonl')
-    path_output_base = os.path.join(path_tracking, f'{location}_tracking_analysis')
-    return path_tracking, path_input, path_output_base
+    return os.path.join(path_results, 'algorithm_tracking')
+
+
+def get_output_base(path_tracking_file):
+    filename = os.path.basename(path_tracking_file)
+    if filename.endswith('_tracking.jsonl'):
+        location = filename[:-len('_tracking.jsonl')]
+    else:
+        location = os.path.splitext(filename)[0]
+    path_folder = os.path.dirname(path_tracking_file)
+    return location, os.path.join(path_folder, f'{location}_tracking_analysis')
+
+
+def get_tracking_files(path_tracking):
+    if not os.path.exists(path_tracking):
+        raise FileNotFoundError(f'Tracking folder not found: {path_tracking}')
+
+    tracking_files = []
+    for filename in os.listdir(path_tracking):
+        if filename.endswith('_tracking.jsonl'):
+            tracking_files.append(os.path.join(path_tracking, filename))
+
+    tracking_files.sort(key=lambda path: os.path.basename(path))
+    return tracking_files
 
 
 def load_tracking_file(path_input):
@@ -258,11 +269,8 @@ def write_csv_outputs(path_output_base, events, iteration_summary, runtime_summa
                                       index=False, encoding='utf-8')
 
 
-def main():
-    config_file = load_configuration()
-    path_tracking, path_input, path_output_base = get_tracking_paths(config_file, LOCATION)
-    os.makedirs(path_tracking, exist_ok=True)
-
+def analyze_tracking_file(path_input):
+    location, path_output_base = get_output_base(path_input)
     events = load_tracking_file(path_input)
     location_summary = make_location_summary(events)
     iteration_summary = make_iteration_summary(events)
@@ -272,15 +280,57 @@ def main():
     chronological_measurements = make_chronological_measurements(events)
 
     path_text_output = path_output_base + '_summary.txt'
-    write_text_summary(path_text_output, LOCATION, events, location_summary,
+    write_text_summary(path_text_output, location, events, location_summary,
                        iteration_summary, runtime_summary, filter_summary,
                        largest_filter_events, creation_summary, chronological_measurements)
     write_csv_outputs(path_output_base, events, iteration_summary, runtime_summary,
                       filter_summary, largest_filter_events, creation_summary,
                       chronological_measurements)
+    return path_text_output
 
-    print(f'Wrote tracking analysis for location {LOCATION}:')
-    print(path_text_output)
+
+def main():
+    config_file = load_configuration()
+
+    path_tracking = TRACKING_FOLDER or get_default_tracking_folder(config_file)
+    path_tracking = os.path.abspath(path_tracking)
+    tracking_files = get_tracking_files(path_tracking)
+
+    if not tracking_files:
+        print(f'No tracking files found in: {path_tracking}')
+        return
+
+    print(f'Analyze {len(tracking_files)} tracking files from:')
+    print(path_tracking)
+
+    written_files = []
+    failed_files = []
+    for path_input in tracking_files:
+        try:
+            path_text_output = analyze_tracking_file(path_input)
+            written_files.append(path_text_output)
+            print(f'Wrote tracking analysis: {path_text_output}')
+        except Exception as error:
+            failed_files.append((path_input, error))
+            print(f'Failed tracking analysis: {path_input}')
+            print(f'  {error}')
+
+    print('')
+    print(f'Finished tracking analysis: {len(written_files)} written, {len(failed_files)} failed.')
+    if failed_files:
+        print('Failed files:')
+        for path_input, error in failed_files:
+            print(f'  {path_input}: {error}')
+
+
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+# Set the folder containing all *_tracking.jsonl files here.
+# If set to None, the configured project results/algorithm_tracking folder is used.
+TRACKING_FOLDER = None
+
+# Number of largest single filter/removal events shown in the text summary.
+TOP_EVENTS = 20
 
 
 if __name__ == '__main__':

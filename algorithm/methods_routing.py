@@ -13,7 +13,7 @@ from shapely.geometry import Point
 from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list
 from algorithm.methods_cost_approximations import calculate_cheapest_option_to_closest_infrastructure, \
     calculate_cheapest_option_to_final_destination
-from algorithm.methods_algorithm import update_branch_comparison_index
+from algorithm.methods_algorithm import remove_duplicate_branches
 from algorithm.tracking import branch_count, get_tracker
 
 import warnings
@@ -216,8 +216,6 @@ def create_branches_from_in_tolerance_locations(data, branches, complete_infrast
         'current_commodity_object': branches.loc[previous_branches, 'current_commodity_object'].tolist(),
     })
 
-    direct_branches['comparison_index'] \
-        = direct_branches['current_node'] + '-' + direct_branches['current_commodity']
     direct_branches['taken_route'] \
         = list(zip(direct_branches['starting_point'],
                    ['Road'] * len(direct_branches.index),
@@ -236,8 +234,7 @@ def create_branches_from_in_tolerance_locations(data, branches, complete_infrast
     direct_branches['longitude'] = complete_infrastructure.loc[nodes_list, 'longitude'].tolist()
 
     direct_branches.sort_values(['current_total_costs'], inplace=True)
-    direct_branches = update_branch_comparison_index(direct_branches)
-    direct_branches = direct_branches.drop_duplicates(subset=['comparison_index'], keep='first')
+    direct_branches = remove_duplicate_branches(direct_branches)
 
     final_destination = data['destination']['location']
 
@@ -702,17 +699,13 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
         road_options['distance_type'] = 'road'
 
-        # remove duplicates based on node/port, commodity and costs
-        road_options['comparison_index'] = [road_options.at[ind, 'current_node'] + '-'
-                                            + road_options.at[ind, 'current_commodity']
-                                            for ind in road_options.index]
-        road_options = update_branch_comparison_index(road_options, branches)
+        # remove duplicates based on node/port, commodity, future transport state and visited infrastructure
         road_options.sort_values(['current_total_costs'], inplace=True)
 
         if not use_minimal_distance:
             before_road_dedup = branch_count(road_options)
             time_road_dedup = time.perf_counter()
-            road_options = road_options.drop_duplicates(subset=['comparison_index'], keep='first')
+            road_options = remove_duplicate_branches(road_options, branches)
             if tracker is not None:
                 tracker.event(iteration=iteration, phase='routing_out', method=method,
                               event='deduplicate_road',
@@ -789,17 +782,13 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
         new_infrastructure_options['distance_type'] = 'new'
 
-        # remove duplicates based on node/port, commodity and costs
-        new_infrastructure_options['comparison_index'] = [new_infrastructure_options.at[ind, 'current_node'] + '-'
-                                                          + new_infrastructure_options.at[ind, 'current_commodity']
-                                                          for ind in new_infrastructure_options.index]
-        new_infrastructure_options = update_branch_comparison_index(new_infrastructure_options, branches)
+        # remove duplicates based on node/port, commodity, future transport state and visited infrastructure
         new_infrastructure_options.sort_values(['current_total_costs'], inplace=True)
 
         if not use_minimal_distance:
             before_new_dedup = branch_count(new_infrastructure_options)
             time_new_dedup = time.perf_counter()
-            new_infrastructure_options = new_infrastructure_options.drop_duplicates(subset=['comparison_index'], keep='first')
+            new_infrastructure_options = remove_duplicate_branches(new_infrastructure_options, branches)
             if tracker is not None:
                 tracker.event(iteration=iteration, phase='routing_out', method=method,
                               event='deduplicate_new_pipeline',
@@ -1014,7 +1003,6 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                     'current_infrastructure': current_index,
                     'current_total_costs': current_total_costs_distances.to_numpy(),
                     'specific_transportation_costs': transportation_costs.to_numpy(),
-                    'comparison_index': [i + '-' + current_commodity_object.get_name() for i in current_index],
                     'taken_route': [(start_infrastructure, mot, distances.at[i], i, efficiency.loc[i])
                                     for i in current_index],
                     'total_efficiency': [branches.loc[s, 'total_efficiency'] * e for e in efficiency],
@@ -1099,8 +1087,6 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                     'current_infrastructure': graph_id,
                     'current_total_costs': current_total_costs_distances.to_numpy(),
                     'specific_transportation_costs': transportation_costs,
-                    'comparison_index': list(map(lambda x: x + '-' + current_commodity_object.get_name(),
-                                                 current_index.tolist())),
                     'taken_route': [(start_infrastructure, mot, distances.at[i], i, 1) for i in current_index],
                     'total_efficiency': branches.loc[[s], 'total_efficiency'].tolist() * length_index,
                     'current_commodity': current_commodity_object.get_name(),
@@ -1136,9 +1122,8 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
         # remove duplicates
         time_deduplicate = time.perf_counter()
         all_infrastructures.sort_values(['current_total_costs'], inplace=True)
-        all_infrastructures = update_branch_comparison_index(all_infrastructures, branches)
         before_dedup = branch_count(all_infrastructures)
-        all_infrastructures = all_infrastructures.drop_duplicates(subset=['comparison_index'], keep='first')
+        all_infrastructures = remove_duplicate_branches(all_infrastructures, branches)
         if tracker is not None:
             tracker.event(iteration=iteration, phase='routing_in', method=method,
                           event='deduplicate_comparison_index',
@@ -1320,10 +1305,8 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
 
             current_infrastructure = 'Shipping'
 
-            comparison_index = []
             taken_route = []
             for i in distances.index:
-                comparison_index.append(i + '-' + current_commodity_object.get_name())
                 taken_route.append((start_infrastructure, mot, distances.at[i], i))
 
             total_efficiency = branches.at[o, 'total_efficiency'] * efficiency
@@ -1372,10 +1355,8 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
 
             total_efficiency = branches.at[o, 'total_efficiency']
 
-            comparison_index = []
             taken_route = []
             for i in distances.index:
-                comparison_index.append(i + '-' + current_commodity_object.get_name())
                 taken_route.append((start_infrastructure, mot, distances.at[i], i))
 
         infrastructure = pd.DataFrame(distances.values, index=distances.index, columns=['current_distance'])
@@ -1386,7 +1367,6 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
             return pd.DataFrame()
 
         infrastructure['current_total_costs'] = current_total_costs_distances
-        infrastructure['comparison_index'] = comparison_index
         infrastructure['taken_route'] = taken_route
 
         infrastructure['benchmark'] = benchmarks[current_commodity_object.get_name()]
@@ -1419,9 +1399,8 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
         # remove duplicates
         time_deduplicate = time.perf_counter()
         infrastructure.sort_values(['current_total_costs'], inplace=True)
-        infrastructure = update_branch_comparison_index(infrastructure, branches)
         before_dedup = branch_count(infrastructure)
-        infrastructure = infrastructure.drop_duplicates(subset=['comparison_index'], keep='first')
+        infrastructure = remove_duplicate_branches(infrastructure, branches)
         if tracker is not None:
             tracker.event(iteration=iteration, phase='routing_in', method=method,
                           event='deduplicate_comparison_index',
