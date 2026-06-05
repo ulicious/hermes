@@ -184,13 +184,14 @@ def update_branch_comparison_index(branches, previous_branches=None):
     branches.loc[:, '_road_new_allowed_next'] = road_new_allowed_next.tolist()
     branches.loc[:, '_shipping_used_state'] = shipping_used.tolist()
     branches.loc[:, '_used_infrastructure_key'] = used_infrastructure_key
-    branches.loc[:, 'comparison_index'] = list(zip(
+    comparison_index = list(zip(
         branches['current_node'].astype(str).tolist(),
         branches['current_commodity'].astype(str).tolist(),
         road_new_allowed_next.tolist(),
         shipping_used.tolist(),
         used_infrastructure_key,
     ))
+    branches.loc[:, 'comparison_index'] = pd.Series(comparison_index, index=branches.index, dtype=object)
     return branches
 
 
