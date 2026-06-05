@@ -982,21 +982,28 @@ def compare_to_local_benchmark(data, branch_number, branches, local_benchmarks):
     # use local benchmark to remove branches
     # todo genau nachprüfen was hier passiert weil local benchmark und branches unterschiedlich groß sein können
     #  und deshalb die frage ist was mit merge passiert
+    if branches.empty:
+        return drop_branch_comparison_columns(branches), branch_number, local_benchmarks
+
     branches = update_branch_comparison_index(branches)
-    merged_df = pd.merge(branches, local_benchmarks, on='comparison_index',
-                         suffixes=('_branch', '_benchmark'))
+    if not local_benchmarks.empty:
+        merged_df = pd.merge(branches, local_benchmarks, on='comparison_index',
+                             suffixes=('_branch', '_benchmark'))
 
-    # Filter rows where the costs in branches are not higher than local_benchmarks
-    filtered_df \
-        = merged_df[merged_df['current_total_costs_branch'] > merged_df['current_total_costs_benchmark']]
+        # Filter rows where the costs in branches are not higher than local_benchmarks
+        filtered_df \
+            = merged_df[merged_df['current_total_costs_branch'] > merged_df['current_total_costs_benchmark']]
 
-    # Get the indices of the rows to be removed from df1
-    indices_to_remove = filtered_df['comparison_index']
+        # Get the indices of the rows to be removed from df1
+        indices_to_remove = filtered_df['comparison_index']
 
-    # Remove rows from df1
-    branches = branches[~branches['comparison_index'].isin(indices_to_remove)]
+        # Remove rows from df1
+        branches = branches[~branches['comparison_index'].isin(indices_to_remove)]
 
     # add remaining branches to local benchmark
+    if branches.empty:
+        return drop_branch_comparison_columns(branches), branch_number, local_benchmarks
+
     new_benchmarks = branches[['comparison_index', 'current_total_costs', 'current_commodity', 'current_node']]
 
     # remove duplicates and keep only cheapest

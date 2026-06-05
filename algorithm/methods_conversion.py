@@ -139,25 +139,26 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
                       removed=before_dedup - branch_count(conversion_branches),
                       runtime_s=time.perf_counter() - time_deduplicate)
 
-    if iteration > 0:
+    if iteration > 0 and not conversion_branches.empty:
         # assessment via local benchmarks makes only sense as soon as iteration has moved at least once
 
         # use local benchmark to remove branches
         time_local_benchmark = time.perf_counter()
         conversion_branches = update_branch_comparison_index(conversion_branches)
         before_local_benchmark = branch_count(conversion_branches)
-        merged_df = pd.merge(conversion_branches, local_benchmarks, on='comparison_index',
-                             suffixes=('_branch', '_benchmark'))
+        if not local_benchmarks.empty:
+            merged_df = pd.merge(conversion_branches, local_benchmarks, on='comparison_index',
+                                 suffixes=('_branch', '_benchmark'))
 
-        # Filter rows where the costs in branches are higher than local_benchmarks
-        filtered_df \
-            = merged_df[merged_df['current_total_costs_branch'] > merged_df['current_total_costs_benchmark']]
+            # Filter rows where the costs in branches are higher than local_benchmarks
+            filtered_df \
+                = merged_df[merged_df['current_total_costs_branch'] > merged_df['current_total_costs_benchmark']]
 
-        # Get the indices of the rows to be removed from df1
-        indices_to_remove = filtered_df['comparison_index']
+            # Get the indices of the rows to be removed from df1
+            indices_to_remove = filtered_df['comparison_index']
 
-        # Remove rows from df1
-        conversion_branches = conversion_branches[~conversion_branches['comparison_index'].isin(indices_to_remove)]
+            # Remove rows from df1
+            conversion_branches = conversion_branches[~conversion_branches['comparison_index'].isin(indices_to_remove)]
         if tracker is not None:
             tracker.event(iteration=iteration, phase='conversion', method=method,
                           event='filter_local_benchmark',
@@ -166,14 +167,15 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
                           runtime_s=time.perf_counter() - time_local_benchmark)
 
         # add remaining branches to local benchmark
-        conversion_branches = update_branch_comparison_index(conversion_branches)
-        new_benchmarks = conversion_branches[['comparison_index', 'current_total_costs',
-                                              'current_commodity', 'current_node']]
+        if not conversion_branches.empty:
+            conversion_branches = update_branch_comparison_index(conversion_branches)
+            new_benchmarks = conversion_branches[['comparison_index', 'current_total_costs',
+                                                  'current_commodity', 'current_node']]
 
-        # remove duplicates and keep only cheapest
-        local_benchmarks = pd.concat([local_benchmarks, new_benchmarks])
-        local_benchmarks.sort_values(['current_total_costs'], inplace=True)
-        local_benchmarks = local_benchmarks.drop_duplicates(subset=['comparison_index'], keep='first')
+            # remove duplicates and keep only cheapest
+            local_benchmarks = pd.concat([local_benchmarks, new_benchmarks])
+            local_benchmarks.sort_values(['current_total_costs'], inplace=True)
+            local_benchmarks = local_benchmarks.drop_duplicates(subset=['comparison_index'], keep='first')
         conversion_branches = drop_branch_comparison_columns(conversion_branches)
 
     if no_conversion_branches.empty & conversion_branches.empty:
