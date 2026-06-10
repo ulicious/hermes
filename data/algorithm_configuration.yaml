@@ -1,0 +1,71 @@
+# general configuration
+project_folder_path: 'C:\Users\mt5285\Documents\Transportmodell\'  # full path of folder
+use_minimal_example: False
+use_low_storage: False  # distances are not precalculated --> lower storage demand but higher memory and time demand
+use_low_memory: False  # avoids parallel processing and large matrix implementations --> lower memory demand but higher time demand
+number_cores: 'max'  # set certain number or 'max'; will be set to 1 if use_low_memory = True
+use_provided_data: True  # if True, then will use data from GitHub
+location_data_name: 'location_data.csv'
+country_data_name: 'country_data.csv'
+available_commodity: ['Hydrogen_Gas', 'Hydrogen_Liquid', 'Ammonia', 'Methane_Gas','Methane_Liquid', 'FTF', 'Methanol', 'DBT', 'MCH']
+available_transport_means: ['Pipeline_Gas', 'New_Pipeline_Gas', 'Pipeline_Liquid', 'New_Pipeline_Liquid', 'Shipping', 'Road']
+create_mip_data: True
+
+## START LOCATIONS
+# parameters and assumptions for creating start locations
+start_locations_update_only_conversion_costs_and_efficiency: False  # if True, existing start locations are reused and only costs/efficiencies are updated
+number_locations: 50
+start_location_area_type: 'countries'  # 'rectangle' or 'countries'
+start_location_minimal_latitude: 49.4
+start_location_maximal_latitude: 50.2
+start_location_minimal_longitude: 5.7
+start_location_maximal_longitude: 6.6
+start_location_countries: {'Morocco': [], 'Algeria': []}  # dictionary with country: list of states (e.g. {'Germany: []} if all Germany. Used if start_location_area_type = 'countries'
+location_creation_type: 'uniform'  # uniformly distributed within boundaries or randomly distributed
+use_voronoi_cells: True  # based on locations, onshore area is divided into voronoi cells
+weight_hydrogen_costs_by_quantity: True  # if True then the value of the voronoi cell is based on the by quantity weighted costs per era 5 cell
+each_country_at_least_one_location: False  # makes sure that each country is represented at least by one start location
+create_locations_for_islands: True
+island_area_threshold: 1000  # kmÂ² --> 1000 will include around 240 islands (if not covered by the distributed islands)
+low_temp_heat_available_at_start: False
+mid_temp_heat_available_at_start: False
+high_temp_heat_available_at_start: False
+
+## INFRASTRUCTURE
+# parameters and assumptions for infrastructure processing
+infrastructure_enforce_update_of_data: False  # if certain infrastructure data has been calculated, we skip calculating again
+infrastructure_update_only_conversion_costs_and_efficiency: False  # set True if you only want to update infrastructure conversion costs and efficiencies
+infrastructure_minimal_latitude: 27
+infrastructure_maximal_latitude: 44
+infrastructure_minimal_longitude: -10
+infrastructure_maximal_longitude: 9
+low_temp_heat_available_at_ports: False
+mid_temp_heat_available_at_ports: False
+high_temp_heat_available_at_ports: False
+low_temp_heat_available_at_pipelines: False
+mid_temp_heat_available_at_pipelines: False
+high_temp_heat_available_at_pipelines: False
+minimal_distance_between_pipeline_connection_points: 50000  # [m] max distance between to connection points in pipeline (will be overwritten if minimal_example is applied)
+gap_distance: 20000  # [m] If distance between two networks is below gap_distance, then networks will be connected
+
+## DESTINATION
+# algorithm assumptions and settings + parameters and assumptions for start
+destination_type: 'country'  # defines the destination type: 'location' (single point) or 'country' (polygon / multipolygon)
+destination_location: [9.993682, 53.551086]  # [Longitude, Latitude]  # todo: check with single location
+destination_countries: {"Spain": []}  # dictionary with country: list of states. If complete country, leave list empty
+use_biggest_landmass: True  # True/False; some countries have several not connected shapes (USA: mainland, Alaska, hawaii, ...) --> choose biggest
+origin_continents: []  # [] if all continents are possible, else define continents like ['Europe']  # todo: auch bei Voronoi Zellen implementieren
+target_commodity: ['Hydrogen_Gas', 'Hydrogen_Liquid', 'Ammonia', 'Methane_Gas','Methane_Liquid', 'FTF', 'Methanol']
+tolerance_distance: 10000  # [m] distance which defines if transport is necessary to change between infrastructure
+to_final_destination_tolerance: 10000  # [m] distance which allows close infrastructure to be at solution
+max_length_new_segment: 100000  # [m] max distance for new pipelines
+max_length_road: math.inf  # [m] max distance for road transportation
+no_road_multiplier: 1.5  # distance * no_road_multiplier
+build_new_infrastructure: True
+H2_ready_infrastructure: True
+low_temp_heat_available_at_destination: False
+mid_temp_heat_available_at_destination: False
+high_temp_heat_available_at_destination: False
+consider_commodity_prices: True
+print_runtime_information: True
+print_benchmark_info: False

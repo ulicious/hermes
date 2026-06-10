@@ -57,7 +57,7 @@ First, choose a python interpreter and afterwards, install all requirements with
 ==============================
 
 The code expects a separate project folder referenced by ``project_folder_path``
-in ``_1_algorithm_configuration.yaml``. Template configuration files are stored
+in ``algorithm_configuration.yaml``. Template configuration files are stored
 in the repository's ``data/`` directory. Create the project folder before data
 processing by running:
 
@@ -68,7 +68,7 @@ processing by running:
 The setup script creates the required folder structure, copies configuration
 files into ``PROJECT FOLDER/config/``, copies provided input data into
 ``PROJECT FOLDER/raw_data/``, and writes the given project folder path into the
-copied ``_1_algorithm_configuration.yaml``. If the setup script is run again,
+copied ``algorithm_configuration.yaml``. If the setup script is run again,
 the copied files are overwritten.
 
 The setup script creates missing folders automatically. The resulting structure
@@ -78,8 +78,8 @@ should look as follows:
 
     PROJECT FOLDER/
         config/
-            _1_algorithm_configuration.yaml
-            _5_plotting_configuration.yaml
+            algorithm_configuration.yaml
+            plotting_configuration.yaml
             techno_economic_data_conversion.yaml
             techno_economic_data_transportation.yaml
         raw_data/
