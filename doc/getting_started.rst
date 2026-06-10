@@ -65,11 +65,11 @@ processing by running:
 
     python _0_setup_project_folder.py "PROJECT FOLDER"
 
-The setup script creates the required folder structure, copies configuration
-files into ``PROJECT FOLDER/config/``, copies provided input data into
-``PROJECT FOLDER/raw_data/``, and writes the given project folder path into the
-copied ``algorithm_configuration.yaml``. If the setup script is run again,
-the copied files are overwritten.
+The setup script creates the required folder structure, copies editable
+configuration files directly into ``PROJECT FOLDER/``, copies provided input
+data into ``PROJECT FOLDER/raw_data/``, and writes the given project folder path
+into the copied ``algorithm_configuration.yaml``. If the setup script is run
+again, the copied files are overwritten.
 
 The setup script creates missing folders automatically. The resulting structure
 should look as follows:
@@ -77,11 +77,10 @@ should look as follows:
 .. code-block:: none
 
     PROJECT FOLDER/
-        config/
-            algorithm_configuration.yaml
-            plotting_configuration.yaml
-            techno_economic_data_conversion.yaml
-            techno_economic_data_transportation.yaml
+        algorithm_configuration.yaml
+        plotting_configuration.yaml
+        techno_economic_data_conversion.yaml
+        techno_economic_data_transportation.yaml
         raw_data/
         processed_data/
             inner_infrastructure_distances/
@@ -101,6 +100,19 @@ If the project folder differs from the template default, pass it to later script
 with ``--project-folder "PROJECT FOLDER"`` or set the ``HERMES_PROJECT_FOLDER``
 environment variable.
 
+Only this central project-folder path is stored as a path in
+``algorithm_configuration.yaml``. All subfolders are derived by the code from
+that project folder. Raw-data file names are fixed by the code as well and are
+not configured in the YAML file. The standard raw input files copied by
+``_0_setup_project_folder.py`` include:
+
+- ``location_data.csv``
+- ``country_data.csv``
+- ``network_pipelines_gas.xlsx``
+- ``network_pipelines_oil.xlsx``
+- ``seaports.geojson``
+- ``water.zip``
+
 .. _usage:
 
 Usage
@@ -112,13 +124,18 @@ Adjust parameters if desired
 ============================
 
 Most settings are controlled through the configuration files in
-``PROJECT FOLDER/config/``. Before running the workflow, review at least:
+``PROJECT FOLDER/``. Before running the workflow, review at least:
 
 - ``project_folder_path`` and the destination settings
 - preprocessing and memory settings such as ``use_low_storage``, ``use_low_memory``, and ``create_mip_data``
 - start-location settings such as ``number_locations``, ``location_creation_type``, ``use_voronoi_cells``, and island handling
 - algorithm settings such as ``target_commodity``, distance tolerances, and infrastructure switches
-- the techno-economic YAML files in ``PROJECT FOLDER/config/``
+- the techno-economic YAML files in ``PROJECT FOLDER/``
+
+Settings such as raw-data file names or whether repository files should be
+copied are not part of ``algorithm_configuration.yaml``. File copying is the
+responsibility of ``_0_setup_project_folder.py``; later workflow steps only read
+from the project folder.
 
 For a full explanation of the available parameters, see
 :ref:`parameter_explanation_algorithm`, :ref:`parameter_explanation_conversion`,

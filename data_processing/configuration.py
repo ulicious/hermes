@@ -7,12 +7,13 @@ import yaml
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_CONFIG_FOLDER = os.path.join(PROJECT_ROOT, 'data')
-WORK_CONFIG_FOLDER_NAME = 'config'
 
 ALGORITHM_CONFIG = 'algorithm_configuration.yaml'
 PLOTTING_CONFIG = 'plotting_configuration.yaml'
 CONVERSION_CONFIG = 'techno_economic_data_conversion.yaml'
 TRANSPORTATION_CONFIG = 'techno_economic_data_transportation.yaml'
+LOCATION_DATA_FILE = 'location_data.csv'
+COUNTRY_DATA_FILE = 'country_data.csv'
 
 CONFIG_FILENAMES = [
     ALGORITHM_CONFIG,
@@ -22,7 +23,6 @@ CONFIG_FILENAMES = [
 ]
 
 PROJECT_STRUCTURE = [
-    WORK_CONFIG_FOLDER_NAME,
     'raw_data',
     'processed_data',
     os.path.join('processed_data', 'inner_infrastructure_distances'),
@@ -42,7 +42,7 @@ def load_yaml(path_file):
 
 
 def get_config_folder(project_folder_path):
-    return os.path.join(project_folder_path, WORK_CONFIG_FOLDER_NAME)
+    return project_folder_path
 
 
 def get_config_path(project_folder_path, filename):

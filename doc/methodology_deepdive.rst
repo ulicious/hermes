@@ -321,7 +321,7 @@ Applying Custom Data
 
 Custom data can be applied as well. Two cases are possible:
 
-- Custom data needs to be processed: Place your data in PROJECT FOLDER/raw_data/ and set the configuration use_provided_data to False (see :ref: general_configuration).
+- Custom data needs to be processed: Place your data in PROJECT FOLDER/raw_data/ using the expected file names, for example ``location_data.csv`` and ``country_data.csv`` for start-location costs and country fallback data. File names and subfolders are fixed by the code and are not configured in the YAML files.
 - Custom data was processed: Place your processed data into PROJECT FOLDER/processed_data/ and run the algorithm. If only parts of the data is custom, you can run the infrastructure processing and replace the respective files while keeping all other.
 
 Important: Your custom data (processed and not processed) needs to resemble the input and processed data of the model.

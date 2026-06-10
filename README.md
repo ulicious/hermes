@@ -15,7 +15,9 @@ A full documentary is provided here: https://hermes-h2.readthedocs.io/en/main/in
 
 Most of the data used are available in this repository, but can be found here as well: DOI: 10.5281/zenodo.15350282
 
-Configuration templates and provided input data are stored in the repository `data` folder. Before processing data, run `_0_setup_project_folder.py PROJECT_FOLDER` to create the working folder structure and copy these files into `PROJECT_FOLDER/config/` and `PROJECT_FOLDER/raw_data/`. The setup script writes the given project folder path into the copied `algorithm_configuration.yaml`. If the setup script is run again, copied files are overwritten.
+Configuration templates and provided input data are stored in the repository `data` folder. Before processing data, run `_0_setup_project_folder.py PROJECT_FOLDER` to create the working folder structure and copy the editable configuration files directly into `PROJECT_FOLDER/` and the raw input data into `PROJECT_FOLDER/raw_data/`. The setup script writes the given project folder path into the copied `algorithm_configuration.yaml`. If the setup script is run again, copied files are overwritten.
+
+Users should adjust `algorithm_configuration.yaml`, `plotting_configuration.yaml`, `techno_economic_data_conversion.yaml`, and `techno_economic_data_transportation.yaml` in `PROJECT_FOLDER/`. Only the central `project_folder_path` is stored as a path in `algorithm_configuration.yaml`. All subfolders and raw-data file names are fixed by the code and are derived from the project folder. For example, `location_data.csv` and `country_data.csv` are expected in `PROJECT_FOLDER/raw_data/` and are not configured in the YAML file.
 
 This data is the necessary input for the full model and the demo version. For the demo version, please indicate that in the general configuration at: use_minimal_example. This will only consider Europe.
 

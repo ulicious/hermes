@@ -4,9 +4,6 @@ use_minimal_example: False
 use_low_storage: False  # distances are not precalculated --> lower storage demand but higher memory and time demand
 use_low_memory: False  # avoids parallel processing and large matrix implementations --> lower memory demand but higher time demand
 number_cores: 'max'  # set certain number or 'max'; will be set to 1 if use_low_memory = True
-use_provided_data: True  # if True, then will use data from GitHub
-location_data_name: 'location_data.csv'
-country_data_name: 'country_data.csv'
 available_commodity: ['Hydrogen_Gas', 'Hydrogen_Liquid', 'Ammonia', 'Methane_Gas','Methane_Liquid', 'FTF', 'Methanol', 'DBT', 'MCH']
 available_transport_means: ['Pipeline_Gas', 'New_Pipeline_Gas', 'Pipeline_Liquid', 'New_Pipeline_Liquid', 'Shipping', 'Road']
 create_mip_data: True

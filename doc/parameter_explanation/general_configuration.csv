@@ -4,9 +4,6 @@ use_minimal_example;True / False;Reduces infrastructure data and random location
 use_low_storage;True / False;If True, precomputed inner-network distances are skipped to reduce storage demand;Usually increases routing time
 use_low_memory;True / False;If True, memory-saving code paths are used and parallel processing is reduced;Usually increases runtime
 number_cores;integer / 'max';Integer to indicate number of usable cores / threads. 'max' if maximum amount should be used;
-use_provided_data;True / False;If True, raw_data as provided will be used. If False, data needs to be placed in PROJECT_FOLDER/raw_data;
-location_data_name;string;CSV file in raw_data with location-specific production data used for start locations;
-country_data_name;string;CSV file in raw_data with country-level fallback values for techno-economic data;
 available_commodity;list;Indicates which commodities will be considered;
 available_transport_means;list;Indicates which transport means will be considered;
 infrastructure_enforce_update_of_data;True / False;If True, infrastructure will be processed again even though files have been created. Otherwise, only such infrastructure will be processed which has not been processed yet;Especially useful if infrastructure processing has been stopped/interrupted

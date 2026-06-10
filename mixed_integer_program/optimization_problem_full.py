@@ -773,7 +773,7 @@ target_commodities = config_file['target_commodity']
 path_overall_data = config_file['project_folder_path']
 path_raw_data = path_overall_data + 'raw_data/'
 path_processed_data = path_overall_data + 'processed_data/'
-techno_economic_path = path_overall_data + 'config/'
+techno_economic_path = path_overall_data
 
 # This switch selects which preprocessed static graph file is loaded.
 # `prepare_data` adds only the current start and destination edges.
