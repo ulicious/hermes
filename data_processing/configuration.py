@@ -61,6 +61,8 @@ def _template_config_path(filename):
 def _copy_file(source, target):
     os.makedirs(os.path.dirname(target), exist_ok=True)
     shutil.copy2(source, target)
+    if not os.path.exists(target):
+        raise FileNotFoundError('File copy failed:\n' + source + '\n->\n' + target)
 
 
 def _format_yaml_single_quoted(value):
@@ -124,7 +126,7 @@ def copy_provided_raw_data(project_folder_path):
     path_raw_data = os.path.join(project_folder_path, 'raw_data')
     os.makedirs(path_raw_data, exist_ok=True)
     for filename in os.listdir(TEMPLATE_CONFIG_FOLDER):
-        if filename in CONFIG_FILENAMES:
+        if filename in CONFIG_FILENAMES + LEGACY_CONFIG_FILENAMES:
             continue
         source = os.path.join(TEMPLATE_CONFIG_FOLDER, filename)
         if os.path.isfile(source):

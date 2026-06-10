@@ -1,7 +1,7 @@
 import argparse
 import os
 
-from data_processing.configuration import CONFIG_FILENAMES, setup_project_folder
+from data_processing.configuration import CONFIG_FILENAMES, get_config_path, setup_project_folder
 
 
 def main():
@@ -19,7 +19,10 @@ def main():
     print(project_folder)
     print('Configuration files copied to:')
     for filename in CONFIG_FILENAMES:
-        print(os.path.join(project_folder, filename))
+        path_file = get_config_path(project_folder, filename)
+        if not os.path.exists(path_file):
+            raise FileNotFoundError('Expected copied configuration file is missing: ' + path_file)
+        print(path_file)
     print('Raw data files were copied to:')
     print(os.path.join(project_folder, 'raw_data'))
 
