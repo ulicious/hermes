@@ -22,6 +22,11 @@ CONFIG_FILENAMES = [
     TRANSPORTATION_CONFIG,
 ]
 
+LEGACY_CONFIG_FILENAMES = [
+    '_1_algorithm_configuration.yaml',
+    '_5_plotting_configuration.yaml',
+]
+
 PROJECT_STRUCTURE = [
     'raw_data',
     'processed_data',
@@ -99,6 +104,22 @@ def copy_config_files(project_folder_path):
     return config_folder
 
 
+def remove_legacy_config_files(project_folder_path):
+    legacy_folders = [
+        project_folder_path,
+        os.path.join(project_folder_path, 'config'),
+    ]
+    legacy_filenames = CONFIG_FILENAMES + LEGACY_CONFIG_FILENAMES
+    removed_files = []
+    for folder in legacy_folders:
+        for filename in legacy_filenames:
+            path_file = os.path.join(folder, filename)
+            if os.path.exists(path_file):
+                os.remove(path_file)
+                removed_files.append(path_file)
+    return removed_files
+
+
 def copy_provided_raw_data(project_folder_path):
     path_raw_data = os.path.join(project_folder_path, 'raw_data')
     os.makedirs(path_raw_data, exist_ok=True)
@@ -113,6 +134,7 @@ def copy_provided_raw_data(project_folder_path):
 def setup_project_folder(project_folder_path):
     project_folder_path = os.path.abspath(project_folder_path)
     create_project_folder_structure(project_folder_path)
+    remove_legacy_config_files(project_folder_path)
     copy_config_files(project_folder_path)
     copy_provided_raw_data(project_folder_path)
     return project_folder_path

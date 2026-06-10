@@ -94,6 +94,11 @@ File copying is handled only by ``_0_setup_project_folder.py``. The preprocessin
 script ``_1_script_process_raw_data.py`` reads the files from the project folder
 and does not copy repository files.
 
+If an older project folder still contains numbered configuration files or a
+``config/`` subfolder from a previous layout, ``_0_setup_project_folder.py``
+removes the known obsolete configuration files and writes the current files
+directly into ``PROJECT FOLDER/``.
+
 The setup script writes the path towards ``PROJECT FOLDER`` into
 :ref:`general_configuration`.
 If the project folder differs from the template default, pass it to later scripts

@@ -1,6 +1,7 @@
 import argparse
+import os
 
-from data_processing.configuration import setup_project_folder
+from data_processing.configuration import CONFIG_FILENAMES, setup_project_folder
 
 
 def main():
@@ -16,7 +17,11 @@ def main():
     project_folder = setup_project_folder(args.project_folder)
     print('HERMES project folder prepared:')
     print(project_folder)
-    print('Configuration and raw data files were copied from the repository data folder.')
+    print('Configuration files copied to:')
+    for filename in CONFIG_FILENAMES:
+        print(os.path.join(project_folder, filename))
+    print('Raw data files were copied to:')
+    print(os.path.join(project_folder, 'raw_data'))
 
 
 if __name__ == '__main__':

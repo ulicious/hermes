@@ -19,6 +19,8 @@ Configuration templates and provided input data are stored in the repository `da
 
 Users should adjust `algorithm_configuration.yaml`, `plotting_configuration.yaml`, `techno_economic_data_conversion.yaml`, and `techno_economic_data_transportation.yaml` in `PROJECT_FOLDER/`. Only the central `project_folder_path` is stored as a path in `algorithm_configuration.yaml`. All subfolders and raw-data file names are fixed by the code and are derived from the project folder. For example, `location_data.csv` and `country_data.csv` are expected in `PROJECT_FOLDER/raw_data/` and are not configured in the YAML file.
 
+If an older project folder still contains numbered configuration files or a `config/` subfolder from a previous layout, `_0_setup_project_folder.py` removes the known obsolete configuration files and writes the current files directly into `PROJECT_FOLDER/`.
+
 This data is the necessary input for the full model and the demo version. For the demo version, please indicate that in the general configuration at: use_minimal_example. This will only consider Europe.
 
 Runtime of the data processing and calculation of the case study is around 1 hour on a normal desktop computer, but heavily depends on the system's hardware.
