@@ -53,7 +53,7 @@ def create_water_availability_polygon(BASE_DIR):
         raise FileNotFoundError(
             'Missing Natural Earth coastline shapefile:\n'
             + str(coastline_shp)
-            + '\nRun _1_script_process_raw_data.py once to download Natural Earth data into raw_data.'
+            + '\nRun _run_workflow.py with RUN_PROCESS_RAW_DATA = True once to download Natural Earth data into raw_data.'
         )
 
     gdb_paths = list(aqueduct_extract_dir.rglob("*.gdb"))

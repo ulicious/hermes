@@ -93,7 +93,7 @@ def read_natural_earth(path_raw_data=None, resolution='10m', category='cultural'
         raise FileNotFoundError(
             'Missing Natural Earth shapefile:\n'
             + shapefile_path
-            + '\nRun _1_script_process_raw_data.py once to download Natural Earth data into raw_data.'
+            + '\nRun _run_workflow.py with RUN_PROCESS_RAW_DATA = True once to download Natural Earth data into raw_data.'
         )
 
     return gpd.read_file(shapefile_path)

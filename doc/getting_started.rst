@@ -59,19 +59,21 @@ First, choose a python interpreter and afterwards, install all requirements with
 The code expects a separate project folder referenced by ``project_folder_path``
 in ``algorithm_configuration.yaml``. Template configuration files are stored
 in the repository's ``data/`` directory. Create the project folder before data
-processing by running:
+processing by using the central workflow runner. Open ``_run_workflow.py``, set
+``PROJECT_FOLDER`` to the desired working folder, set
+``RUN_SETUP_PROJECT_FOLDER = True``, and run:
 
 .. code-block:: none
 
-    python _0_setup_project_folder.py "PROJECT FOLDER"
+    python _run_workflow.py
 
-The setup script creates the required folder structure, copies editable
+The setup step creates the required folder structure, copies editable
 configuration files directly into ``PROJECT FOLDER/``, copies provided input
 data into ``PROJECT FOLDER/raw_data/``, and writes the given project folder path
-into the copied ``algorithm_configuration.yaml``. If the setup script is run
+into the copied ``algorithm_configuration.yaml``. If setup is run
 again, the copied files are overwritten.
 
-The setup script creates missing folders automatically. The resulting structure
+The setup step creates missing folders automatically. The resulting structure
 should look as follows:
 
 .. code-block:: none
@@ -90,26 +92,26 @@ should look as follows:
             location_results/
             plots/
 
-File copying is handled only by ``_0_setup_project_folder.py``. The preprocessing
-script ``_1_script_process_raw_data.py`` reads the files from the project folder
-and does not copy repository files.
+File copying is handled only by the setup step. The preprocessing step reads
+the files from the project folder and does not copy repository files.
 
 If an older project folder still contains numbered configuration files or a
-``config/`` subfolder from a previous layout, ``_0_setup_project_folder.py``
-removes the known obsolete configuration files and writes the current files
-directly into ``PROJECT FOLDER/``.
+``config/`` subfolder from a previous layout, the setup step removes the known
+obsolete configuration files and writes the current files directly into
+``PROJECT FOLDER/``.
 
-The setup script writes the path towards ``PROJECT FOLDER`` into
-:ref:`general_configuration`.
-If the project folder differs from the template default, pass it to later scripts
-with ``--project-folder "PROJECT FOLDER"`` or set the ``HERMES_PROJECT_FOLDER``
-environment variable.
+The setup step writes the path towards ``PROJECT FOLDER`` into
+:ref:`general_configuration`. The workflow scripts are stored in ``scripts/``
+and are normally started through ``_run_workflow.py``. Advanced users can still
+run a single step from the repository root via module call, for example
+``python -m scripts._3_main "PROJECT FOLDER"``. The ``HERMES_PROJECT_FOLDER``
+environment variable can also be used.
 
 Only this central project-folder path is stored as a path in
 ``algorithm_configuration.yaml``. All subfolders are derived by the code from
 that project folder. Raw-data file names are fixed by the code as well and are
 not configured in the YAML file. The standard raw input files copied by
-``_0_setup_project_folder.py`` include:
+the setup step include:
 
 - ``location_data.csv``
 - ``country_data.csv``
@@ -139,8 +141,8 @@ Most settings are controlled through the configuration files in
 
 Settings such as raw-data file names or whether repository files should be
 copied are not part of ``algorithm_configuration.yaml``. File copying is the
-responsibility of ``_0_setup_project_folder.py``; later workflow steps only read
-from the project folder.
+responsibility of the setup step; later workflow steps only read from the
+project folder.
 
 For a full explanation of the available parameters, see
 :ref:`parameter_explanation_algorithm`, :ref:`parameter_explanation_conversion`,
@@ -149,24 +151,42 @@ For a full explanation of the available parameters, see
 Run Python code
 ===============
 
-Run following python files consecutively:
+Recommended: use the central workflow runner. Open ``_run_workflow.py``, set
+``PROJECT_FOLDER`` and the ``RUN_*`` booleans at the top of the file, then run:
 
-0. ``_0_setup_project_folder.py "PROJECT FOLDER"``: creates the project folder structure and copies configuration and input files
-1. ``_1_script_process_raw_data.py --project-folder "PROJECT FOLDER"``: preprocesses raw infrastructure data, ports, network distances, continent connectivity, and conversion costs at infrastructure nodes
-2. ``_2_create_random_locations.py --project-folder "PROJECT FOLDER"``: creates start locations and attaches location-specific production and conversion data
-3. ``_3_main.py --project-folder "PROJECT FOLDER"``: runs the routing algorithm for all not-yet-processed start locations
+.. code-block:: none
+
+    python _run_workflow.py
+
+The runner starts the selected workflow scripts in order and passes the project
+folder automatically. It can start setup, raw-data processing, start-location
+creation, the main algorithm, MIP optimization, plot-data processing, plotting,
+and algorithm-tracking analysis. Keep only the desired ``RUN_*`` flags set to
+``True``.
+
+Advanced users can also run individual workflow modules from the repository
+root:
+
+0. ``python -m scripts._0_setup_project_folder "PROJECT FOLDER"``: creates the project folder structure and copies configuration and input files
+1. ``python -m scripts._1_script_process_raw_data "PROJECT FOLDER"``: preprocesses raw infrastructure data, ports, network distances, continent connectivity, and conversion costs at infrastructure nodes
+2. ``python -m scripts._2_create_random_locations "PROJECT FOLDER"``: creates start locations and attaches location-specific production and conversion data
+3. ``python -m scripts._3_main "PROJECT FOLDER"``: runs the routing algorithm for all not-yet-processed start locations
+4. ``python -m scripts._4_mip_optimization "PROJECT FOLDER"``: optionally runs the MIP validation workflow
+5. ``python -m scripts._5_process_plot_data "PROJECT FOLDER"``: optionally prepares result data for plotting
+6. ``python -m scripts._6_plot_results "PROJECT FOLDER"``: optionally creates plots
+7. ``python -m scripts._7_analyze_algorithm_tracking "PROJECT FOLDER"``: optionally analyzes algorithm tracking logs
 
 The algorithm creates one result file per start location in
 ``PROJECT FOLDER/results/location_results/``.
 
-If desired, ``_4_plot_results.py`` can be used afterwards to create standard plots
-in ``PROJECT FOLDER/results/plots/``.
+If desired, the plot-data processing and plotting steps can be used afterwards
+to create standard plots in ``PROJECT FOLDER/results/plots/``.
 
 Things to consider
 ==================
 
-- If techno-economic assumptions change, rerun ``_1_script_process_raw_data.py`` and
-  ``_2_create_random_locations.py``. The flags
+- If techno-economic assumptions change, rerun the raw-data processing and
+  start-location creation steps. The flags
   ``infrastructure_update_only_conversion_costs_and_efficiency`` and
   ``start_locations_update_only_conversion_costs_and_efficiency`` can be used
   to skip full infrastructure preprocessing or start-location regeneration.

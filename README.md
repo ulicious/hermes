@@ -15,11 +15,17 @@ A full documentary is provided here: https://hermes-h2.readthedocs.io/en/main/in
 
 Most of the data used are available in this repository, but can be found here as well: DOI: 10.5281/zenodo.15350282
 
-Configuration templates and provided input data are stored in the repository `data` folder. Before processing data, run `_0_setup_project_folder.py PROJECT_FOLDER` to create the working folder structure and copy the editable configuration files directly into `PROJECT_FOLDER/` and the raw input data into `PROJECT_FOLDER/raw_data/`. The setup script writes the given project folder path into the copied `algorithm_configuration.yaml`. If the setup script is run again, copied files are overwritten.
+Configuration templates and provided input data are stored in the repository `data` folder. Before processing data, use `_run_workflow.py` with `PROJECT_FOLDER` set and `RUN_SETUP_PROJECT_FOLDER = True` to create the working folder structure and copy the editable configuration files directly into `PROJECT_FOLDER/` and the raw input data into `PROJECT_FOLDER/raw_data/`. The setup step writes the given project folder path into the copied `algorithm_configuration.yaml`. If setup is run again, copied files are overwritten.
 
 Users should adjust `algorithm_configuration.yaml`, `plotting_configuration.yaml`, `techno_economic_data_conversion.yaml`, and `techno_economic_data_transportation.yaml` in `PROJECT_FOLDER/`. Only the central `project_folder_path` is stored as a path in `algorithm_configuration.yaml`. All subfolders and raw-data file names are fixed by the code and are derived from the project folder. For example, `location_data.csv` and `country_data.csv` are expected in `PROJECT_FOLDER/raw_data/` and are not configured in the YAML file.
 
-If an older project folder still contains numbered configuration files or a `config/` subfolder from a previous layout, `_0_setup_project_folder.py` removes the known obsolete configuration files and writes the current files directly into `PROJECT_FOLDER/`.
+If an older project folder still contains numbered configuration files or a `config/` subfolder from a previous layout, the setup step removes the known obsolete configuration files and writes the current files directly into `PROJECT_FOLDER/`.
+
+The workflow scripts are stored in `scripts/` and are normally started through `_run_workflow.py`. Advanced users can still run a single step from the repository root via module call, e.g. `python -m scripts._3_main PROJECT_FOLDER` or `python -m scripts._3_main --project-folder PROJECT_FOLDER`. The `HERMES_PROJECT_FOLDER` environment variable can also be used.
+
+For less experienced users, `_run_workflow.py` provides one central entry point. Set `PROJECT_FOLDER` and the `RUN_*` booleans at the top of the file, then run `python _run_workflow.py`. The script starts the selected workflow modules in order and passes the project folder automatically.
+
+The central runner can start setup, raw-data processing, start-location creation, the main algorithm, MIP optimization, plot-data processing, plotting, and algorithm-tracking analysis. Keep only the desired `RUN_*` flags set to `True`.
 
 This data is the necessary input for the full model and the demo version. For the demo version, please indicate that in the general configuration at: use_minimal_example. This will only consider Europe.
 

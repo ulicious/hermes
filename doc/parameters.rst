@@ -216,8 +216,8 @@ structure:
 
     PROJECT FOLDER/
         results/
-            location_results/  # per-location result csv files written by _3_main.py
-            plots/  # figures written by _4_plot_results.py
+            location_results/  # per-location result csv files written by scripts._3_main
+            plots/  # figures written by scripts._6_plot_results
 
 The ``process_results`` setting is used to name result sets that should be
 processed for later comparison workflows.

@@ -19,8 +19,9 @@ The current workflow is split into four main steps:
 
 The documentation in this folder reflects the current repository structure,
 the active YAML configuration files, and the parameter set used by the
-latest code in ``_1_script_process_raw_data.py``, ``_2_create_random_locations.py``,
-``_3_main.py``, and ``_4_plot_results.py``.
+latest code in ``scripts._1_script_process_raw_data``,
+``scripts._2_create_random_locations``, ``scripts._3_main``,
+``scripts._5_process_plot_data``, and ``scripts._6_plot_results``.
 
 Citation
 ========

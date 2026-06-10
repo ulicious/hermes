@@ -1,11 +1,16 @@
 import argparse
 import os
 
-from data_processing.configuration import CONFIG_FILENAMES, get_config_path, setup_project_folder
+from data_processing.configuration import (
+    CONFIG_FILENAMES,
+    get_config_path,
+    setup_project_folder,
+)
 
 
 def main():
     parser = argparse.ArgumentParser(
+        prog='python -m scripts._0_setup_project_folder',
         description='Create the HERMES project folder structure and copy input/config files.'
     )
     parser.add_argument(

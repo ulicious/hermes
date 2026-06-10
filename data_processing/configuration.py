@@ -143,13 +143,18 @@ def setup_project_folder(project_folder_path):
 
 
 def _project_folder_from_cli():
-    for index, argument in enumerate(sys.argv[1:]):
+    arguments = sys.argv[1:]
+    for index, argument in enumerate(arguments):
         if argument == '--project-folder':
             value_index = index + 2
             if value_index < len(sys.argv):
                 return sys.argv[value_index]
         if argument.startswith('--project-folder='):
             return argument.split('=', 1)[1]
+    for argument in arguments:
+        if argument.startswith('-'):
+            continue
+        return argument
     return None
 
 
@@ -165,6 +170,12 @@ def resolve_project_folder_path(project_folder_path=None):
     return template_config['project_folder_path']
 
 
+def _ensure_trailing_separator(path_folder):
+    if path_folder.endswith(os.sep):
+        return path_folder
+    return path_folder + os.sep
+
+
 def load_algorithm_configuration(project_folder_path=None):
     project_folder_path = resolve_project_folder_path(project_folder_path)
     config_path = os.path.join(get_config_folder(project_folder_path), ALGORITHM_CONFIG)
@@ -172,9 +183,11 @@ def load_algorithm_configuration(project_folder_path=None):
         raise FileNotFoundError(
             'Missing configuration file:\n'
             + config_path
-            + '\nRun _0_setup_project_folder.py with the desired project folder first.'
+            + '\nRun _run_workflow.py with RUN_SETUP_PROJECT_FOLDER = True first.'
         )
-    return load_yaml(config_path)
+    config_file = load_yaml(config_path)
+    config_file['project_folder_path'] = _ensure_trailing_separator(config_file['project_folder_path'])
+    return config_file
 
 
 def load_plotting_configuration(config_file=None):
