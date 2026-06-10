@@ -4,8 +4,6 @@ import random
 # from xxlimited import new
 
 import shapely.geometry
-import yaml
-
 import pandas as pd
 import geopandas as gpd
 import numpy as np

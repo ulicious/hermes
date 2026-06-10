@@ -130,7 +130,8 @@ Strike Prices
 
 Strike prices are defined per commodity in
 ``techno_economic_data_conversion.yaml``. They are used when
-``consider_commodity_prices`` is enabled in ``algorithm_configuration.yaml``.
+``consider_commodity_prices`` is enabled in ``_1_algorithm_configuration.yaml``.
+Both files are read from ``PROJECT FOLDER/config/`` during model runs.
 
 .. csv-table::
    :header-rows: 1
@@ -183,7 +184,8 @@ Transport assumptions and setting decide on availability of different transport 
         Self_Consumption: loss fraction per km
         Shipping_Speed: km/h
 
-The transport input data is stored in ``techno_economic_data_transportation.yaml``.
+The transport input data is stored in ``techno_economic_data_transportation.yaml``
+in ``PROJECT FOLDER/config/``.
 For each commodity, the file defines the admissible transport means together with
 the corresponding cost and loss assumptions.
 
@@ -199,8 +201,9 @@ the corresponding cost and loss assumptions.
 Plotting Parameter
 ###################
 
-``plotting_configuration.yaml`` controls which result folders are processed and
-how plots are styled. The current plotting workflow expects the following
+``_5_plotting_configuration.yaml`` in ``PROJECT FOLDER/config/`` controls which
+result folders are processed and how plots are styled. The current plotting
+workflow expects the following
 structure:
 
 .. code-block:: none

@@ -2,13 +2,13 @@ import os
 import time
 import multiprocessing
 import itertools
-import yaml
 import sys
 
 import numpy as np
 
 from algorithm.script_algorithm import run_algorithm
 from algorithm.methods_main import prepare_data_and_configuration_dictionary
+from data_processing.configuration import load_algorithm_configuration, load_technology_data
 
 # sys.path.append(os.path.dirname(os.getcwd()))
 
@@ -18,9 +18,7 @@ warnings.filterwarnings('ignore')
 if __name__ == '__main__':
 
     # load configuration file
-    path_config = os.getcwd() + '/_1_algorithm_configuration.yaml'
-    yaml_file = open(path_config)
-    config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
+    config_file = load_algorithm_configuration()
 
     data, configuration, location_data = prepare_data_and_configuration_dictionary(config_file)
 
@@ -46,11 +44,7 @@ if __name__ == '__main__':
         path_raw_data = path_project_folder + 'raw_data/'
         path_processed_data = path_project_folder + 'processed_data/'
 
-        yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
-        techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
-
-        yaml_file = open(path_raw_data + 'techno_economic_data_transportation.yaml')
-        techno_economic_data_transport = yaml.load(yaml_file, Loader=yaml.FullLoader)
+        techno_economic_data_conversion, techno_economic_data_transport = load_technology_data(config_file)
 
         print('Main configuration:')
 

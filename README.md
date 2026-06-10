@@ -15,6 +15,8 @@ A full documentary is provided here: https://hermes-h2.readthedocs.io/en/main/in
 
 Most of the data used are available in this repository, but can be found here as well: DOI: 10.5281/zenodo.15350282
 
+Configuration templates and provided input data are stored in the repository `data` folder. Before processing data, run `_0_setup_project_folder.py PROJECT_FOLDER` to create the working folder structure and copy these files into `PROJECT_FOLDER/config/` and `PROJECT_FOLDER/raw_data/`. The setup script writes the given project folder path into the copied `_1_algorithm_configuration.yaml`. If the setup script is run again, copied files are overwritten.
+
 This data is the necessary input for the full model and the demo version. For the demo version, please indicate that in the general configuration at: use_minimal_example. This will only consider Europe.
 
 Runtime of the data processing and calculation of the case study is around 1 hour on a normal desktop computer, but heavily depends on the system's hardware.

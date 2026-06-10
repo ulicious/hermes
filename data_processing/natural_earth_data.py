@@ -4,7 +4,8 @@ import urllib.request
 import zipfile
 
 import geopandas as gpd
-import yaml
+
+from data_processing.configuration import load_algorithm_configuration
 
 
 logger = logging.getLogger(__name__)
@@ -21,9 +22,7 @@ NATURAL_EARTH_DATASETS = [
 
 def get_configured_raw_data_path():
     """Return the configured raw_data folder for scripts that do not get it explicitly."""
-    path_config = os.path.join(os.getcwd(), '_1_algorithm_configuration.yaml')
-    with open(path_config, encoding='utf-8') as yaml_file:
-        config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
+    config_file = load_algorithm_configuration()
     return os.path.join(config_file['project_folder_path'], 'raw_data')
 
 

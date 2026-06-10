@@ -1,7 +1,6 @@
 import math
 import os
 import time
-import yaml
 
 import pandas as pd
 import numpy as np
@@ -12,6 +11,7 @@ from shapely.ops import nearest_points
 from algorithm.methods_geographic import calc_distance_single_to_single, calc_distance_list_to_single, update_branch_continents
 from algorithm.object_commodity import create_commodity_objects
 from algorithm.tracking import branch_count, get_tracker
+from data_processing.configuration import load_technology_data
 
 
 def _is_missing_state_value(value):
@@ -229,12 +229,7 @@ def prepare_commodities(config_file, location_data, data):
     @param dict data: dictionary with all common data
     @return: commodity objects and list with commodity names
     """
-    path_data = config_file['project_folder_path'] + 'raw_data/'
-    yaml_file = open(path_data + 'techno_economic_data_conversion.yaml')
-    techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
-
-    yaml_file = open(path_data + 'techno_economic_data_transportation.yaml')
-    techno_economic_data_transportation = yaml.load(yaml_file, Loader=yaml.FullLoader)
+    techno_economic_data_conversion, techno_economic_data_transportation = load_technology_data(config_file)
 
     conversion_costs_and_efficiencies = data['conversion_costs_and_efficiencies']
 

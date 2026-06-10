@@ -3,7 +3,6 @@ import multiprocessing
 import itertools
 
 import os
-import yaml
 import math
 import ast
 import shapely
@@ -15,16 +14,12 @@ from tqdm import tqdm
 from shapely.geometry import Point
 
 from plotting.helpers_plotting import load_data, get_complete_infrastructure, create_weighted_routing_data_script
+from data_processing.configuration import load_algorithm_configuration, load_plotting_configuration
 
 # script to process results
 # load configuration file
-path_config = os.getcwd() + '/_1_algorithm_configuration.yaml'
-yaml_file = open(path_config)
-config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
-
-path_config = os.getcwd() + '/_5_plotting_configuration.yaml'
-yaml_file = open(path_config)
-config_file_plotting = yaml.load(yaml_file, Loader=yaml.FullLoader)
+config_file = load_algorithm_configuration()
+config_file_plotting = load_plotting_configuration(config_file)
 
 path_production_costs = config_file['project_folder_path'] + 'start_destination_combinations.csv'
 production_costs = pd.read_csv(path_production_costs, index_col=0)

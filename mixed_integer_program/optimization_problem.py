@@ -1,5 +1,4 @@
 import itertools
-import yaml
 import os
 
 import pandas as pd
@@ -14,6 +13,7 @@ try:
     from .prepare_data import prepare_data, create_edges_from_distance_only, create_graph
 except ImportError:
     from prepare_data import prepare_data, create_edges_from_distance_only, create_graph
+from data_processing.configuration import load_algorithm_configuration, load_technology_data
 
 # noinspection PyTypeChecker
 class OptimizationGurobiModel:
@@ -323,11 +323,7 @@ class OptimizationGurobiModel:
         self.model_type = 'gurobi'
 
         # load techno economic data
-        yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
-        self.techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
-
-        yaml_file = open(path_raw_data + 'techno_economic_data_transportation.yaml')
-        self.techno_economic_data_transport = yaml.load(yaml_file, Loader=yaml.FullLoader)
+        self.techno_economic_data_conversion, self.techno_economic_data_transport = load_technology_data(config_file)
 
         self.BigM = 200
         self.eps = 0.001
@@ -422,14 +418,8 @@ class OptimizationGurobiModel:
             print(total_costs)
             print(new_costs)
 
-path_config = os.getcwd()
-path_config = os.path.dirname(path_config)
-
-yaml_file = open(path_config + '/_1_algorithm_configuration.yaml')
-config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
-
-yaml_file = open(path_config + '/data/techno_economic_data_transportation.yaml')
-techno_economic_data_transport = yaml.load(yaml_file, Loader=yaml.FullLoader)
+config_file = load_algorithm_configuration()
+_, techno_economic_data_transport = load_technology_data(config_file)
 
 all_commodities = config_file['available_commodity']
 start_commodities = config_file['available_commodity']

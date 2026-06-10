@@ -1,6 +1,5 @@
 import os
 import matplotlib.pyplot as plt
-import yaml
 import shapely
 
 import pandas as pd
@@ -19,6 +18,7 @@ from plotting.get_figures import get_number_figure, get_energy_carrier_figure, g
     get_tight_boundaries_for_start_locations_infrastructure_destination
 from plotting.helpers_plotting import load_data, get_complete_infrastructure, load_result, plot_comparison_plot, \
     match_routing_results
+from data_processing.configuration import load_algorithm_configuration, load_plotting_configuration
 
 
 def check_required_files_exist(required_files, purpose):
@@ -29,17 +29,13 @@ def check_required_files_exist(required_files, purpose):
 
 
 # get general configuration
-path_config = os.getcwd() + '/_1_algorithm_configuration.yaml'
-yaml_file = open(path_config)
-config_file_general = yaml.load(yaml_file, Loader=yaml.FullLoader)
+config_file_general = load_algorithm_configuration()
 
 path_data = config_file_general['project_folder_path'] + 'processed_data/'
 path_files = config_file_general['project_folder_path'] + 'results/processed_results/'
 path_saving = config_file_general['project_folder_path'] + 'results/plots/'
 
-path_config = os.getcwd() + '/_5_plotting_configuration.yaml'
-yaml_file = open(path_config)
-config_file_plotting = yaml.load(yaml_file, Loader=yaml.FullLoader)
+config_file_plotting = load_plotting_configuration(config_file_general)
 
 start_destination_combinations_file = os.path.join(config_file_general['project_folder_path'],
                                                    'start_destination_combinations.csv')

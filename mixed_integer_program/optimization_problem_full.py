@@ -1,5 +1,4 @@
 import itertools
-import yaml
 import os
 import logging
 import time
@@ -23,6 +22,7 @@ from mixed_integer_program.mip_data_helpers import (
     prepare_destination_mip_data,
 )
 from data_processing.helpers_geometry import get_destination
+from data_processing.configuration import load_algorithm_configuration, load_technology_data
 
 
 logger = logging.getLogger(__name__)
@@ -763,17 +763,8 @@ class OptimizationGurobiModel:
             print(total_costs)
             print(new_costs)
 
-path_config = os.getcwd()
-path_config = os.path.dirname(path_config)
-
-yaml_file = open(path_config + '/_1_algorithm_configuration.yaml')
-config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
-
-yaml_file = open(path_config + '/data/techno_economic_data_transportation.yaml')
-techno_economic_data_transport = yaml.load(yaml_file, Loader=yaml.FullLoader)
-
-yaml_file = open(path_config + '/data/techno_economic_data_conversion.yaml')
-techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
+config_file = load_algorithm_configuration()
+techno_economic_data_conversion, techno_economic_data_transport = load_technology_data(config_file)
 
 all_commodities = config_file['available_commodity']
 start_commodities = config_file['available_commodity']
@@ -782,7 +773,7 @@ target_commodities = config_file['target_commodity']
 path_overall_data = config_file['project_folder_path']
 path_raw_data = path_overall_data + 'raw_data/'
 path_processed_data = path_overall_data + 'processed_data/'
-techno_economic_path = path_config + '/data/'
+techno_economic_path = path_overall_data + 'config/'
 
 # This switch selects which preprocessed static graph file is loaded.
 # `prepare_data` adds only the current start and destination edges.

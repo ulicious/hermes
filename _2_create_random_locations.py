@@ -1,7 +1,6 @@
 import math
 import os
 import logging
-import yaml
 import shapely
 import multiprocessing
 
@@ -25,6 +24,7 @@ from data_processing.helpers_geometry import (
 from data_processing.natural_earth_data import load_states, load_world
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_start_locations, \
     check_if_location_is_valid, attach_feedstock_costs_and_interest_rate
+from data_processing.configuration import load_algorithm_configuration, load_technology_data
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -85,9 +85,7 @@ def calculate_start_mip_distances_like_heuristic(config_file, options, starting_
     return road_distances
 
 
-path_config = os.getcwd() + '/_1_algorithm_configuration.yaml'
-yaml_file = open(path_config)
-config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
+config_file = load_algorithm_configuration()
 
 path_raw_data = config_file['project_folder_path'] + 'raw_data/'
 
@@ -105,8 +103,7 @@ world_surface = Polygon([Point([-180, -90]), Point([-180, 90]), Point([180, 90])
 levelized_costs_location = pd.read_csv(path_raw_data + config_file['location_data_name'], index_col=0, sep=';')
 levelized_costs_country = pd.read_csv(path_raw_data + config_file['country_data_name'], index_col=0)
 
-yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
-techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
+techno_economic_data_conversion, _ = load_technology_data(config_file)
 
 if not start_locations_update_only_conversion_costs_and_efficiency:
 

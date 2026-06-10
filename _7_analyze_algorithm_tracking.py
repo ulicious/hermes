@@ -2,13 +2,12 @@ import json
 import os
 
 import pandas as pd
-import yaml
+
+from data_processing.configuration import load_algorithm_configuration
 
 
 def load_configuration():
-    path_config = os.path.join(PROJECT_ROOT, '_1_algorithm_configuration.yaml')
-    with open(path_config, encoding='utf-8') as file:
-        return yaml.load(file, Loader=yaml.FullLoader)
+    return load_algorithm_configuration()
 
 
 def get_default_tracking_folder(config_file):
@@ -283,9 +282,10 @@ def analyze_tracking_file(path_input):
     write_text_summary(path_text_output, location, events, location_summary,
                        iteration_summary, runtime_summary, filter_summary,
                        largest_filter_events, creation_summary, chronological_measurements)
-    write_csv_outputs(path_output_base, events, iteration_summary, runtime_summary,
-                      filter_summary, largest_filter_events, creation_summary,
-                      chronological_measurements)
+    if False:
+        write_csv_outputs(path_output_base, events, iteration_summary, runtime_summary,
+                          filter_summary, largest_filter_events, creation_summary,
+                          chronological_measurements)
     return path_text_output
 
 

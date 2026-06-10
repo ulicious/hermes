@@ -5,9 +5,9 @@ import ast
 import math
 
 import pandas as pd
-import yaml
 
 from data_processing.helpers_geometry import get_destination
+from data_processing.configuration import load_algorithm_configuration, load_technology_data
 from mixed_integer_program.mip_data_helpers import (
     load_minimal_mip_case,
     load_static_mip_graph,
@@ -19,9 +19,6 @@ from mixed_integer_program.optimization_problem_full_fast import FastOptimizatio
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('gurobipy').setLevel(logging.WARNING)
-
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-
 
 def initialize_mip_incumbent_history_file(config_file):
     """Create one shared incumbent history file for the current optimization run."""
@@ -203,12 +200,8 @@ def configure_mip_logging(show_mip_logs=True):
 
 def load_configuration_and_technology_data():
     """Load settings and techno-economic assumptions used by every MIP run."""
-    with open(os.path.join(PROJECT_ROOT, '_1_algorithm_configuration.yaml')) as yaml_file:
-        config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
-    with open(os.path.join(PROJECT_ROOT, 'data', 'techno_economic_data_transportation.yaml')) as yaml_file:
-        transport_data = yaml.load(yaml_file, Loader=yaml.FullLoader)
-    with open(os.path.join(PROJECT_ROOT, 'data', 'techno_economic_data_conversion.yaml')) as yaml_file:
-        conversion_data = yaml.load(yaml_file, Loader=yaml.FullLoader)
+    config_file = load_algorithm_configuration()
+    conversion_data, transport_data = load_technology_data(config_file)
     return config_file, conversion_data, transport_data
 
 

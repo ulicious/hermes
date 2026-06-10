@@ -3,12 +3,12 @@ import geopandas as gpd
 import shapely
 import matplotlib.pyplot as plt
 from shapely.geometry import Point, LineString, Polygon, MultiLineString
-import yaml
 import os
 import random
 
 from data_processing.helpers_geometry import get_boundaries_from_config
 from data_processing.natural_earth_data import load_world_lowres
+from data_processing.configuration import load_algorithm_configuration
 
 
 def _read_csv_or_empty(path, columns=None, index_col=0):
@@ -285,9 +285,7 @@ def plot_unprocessed_pipelines():
     plt.show()
 
 # load configuration file
-path_config = os.path.dirname(os.getcwd()) + '/_1_algorithm_configuration.yaml'
-yaml_file = open(path_config)
-config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
+config_file = load_algorithm_configuration()
 
 path_processed_data = config_file['project_folder_path'] + 'processed_data/'
 

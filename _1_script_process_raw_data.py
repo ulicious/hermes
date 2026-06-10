@@ -1,7 +1,5 @@
-import yaml
 import multiprocessing
 import os
-import shutil
 import logging
 import shapely
 import time
@@ -29,6 +27,10 @@ from data_processing.helpers_continent_connections import (
     save_continent_connectivity,
 )
 from data_processing.natural_earth_data import download_natural_earth_data
+from data_processing.configuration import (
+    load_algorithm_configuration,
+    load_technology_data,
+)
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -106,9 +108,7 @@ def ensure_processed_infrastructure_files(path_processed):
 
 
 # load configuration file
-path_config = os.getcwd() + '/_1_algorithm_configuration.yaml'
-yaml_file = open(path_config)
-config_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
+config_file = load_algorithm_configuration()
 
 use_minimal_example = config_file['use_minimal_example']
 use_low_storage = config_file['use_low_storage']
@@ -131,39 +131,8 @@ path_overall_data = config_file['project_folder_path']
 path_raw_data = path_overall_data + 'raw_data/'
 path_processed_data = path_overall_data + 'processed_data/'
 
-# check if project folders exists and create if not
-if not os.path.exists(path_overall_data):
-    os.mkdir(path_overall_data)
-
-if not os.path.exists(path_raw_data):
-    os.mkdir(path_raw_data)
-
-if not os.path.exists(path_processed_data):
-    os.mkdir(path_processed_data)
-
-if not os.path.exists(path_overall_data + 'results/'):
-    os.mkdir(path_overall_data + 'results/')
-
-if not os.path.exists(path_overall_data + 'results/location_results/'):
-    os.mkdir(path_overall_data + 'results/location_results/')
-
-if not os.path.exists(path_overall_data + 'results/plots/'):
-    os.mkdir(path_overall_data + 'results/plots/')
-
-# move raw data from this repository to project folder raw data if set in configuration
-if config_file['use_provided_data']:
-    file_directory = os.getcwd() + '/data/'
-    files = os.listdir(file_directory)
-    for f in files:
-        shutil.copy(file_directory + f, path_raw_data)
-
-# load techno-economic data transport
-yaml_file = open(path_raw_data + 'techno_economic_data_transportation.yaml')
-techno_economic_data_transport = yaml.load(yaml_file, Loader=yaml.FullLoader)
-
-# load techno economic data
-yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
-techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
+# load techno-economic data
+techno_economic_data_conversion, techno_economic_data_transport = load_technology_data(config_file)
 
 files_in_folder = os.listdir(path_processed_data)
 ensure_processed_infrastructure_files(path_processed_data)

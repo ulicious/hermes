@@ -2,7 +2,6 @@ import itertools
 import time
 import math
 import gc
-import yaml
 
 import pandas as pd
 
@@ -19,6 +18,7 @@ from algorithm.methods_geographic import update_branch_continents
 from algorithm.methods_conversion import apply_conversion
 from algorithm.methods_cost_approximations import calculate_minimal_costs_conversion_for_oil_and_gas_infrastructure
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure, calculate_conversion_costs_and_efficiencies_for_all_combinations
+from data_processing.configuration import load_technology_data
 from algorithm.tracking import AlgorithmTracker, branch_count
 
 import logging
@@ -315,9 +315,7 @@ def run_algorithm(args):
     data['minimal_distances'] = minimal_distances
 
     # attach conversion costs and efficiencies to start
-    path_techno_economic_data = config_file['project_folder_path'] + 'raw_data/'
-    yaml_file = open(path_techno_economic_data + 'techno_economic_data_conversion.yaml')
-    techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
+    techno_economic_data_conversion, _ = load_technology_data(config_file)
 
     conversions_location_data \
         = attach_conversion_costs_and_efficiency_to_infrastructure(location_data, config_file,

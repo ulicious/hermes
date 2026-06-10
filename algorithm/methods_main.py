@@ -1,5 +1,4 @@
 import math
-import yaml
 import shapely
 import json
 import os
@@ -14,6 +13,7 @@ from shapely.geometry import MultiLineString, Point
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure
 from data_processing.helpers_geometry import get_destination_information
 from data_processing.natural_earth_data import load_world
+from data_processing.configuration import load_technology_data
 
 
 def _read_csv_or_empty(path, columns=None, index_col=0, dtype=None):
@@ -121,11 +121,7 @@ def prepare_data_and_configuration_dictionary(config_file):
 
     conversion_costs_and_efficiencies = pd.read_csv(path_processed_data + 'conversion_costs_and_efficiency.csv', index_col=0)
 
-    yaml_file = open(path_raw_data + 'techno_economic_data_conversion.yaml')
-    techno_economic_data_conversion = yaml.load(yaml_file, Loader=yaml.FullLoader)
-
-    yaml_file = open(path_raw_data + 'techno_economic_data_transportation.yaml')
-    techno_economic_data_transport = yaml.load(yaml_file, Loader=yaml.FullLoader)
+    techno_economic_data_conversion, techno_economic_data_transport = load_technology_data(config_file)
 
     coastlines = gpd.GeoDataFrame(coastlines, geometry=coastlines['geometry'].apply(loads))
     coastlines = coastlines.sort_index()

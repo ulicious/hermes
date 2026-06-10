@@ -57,12 +57,31 @@ First, choose a python interpreter and afterwards, install all requirements with
 ==============================
 
 The code expects a separate project folder referenced by ``project_folder_path``
-in ``algorithm_configuration.yaml``. HERMES creates missing folders automatically,
-but the resulting structure should look as follows:
+in ``_1_algorithm_configuration.yaml``. Template configuration files are stored
+in the repository's ``data/`` directory. Create the project folder before data
+processing by running:
+
+.. code-block:: none
+
+    python _0_setup_project_folder.py "PROJECT FOLDER"
+
+The setup script creates the required folder structure, copies configuration
+files into ``PROJECT FOLDER/config/``, copies provided input data into
+``PROJECT FOLDER/raw_data/``, and writes the given project folder path into the
+copied ``_1_algorithm_configuration.yaml``. If the setup script is run again,
+the copied files are overwritten.
+
+The setup script creates missing folders automatically. The resulting structure
+should look as follows:
 
 .. code-block:: none
 
     PROJECT FOLDER/
+        config/
+            _1_algorithm_configuration.yaml
+            _5_plotting_configuration.yaml
+            techno_economic_data_conversion.yaml
+            techno_economic_data_transportation.yaml
         raw_data/
         processed_data/
             inner_infrastructure_distances/
@@ -72,10 +91,15 @@ but the resulting structure should look as follows:
             location_results/
             plots/
 
-If ``use_provided_data`` is set to ``True``, the files from the repository's
-``data/`` directory are copied into ``PROJECT FOLDER/raw_data/`` during preprocessing.
+File copying is handled only by ``_0_setup_project_folder.py``. The preprocessing
+script ``_1_script_process_raw_data.py`` reads the files from the project folder
+and does not copy repository files.
 
-Please indicate the path towards ``PROJECT FOLDER`` in :ref:`general_configuration`.
+The setup script writes the path towards ``PROJECT FOLDER`` into
+:ref:`general_configuration`.
+If the project folder differs from the template default, pass it to later scripts
+with ``--project-folder "PROJECT FOLDER"`` or set the ``HERMES_PROJECT_FOLDER``
+environment variable.
 
 .. _usage:
 
@@ -87,14 +111,14 @@ The following article will describe the necessary steps to run the HERMES model
 Adjust parameters if desired
 ============================
 
-Most settings are controlled through ``algorithm_configuration.yaml`` and
-``plotting_configuration.yaml``. Before running the workflow, review at least:
+Most settings are controlled through the configuration files in
+``PROJECT FOLDER/config/``. Before running the workflow, review at least:
 
 - ``project_folder_path`` and the destination settings
 - preprocessing and memory settings such as ``use_low_storage``, ``use_low_memory``, and ``create_mip_data``
 - start-location settings such as ``number_locations``, ``location_creation_type``, ``use_voronoi_cells``, and island handling
 - algorithm settings such as ``target_commodity``, distance tolerances, and infrastructure switches
-- the techno-economic YAML files in ``data/`` or in ``PROJECT FOLDER/raw_data/``
+- the techno-economic YAML files in ``PROJECT FOLDER/config/``
 
 For a full explanation of the available parameters, see
 :ref:`parameter_explanation_algorithm`, :ref:`parameter_explanation_conversion`,
@@ -105,9 +129,10 @@ Run Python code
 
 Run following python files consecutively:
 
-1. ``_1_script_process_raw_data.py``: preprocesses raw infrastructure data, ports, network distances, continent connectivity, and conversion costs at infrastructure nodes
-2. ``_2_create_random_locations.py``: creates start locations and attaches location-specific production and conversion data
-3. ``_3_main.py``: runs the routing algorithm for all not-yet-processed start locations
+0. ``_0_setup_project_folder.py "PROJECT FOLDER"``: creates the project folder structure and copies configuration and input files
+1. ``_1_script_process_raw_data.py --project-folder "PROJECT FOLDER"``: preprocesses raw infrastructure data, ports, network distances, continent connectivity, and conversion costs at infrastructure nodes
+2. ``_2_create_random_locations.py --project-folder "PROJECT FOLDER"``: creates start locations and attaches location-specific production and conversion data
+3. ``_3_main.py --project-folder "PROJECT FOLDER"``: runs the routing algorithm for all not-yet-processed start locations
 
 The algorithm creates one result file per start location in
 ``PROJECT FOLDER/results/location_results/``.
