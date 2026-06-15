@@ -65,6 +65,149 @@ def _filter_shipping_infrastructure_by_destination_continents(shipping_infrastru
     return shipping_infrastructure[shipping_infrastructure['continent'].isin(target_continents)]
 
 
+def _is_valid_continent(continent):
+    return continent is not None and pd.notna(continent) and str(continent).lower() != 'nan'
+
+
+def _get_reachable_continents(continent, data):
+    if not _is_valid_continent(continent):
+        return None
+
+    continent = str(continent)
+    continent_connections = data.get('continent_connections', {})
+    reachable_continents = continent_connections.get('reachable_continents', {})
+    return set(reachable_continents.get(continent, [continent]))
+
+
+def _get_branch_reachable_continent_union(branches, data):
+    if 'current_continent' not in branches.columns:
+        return None
+
+    reachable_union = set()
+    for continent in branches['current_continent'].dropna().unique():
+        reachable = _get_reachable_continents(continent, data)
+        if reachable is not None:
+            reachable_union.update(reachable)
+
+    if not reachable_union:
+        return None
+    return reachable_union
+
+
+def _filter_infrastructure_by_reachable_continents(infrastructure_index, complete_infrastructure, branches, data):
+    if 'continent' not in complete_infrastructure.columns:
+        return infrastructure_index
+
+    reachable_union = _get_branch_reachable_continent_union(branches, data)
+    if reachable_union is None:
+        return infrastructure_index
+
+    infrastructure_continents = complete_infrastructure.loc[infrastructure_index, 'continent']
+    keep_mask = (
+        infrastructure_continents.apply(lambda value: not _is_valid_continent(value))
+        | infrastructure_continents.astype(str).isin(reachable_union)
+    )
+    return list(pd.Index(infrastructure_index)[keep_mask.to_numpy()])
+
+
+def _filter_infrastructure_by_reachable_set(infrastructure_index, complete_infrastructure, reachable_continents):
+    if reachable_continents is None or 'continent' not in complete_infrastructure.columns:
+        return list(infrastructure_index)
+
+    infrastructure_continents = complete_infrastructure.loc[infrastructure_index, 'continent']
+    keep_mask = (
+        infrastructure_continents.apply(lambda value: not _is_valid_continent(value))
+        | infrastructure_continents.astype(str).isin(reachable_continents)
+    )
+    return list(pd.Index(infrastructure_index)[keep_mask.to_numpy()])
+
+
+def _build_reachable_distance_blocks(complete_infrastructure, infrastructure_index, branches_no_duplicates,
+                                     branches, data):
+    if (
+        'continent' not in complete_infrastructure.columns
+        or 'current_continent' not in branches.columns
+        or branches_no_duplicates.empty
+    ):
+        distances = calc_distance_list_to_list(
+            complete_infrastructure.loc[infrastructure_index, 'latitude'],
+            complete_infrastructure.loc[infrastructure_index, 'longitude'],
+            branches_no_duplicates['latitude'],
+            branches_no_duplicates['longitude'])
+        return [{
+            'row_index': pd.Index(infrastructure_index),
+            'column_nodes': pd.Index(branches_no_duplicates['current_node']),
+            'values': np.asarray(distances).transpose(),
+        }]
+
+    branch_continents = branches_no_duplicates['current_continent']
+    grouped_nodes = {}
+    for row_index, continent in branch_continents.items():
+        reachable = _get_reachable_continents(continent, data)
+        if reachable is None:
+            reachable_key = None
+        else:
+            reachable_key = tuple(sorted(reachable))
+        grouped_nodes.setdefault(reachable_key, []).append(row_index)
+
+    distance_blocks = []
+    for reachable_key, branch_indices in grouped_nodes.items():
+        branch_block = branches_no_duplicates.loc[branch_indices]
+        reachable = set(reachable_key) if reachable_key is not None else None
+        infrastructure_block_index = _filter_infrastructure_by_reachable_set(
+            infrastructure_index, complete_infrastructure, reachable)
+        if len(infrastructure_block_index) == 0 or branch_block.empty:
+            continue
+
+        distances = calc_distance_list_to_list(
+            complete_infrastructure.loc[infrastructure_block_index, 'latitude'],
+            complete_infrastructure.loc[infrastructure_block_index, 'longitude'],
+            branch_block['latitude'],
+            branch_block['longitude'])
+        distance_blocks.append({
+            'row_index': pd.Index(infrastructure_block_index),
+            'column_nodes': pd.Index(branch_block['current_node']),
+            'values': np.asarray(distances).transpose(),
+        })
+
+    return distance_blocks
+
+
+def _apply_reachable_continent_mask(mask, row_index, column_index, branches, complete_infrastructure, data):
+    if (
+        mask.size == 0
+        or 'current_continent' not in branches.columns
+        or 'continent' not in complete_infrastructure.columns
+    ):
+        return 0
+
+    row_index = pd.Index(row_index)
+    column_index = pd.Index(column_index)
+    row_continents = complete_infrastructure.reindex(row_index)['continent']
+    if row_continents.empty:
+        return 0
+
+    before = int(mask.sum())
+    branch_continents = branches.reindex(column_index)['current_continent']
+
+    for continent in branch_continents.dropna().unique():
+        reachable = _get_reachable_continents(continent, data)
+        if reachable is None:
+            continue
+
+        affected_columns = np.flatnonzero(branch_continents.astype(str).to_numpy() == str(continent))
+        if len(affected_columns) == 0:
+            continue
+
+        allowed_rows = (
+            row_continents.apply(lambda value: not _is_valid_continent(value))
+            | row_continents.astype(str).isin(reachable)
+        ).to_numpy()
+        mask[np.ix_(~allowed_rows, affected_columns)] = False
+
+    return before - int(mask.sum())
+
+
 def _remove_visited_options_from_mask(mask, row_index, column_index, visited_infrastructure):
     row_lookup = pd.Index(row_index)
     column_lookup = {branch: position for position, branch in enumerate(column_index)}
@@ -315,24 +458,36 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
         if limitation == 'no_pipeline_gas':
             reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'PG' not in i]
+            if not use_minimal_distance:
+                reduced_infrastructure_index = _filter_infrastructure_by_reachable_continents(
+                    reduced_infrastructure_index, complete_infrastructure, branches, data)
             distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                    complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                    branches['latitude'], branches['longitude'])
 
         elif limitation == 'no_pipeline_liquid':
             reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'PL' not in i]
+            if not use_minimal_distance:
+                reduced_infrastructure_index = _filter_infrastructure_by_reachable_continents(
+                    reduced_infrastructure_index, complete_infrastructure, branches, data)
             distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                    complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                    branches['latitude'], branches['longitude'])
 
         elif limitation == 'no_pipelines':
             reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'H' in i]
+            if not use_minimal_distance:
+                reduced_infrastructure_index = _filter_infrastructure_by_reachable_continents(
+                    reduced_infrastructure_index, complete_infrastructure, branches, data)
             distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                    complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                    branches['latitude'], branches['longitude'])
 
         elif limitation == 'only_in_tolerance':  # these will immediately terminate since destinations are in tolerance
             reduced_infrastructure_index = in_tolerance_to_destination_infrastructure
+            if not use_minimal_distance:
+                reduced_infrastructure_index = _filter_infrastructure_by_reachable_continents(
+                    reduced_infrastructure_index, complete_infrastructure, branches, data)
             distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
                                                    complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                    branches['latitude'], branches['longitude'])
@@ -340,7 +495,11 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
         else:  # don't limit infrastructure at all
             reduced_infrastructure_index = complete_infrastructure.index
-            distances = calc_distance_list_to_list(complete_infrastructure['latitude'], complete_infrastructure['longitude'],
+            if not use_minimal_distance:
+                reduced_infrastructure_index = _filter_infrastructure_by_reachable_continents(
+                    reduced_infrastructure_index, complete_infrastructure, branches, data)
+            distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
+                                                   complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                    branches['latitude'], branches['longitude'])
 
         road_transportation_costs = {}
@@ -407,6 +566,12 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 new_infrastructure_mask[:, branch_position] \
                     = distance_values[:, branch_position] <= max_length_new_segment / no_road_multiplier
 
+        if not use_minimal_distance:
+            _apply_reachable_continent_mask(road_mask, reduced_infrastructure_index, branches.index,
+                                            branches, complete_infrastructure, data)
+            _apply_reachable_continent_mask(new_infrastructure_mask, reduced_infrastructure_index, branches.index,
+                                            branches, complete_infrastructure, data)
+
         road_transportation_costs = pd.Series(road_transportation_costs.values(), index=road_transportation_costs.keys())
         new_transportation_costs = pd.Series(new_transportation_costs.values(), index=new_transportation_costs.keys())
 
@@ -444,10 +609,8 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 if configuration['destination_type'] == 'country':  # destination not necessary with polygons
                     reduced_infrastructure_index = [i for i in reduced_infrastructure_index if i != 'Destination']
 
-                distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
-                                                       complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
-                                                       branches_no_duplicates['latitude'],
-                                                       branches_no_duplicates['longitude'])
+                reduced_infrastructure_index = _filter_infrastructure_by_reachable_continents(
+                    reduced_infrastructure_index, complete_infrastructure, branches, data)
 
             elif limitation == 'no_pipeline_liquid':
                 reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'PL' not in i]
@@ -455,10 +618,8 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 if configuration['destination_type'] == 'country':  # destination not necessary with polygons
                     reduced_infrastructure_index = [i for i in reduced_infrastructure_index if i != 'Destination']
 
-                distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
-                                                       complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
-                                                       branches_no_duplicates['latitude'],
-                                                       branches_no_duplicates['longitude'])
+                reduced_infrastructure_index = _filter_infrastructure_by_reachable_continents(
+                    reduced_infrastructure_index, complete_infrastructure, branches, data)
 
             elif limitation == 'no_pipelines':
                 if configuration['destination_type'] == 'location':
@@ -466,32 +627,25 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 else:
                     reduced_infrastructure_index = [i for i in complete_infrastructure.index if 'H' in i]
 
-                distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
-                                                       complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
-                                                       branches_no_duplicates['latitude'],
-                                                       branches_no_duplicates['longitude'])
+                reduced_infrastructure_index = _filter_infrastructure_by_reachable_continents(
+                    reduced_infrastructure_index, complete_infrastructure, branches, data)
 
             elif limitation == 'only_in_tolerance':  # these will immediately terminate since destinations are in tolerance
                 reduced_infrastructure_index = in_tolerance_to_destination_infrastructure
-
-                distances = calc_distance_list_to_list(
-                    complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
-                    complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
-                    branches_no_duplicates['latitude'], branches_no_duplicates['longitude'])
+                reduced_infrastructure_index = _filter_infrastructure_by_reachable_continents(
+                    reduced_infrastructure_index, complete_infrastructure, branches, data)
 
             else:
                 reduced_infrastructure_index = complete_infrastructure.index.tolist()
                 if configuration['destination_type'] == 'country':  # destination not necessary with polygons
                     reduced_infrastructure_index = [i for i in complete_infrastructure.index if i != 'Destination']
 
-                distances = calc_distance_list_to_list(complete_infrastructure.loc[reduced_infrastructure_index, 'latitude'],
-                                                       complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
-                                                       branches_no_duplicates['latitude'],
-                                                       branches_no_duplicates['longitude'])
+                reduced_infrastructure_index = _filter_infrastructure_by_reachable_continents(
+                    reduced_infrastructure_index, complete_infrastructure, branches, data)
 
-            distances = pd.DataFrame(distances.transpose(),
-                                     index=reduced_infrastructure_index,
-                                     columns=branches_no_duplicates['current_node'], dtype='int32')
+            distance_blocks = _build_reachable_distance_blocks(
+                complete_infrastructure, reduced_infrastructure_index,
+                branches_no_duplicates, branches, data)
 
         else:
             # Check distance not for all infrastructure but just closest one to assess, if the closest
@@ -507,11 +661,22 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             distances \
                 = branches_no_duplicates.set_index([branches_no_duplicates['current_node'],
                                                     branches_no_duplicates['closest_node']])['minimal_distance'].unstack().transpose()
+            distance_blocks = [{
+                'row_index': distances.index,
+                'column_nodes': distances.columns,
+                'values': distances.to_numpy(copy=False),
+            }]
         if tracker is not None:
+            matrix_rows = sum(len(block['row_index']) for block in distance_blocks)
+            matrix_columns = sum(len(block['column_nodes']) for block in distance_blocks)
+            matrix_cells = sum(len(block['row_index']) * len(block['column_nodes'])
+                               for block in distance_blocks)
             tracker.event(iteration=iteration, phase='routing_out', method=method,
                           event='distance_matrix_created',
-                          details={'rows': len(distances.index) if hasattr(distances, 'index') else 0,
-                                   'columns': len(distances.columns) if hasattr(distances, 'columns') else 0,
+                          details={'rows': matrix_rows,
+                                   'columns': matrix_columns,
+                                   'blocks': len(distance_blocks),
+                                   'cells': matrix_cells,
                                    'use_minimal_distance': use_minimal_distance,
                                    'limitation': limitation})
 
@@ -554,78 +719,93 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
         # iterate over all commodities. Necessary to look at each commodity to check if applicable for road or
         # new pipeline and to get costs of transport
-        for c in branches['current_commodity'].unique():
-            c_branches = branches[branches['current_commodity'] == c]
-            if c_branches.empty:
-                continue
+        for distance_block in distance_blocks:
+            block_column_nodes = distance_block['column_nodes']
+            row_index = distance_block['row_index']
+            block_values = distance_block['values']
 
-            commodity_object = data['commodities']['commodity_objects'][c]
+            for c in branches['current_commodity'].unique():
+                c_branches = branches[branches['current_commodity'] == c]
+                if c_branches.empty:
+                    continue
 
-            # exchange current_node columns with corresponding branch names
-            node_to_branch = dict(zip(c_branches['current_node'], c_branches.index))
-            columns_to_keep = [n for n in distances.columns if n in node_to_branch]
-            if not columns_to_keep:
-                continue
+                commodity_object = data['commodities']['commodity_objects'][c]
 
-            column_index = np.asarray([node_to_branch[n] for n in columns_to_keep], dtype=object)
-            row_index = distances.index
-            distance_values = distances.loc[:, columns_to_keep].to_numpy(copy=False)
-            branch_meta = c_branches.loc[column_index]
+                # exchange current_node columns with corresponding branch names
+                node_to_branch = dict(zip(c_branches['current_node'], c_branches.index))
+                block_column_lookup = {node: position for position, node in enumerate(block_column_nodes)}
+                columns_to_keep = [n for n in block_column_nodes if n in node_to_branch]
+                if not columns_to_keep:
+                    continue
 
-            # some locations are within tolerance. These are processed separately as we don't need transportation
-            in_tolerance_mask = distance_values <= configuration['tolerance_distance']
-            if np.any(in_tolerance_mask):
-                in_tolerance_distances = _build_options_from_mask(distance_values, row_index, column_index,
-                                                                  in_tolerance_mask)
-                in_tolerance_distances['current_distance'] = 0  # in tolerance means 0 distance
-                all_road_distances.append(in_tolerance_distances)
+                column_positions = [block_column_lookup[n] for n in columns_to_keep]
+                column_index = np.asarray([node_to_branch[n] for n in columns_to_keep], dtype=object)
+                distance_values = block_values[:, column_positions]
+                branch_meta = c_branches.loc[column_index]
 
-            if commodity_object.get_transportation_options()['Road']:
-
-                # remove all branches where road is not applicable (remove rows)
-                road_applicable = branch_meta['Road_applicable'].to_numpy(dtype=bool)
-
-                # remove all options where max length exceeds distance (remove columns)
-                max_length_road_costs \
-                    = (benchmarks[commodity_object.get_name()] - branch_meta['current_total_costs']).to_numpy() * 1000 \
-                    / branch_meta['road_transportation_costs'].to_numpy() / no_road_multiplier
-                max_length_road_array = np.minimum(max_length_road_costs, max_length_road / no_road_multiplier)
-                road_mask = (distance_values <= max_length_road_array[None, :]) & road_applicable[None, :]
-
-                # remove options based on previous used infrastructure
+                # some locations are within tolerance. These are processed separately as we don't need transportation
+                in_tolerance_mask = distance_values <= configuration['tolerance_distance']
                 if not use_minimal_distance:
-                    _remove_visited_options_from_mask(road_mask, row_index, column_index,
-                                                      branches_to_remove_based_on_visited_infrastructure)
+                    _apply_reachable_continent_mask(in_tolerance_mask, row_index, column_index,
+                                                    c_branches, complete_infrastructure, data)
+                if np.any(in_tolerance_mask):
+                    in_tolerance_distances = _build_options_from_mask(distance_values, row_index, column_index,
+                                                                      in_tolerance_mask)
+                    in_tolerance_distances['current_distance'] = 0  # in tolerance means 0 distance
+                    all_road_distances.append(in_tolerance_distances)
 
-                road_distances = _build_options_from_mask(distance_values, row_index, column_index, road_mask)
+                if commodity_object.get_transportation_options()['Road']:
 
-                # todo: some values are b'' --> why?
+                    # remove all branches where road is not applicable (remove rows)
+                    road_applicable = branch_meta['Road_applicable'].to_numpy(dtype=bool)
 
-                if not road_distances.empty:
-                    all_road_distances.append(road_distances)
+                    # remove all options where max length exceeds distance (remove columns)
+                    max_length_road_costs \
+                        = (benchmarks[commodity_object.get_name()] - branch_meta['current_total_costs']).to_numpy() * 1000 \
+                        / branch_meta['road_transportation_costs'].to_numpy() / no_road_multiplier
+                    max_length_road_array = np.minimum(max_length_road_costs, max_length_road / no_road_multiplier)
+                    road_mask = (distance_values <= max_length_road_array[None, :]) & road_applicable[None, :]
+                    if not use_minimal_distance:
+                        _apply_reachable_continent_mask(road_mask, row_index, column_index,
+                                                        c_branches, complete_infrastructure, data)
 
-            # create and process new infrastructure distances
-            if (commodity_object.get_transportation_options()['New_Pipeline_Gas']
-                    | commodity_object.get_transportation_options()['New_Pipeline_Liquid']):
+                    # remove options based on previous used infrastructure
+                    if not use_minimal_distance:
+                        _remove_visited_options_from_mask(road_mask, row_index, column_index,
+                                                          branches_to_remove_based_on_visited_infrastructure)
 
-                # add information before any change to distances is made
-                pipeline_applicable = (branch_meta['New_Pipeline_Gas_applicable'].to_numpy(dtype=bool)
-                                       | branch_meta['New_Pipeline_Liquid_applicable'].to_numpy(dtype=bool))
-                minimal_distance = minimal_distances.loc[columns_to_keep, 'minimal_distance'].to_numpy()
+                    road_distances = _build_options_from_mask(distance_values, row_index, column_index, road_mask)
 
-                # remove branches where all minimal distances are already higher than minimal distance to next node,
-                # choose branches which are applicable for new infrastructure, and remove distances above max length.
-                new_branch_mask = (minimal_distance <= max_length_new_segment / no_road_multiplier) & pipeline_applicable
-                new_mask = (distance_values <= max_length_new_segment / no_road_multiplier) & new_branch_mask[None, :]
+                    # todo: some values are b'' --> why?
 
-                # remove used infrastructure
-                if not use_minimal_distance:
-                    _remove_visited_options_from_mask(new_mask, row_index, column_index,
-                                                      branches_to_remove_based_on_visited_infrastructure)
+                    if not road_distances.empty:
+                        all_road_distances.append(road_distances)
 
-                new_distances = _build_options_from_mask(distance_values, row_index, column_index, new_mask)
-                if not new_distances.empty:
-                    all_new_distances.append(new_distances)
+                # create and process new infrastructure distances
+                if (commodity_object.get_transportation_options()['New_Pipeline_Gas']
+                        | commodity_object.get_transportation_options()['New_Pipeline_Liquid']):
+
+                    # add information before any change to distances is made
+                    pipeline_applicable = (branch_meta['New_Pipeline_Gas_applicable'].to_numpy(dtype=bool)
+                                           | branch_meta['New_Pipeline_Liquid_applicable'].to_numpy(dtype=bool))
+                    minimal_distance = minimal_distances.loc[columns_to_keep, 'minimal_distance'].to_numpy()
+
+                    # remove branches where all minimal distances are already higher than minimal distance to next node,
+                    # choose branches which are applicable for new infrastructure, and remove distances above max length.
+                    new_branch_mask = (minimal_distance <= max_length_new_segment / no_road_multiplier) & pipeline_applicable
+                    new_mask = (distance_values <= max_length_new_segment / no_road_multiplier) & new_branch_mask[None, :]
+                    if not use_minimal_distance:
+                        _apply_reachable_continent_mask(new_mask, row_index, column_index,
+                                                        c_branches, complete_infrastructure, data)
+
+                    # remove used infrastructure
+                    if not use_minimal_distance:
+                        _remove_visited_options_from_mask(new_mask, row_index, column_index,
+                                                          branches_to_remove_based_on_visited_infrastructure)
+
+                    new_distances = _build_options_from_mask(distance_values, row_index, column_index, new_mask)
+                    if not new_distances.empty:
+                        all_new_distances.append(new_distances)
 
         if all_road_distances:
             road_options = pd.concat(all_road_distances, ignore_index=True)
