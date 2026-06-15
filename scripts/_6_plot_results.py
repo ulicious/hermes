@@ -92,6 +92,7 @@ production_plot_results = config_file_plotting['production_costs_plot']
 conversion_plot_results = config_file_plotting['conversion_costs_plot']
 transport_plot_results = config_file_plotting['transport_costs_plot']
 total_supply_costs_plot_results = config_file_plotting['total_supply_costs_plot']
+profit_plot_results = config_file_plotting['profit_plots']
 all_costs_plot_results = config_file_plotting['all_costs_plot']
 commodity_plot_results = config_file_plotting['commodity_plot']
 efficiency_plot_results = config_file_plotting['efficiency_plot']
@@ -104,7 +105,8 @@ weighted_routes_plot_results = config_file_plotting['weighted_routes_plot']
 supply_curve_results = config_file_plotting['supply_curve_plots']['results']
 
 all_results = list(set(production_plot_results + conversion_plot_results + transport_plot_results
-                       + total_supply_costs_plot_results + all_costs_plot_results + commodity_plot_results
+                       + total_supply_costs_plot_results + profit_plot_results
+                       + all_costs_plot_results + commodity_plot_results
                        + efficiency_plot_results + sankey_plot_results
                        + routes_plot_results + full_plot_results + weighted_routes_plot_results
                        + commodity_transport_mean_results + supply_curve_results))
@@ -126,7 +128,7 @@ if config_file_plotting['start_locations_infrastructure_destination_plot']:
 for r in all_results:
     print(r)
 
-    data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
+    data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
         = load_result(r, path_files, config_file_plotting, production_costs, with_routes=True)
 
     # nice names for results can be undefined --> will be r if not defined
@@ -154,6 +156,13 @@ for r in all_results:
                           use_voronoi=True, production_costs=production_costs,
                           limit_scale=config_file_plotting['limit_scale'],
                           save=True, save_path=path_saving, fig_title=r + '_total_costs')
+
+    if r in profit_plot_results:
+        get_number_figure(data.copy(), norm_adjusted_costs, cmap, boundaries, destination_location,
+                          column='adjusted_costs',
+                          use_voronoi=True, production_costs=production_costs,
+                          limit_scale=config_file_plotting['limit_scale'],
+                          save=True, save_path=path_saving, fig_title=r + '_profit')
 
     if r in commodity_plot_results:
         get_energy_carrier_figure(data.copy(), boundaries, color_dictionary, nice_name_dictionary, destination_location,
@@ -328,6 +337,12 @@ plot_comparison_plot('costs', config_file_plotting['total_supply_costs_compariso
                      nice_name_dictionary=nice_name_dictionary,
                      cost_type='')
 
+plot_comparison_plot('costs', config_file_plotting['profit_comparison_plots'],
+                     path_files, path_saving,
+                     config_file_plotting, production_costs, cmap, boundaries,
+                     nice_name_dictionary=nice_name_dictionary,
+                     cost_type='adjusted_costs')
+
 plot_comparison_plot('energy_carrier', config_file_plotting['commodity_comparison_plot'],
                      path_files, path_saving,
                      config_file_plotting, production_costs, cmap, boundaries,
@@ -352,7 +367,7 @@ for country in config_file_plotting['supply_curve_comparison_plots']['countries'
 for n, comparison in enumerate(config_file_plotting['matched_supply_routes_plots']):
     results_data = []
     for r in comparison:
-        data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
+        data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
             = load_result(r, path_files, config_file_plotting, production_costs)
 
         results_data.append(data.copy())
@@ -368,7 +383,7 @@ for r in config_file_plotting['compare_costs_and_quantities_plot']:
 
     # mpl.use('TkAgg')
 
-    data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
+    data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
         = load_result(r, path_files, config_file_plotting, production_costs)
 
     diff_lat = boundaries['max_latitude'] - boundaries['min_latitude']
@@ -532,7 +547,7 @@ for r in config_file_plotting['compare_costs_and_quantities_plot']:
 for n, comparison in enumerate(config_file_plotting['solving_time_plot']):
     all_data = []
     for r in comparison:
-        data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
+        data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
             = load_result(r, path_files, config_file_plotting, production_costs, with_routes=False)
         all_data.append(data)
 

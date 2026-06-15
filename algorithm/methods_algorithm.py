@@ -35,60 +35,15 @@ def _as_state_list(value):
     return [value]
 
 
-def _normalise_infrastructure_state(values):
-    clean_values = []
-    for value in _as_state_list(values):
-        if _is_missing_state_value(value):
-            continue
-        value = str(value)
-        if value in {'None', 'nan'}:
-            continue
-        clean_values.append(value)
-    return tuple(sorted(set(clean_values)))
-
-
-def _infrastructure_key_from_values(values):
-    return ';'.join(_normalise_infrastructure_state(values))
-
-
-def _append_infrastructure_to_key(previous_key, current_infrastructure):
-    current_values = _as_state_list(current_infrastructure)
-    if not current_values:
-        if _is_missing_state_value(previous_key):
-            return ''
-        return str(previous_key)
-
-    values = []
-    if not _is_missing_state_value(previous_key):
-        values = [value for value in str(previous_key).split(';') if value]
-
-    values.extend(current_values)
-    return _infrastructure_key_from_values(values)
-
-
-def _normalise_transport_state(current_transport_mean):
-    if _is_missing_state_value(current_transport_mean):
-        return 'initial'
-    if current_transport_mean in ['Road', 'New_Pipeline_Gas', 'New_Pipeline_Liquid']:
-        return 'needs_inner_infrastructure_transport'
-    return 'can_use_connector_transport'
-
-
 def _road_new_allowed_next(current_transport_mean):
     if _is_missing_state_value(current_transport_mean):
         return True
     return current_transport_mean not in ['Road', 'New_Pipeline_Gas', 'New_Pipeline_Liquid']
 
 
-def _transport_history_contains_shipping(values):
-    return any(transport_mean == 'Shipping' for transport_mean in _as_state_list(values))
-
-
 BRANCH_COMPARISON_TEMP_COLUMNS = [
     'comparison_index',
     '_road_new_allowed_next',
-    '_shipping_used_state',
-    '_used_infrastructure_key',
 ]
 
 
@@ -102,35 +57,18 @@ def drop_branch_comparison_columns(branches):
     return branches
 
 
-def _has_used_shipping(row, previous_by_branch=None):
-    previous_transport_means = _as_state_list(row.get('all_previous_transport_means'))
-    previous_branch = row.get('previous_branch')
-    if (not previous_transport_means and previous_by_branch is not None and previous_branch in previous_by_branch.index
-            and 'all_previous_transport_means' in previous_by_branch.columns):
-        previous_transport_means = _as_state_list(previous_by_branch.at[previous_branch, 'all_previous_transport_means'])
-
-    current_transport_mean = row.get('current_transport_mean')
-    transport_means = previous_transport_means + _as_state_list(current_transport_mean)
-    return any(transport_mean == 'Shipping' for transport_mean in transport_means)
-
-
 def update_branch_comparison_index(branches, previous_branches=None):
-    """Use a state key that preserves future-relevant path dependencies.
+    """Use the local branch state needed for dominance checks.
 
-    Branches at the same node with the same commodity are only comparable if
-    they also have the same next transport state and the same set of already
-    used infrastructures. Road and new pipelines are treated as the same state,
-    because both require an inner-infrastructure transport next. The
-    infrastructure set is intentionally unordered:
-    using PG and PL in either order blocks the same future graph reuse.
+    Branches at the same node with the same commodity are comparable as long
+    as they have the same immediate connector-transport state. Road and new
+    pipelines are treated as the same state because both require an
+    inner-infrastructure transport next.
     """
     if branches.empty or not {'current_node', 'current_commodity'}.issubset(branches.columns):
         return branches
 
     index = branches.index
-    previous_by_branch = None
-    if previous_branches is not None and not previous_branches.empty and 'branch_index' in previous_branches.columns:
-        previous_by_branch = previous_branches.drop_duplicates(subset=['branch_index']).set_index('branch_index')
 
     if 'current_transport_mean' in branches.columns:
         current_transport = branches['current_transport_mean']
@@ -139,57 +77,11 @@ def update_branch_comparison_index(branches, previous_branches=None):
 
     road_new_allowed_next = current_transport.map(_road_new_allowed_next).astype(bool)
 
-    if '_shipping_used_state' in branches.columns:
-        shipping_used = branches['_shipping_used_state'].fillna(False).astype(bool)
-    elif 'all_previous_transport_means' in branches.columns:
-        shipping_used = branches['all_previous_transport_means'].map(_transport_history_contains_shipping).astype(bool)
-    elif previous_by_branch is not None and 'previous_branch' in branches.columns \
-            and '_shipping_used_state' in previous_by_branch.columns:
-        shipping_used = branches['previous_branch'].map(previous_by_branch['_shipping_used_state']).fillna(False).astype(bool)
-    elif previous_by_branch is not None and 'previous_branch' in branches.columns \
-            and 'all_previous_transport_means' in previous_by_branch.columns:
-        previous_shipping = previous_by_branch['all_previous_transport_means'].map(_transport_history_contains_shipping)
-        shipping_used = branches['previous_branch'].map(previous_shipping).fillna(False).astype(bool)
-    else:
-        shipping_used = pd.Series(False, index=index)
-    shipping_used = shipping_used | (current_transport == 'Shipping')
-
-    if previous_by_branch is not None and 'previous_branch' in branches.columns:
-        if '_used_infrastructure_key' in previous_by_branch.columns:
-            previous_infrastructure_key = branches['previous_branch'].map(previous_by_branch['_used_infrastructure_key'])
-        elif 'all_previous_infrastructure' in previous_by_branch.columns:
-            previous_keys = previous_by_branch['all_previous_infrastructure'].map(_infrastructure_key_from_values)
-            previous_infrastructure_key = branches['previous_branch'].map(previous_keys)
-        else:
-            previous_infrastructure_key = pd.Series([''] * len(branches), index=index)
-    elif '_used_infrastructure_key' in branches.columns:
-        previous_infrastructure_key = branches['_used_infrastructure_key']
-    elif 'all_previous_infrastructure' in branches.columns:
-        previous_infrastructure_key = branches['all_previous_infrastructure'].map(_infrastructure_key_from_values)
-    else:
-        previous_infrastructure_key = pd.Series([''] * len(branches), index=index)
-
-    if 'current_infrastructure' in branches.columns:
-        used_infrastructure_key = [
-            _append_infrastructure_to_key(previous_key, current_infrastructure)
-            for previous_key, current_infrastructure
-            in zip(previous_infrastructure_key.tolist(), branches['current_infrastructure'].tolist())
-        ]
-    else:
-        used_infrastructure_key = [
-            '' if _is_missing_state_value(previous_key) else str(previous_key)
-            for previous_key in previous_infrastructure_key.tolist()
-        ]
-
     branches.loc[:, '_road_new_allowed_next'] = road_new_allowed_next.tolist()
-    branches.loc[:, '_shipping_used_state'] = shipping_used.tolist()
-    branches.loc[:, '_used_infrastructure_key'] = used_infrastructure_key
     comparison_index = list(zip(
         branches['current_node'].astype(str).tolist(),
         branches['current_commodity'].astype(str).tolist(),
         road_new_allowed_next.tolist(),
-        shipping_used.tolist(),
-        used_infrastructure_key,
     ))
     branches.loc[:, 'comparison_index'] = pd.Series(comparison_index, index=branches.index, dtype=object)
     return branches
@@ -669,7 +561,7 @@ def postprocessing_branches(branches, old_branches):
                        'all_previous_distances', 'all_previous_transportation_costs', 'all_previous_conversion_costs',
                        'all_previous_total_costs', 'all_previous_commodities', 'branch_index',
                        'starting_latitude', 'starting_longitude', 'taken_routes', 'total_efficiency',
-                       '_used_infrastructure_key', '_shipping_used_state', '_road_new_allowed_next']
+                       '_road_new_allowed_next']
     old_branches = old_branches[[column for column in columns_to_keep if column in old_branches.columns]]
 
     branches = pd.merge(branches, old_branches, left_on='previous_branch', right_on='branch_index', how='left')
@@ -717,7 +609,7 @@ def postprocessing_branches(branches, old_branches):
         if '_y' not in c:
             columns_to_keep.append(c)
     branches = branches[columns_to_keep]
-    for state_column in ['_used_infrastructure_key', '_shipping_used_state', '_road_new_allowed_next']:
+    for state_column in ['_road_new_allowed_next']:
         suffixed_column = state_column + '_x'
         if suffixed_column in branches.columns and state_column not in branches.columns:
             branches.rename(columns={suffixed_column: state_column}, inplace=True)

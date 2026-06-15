@@ -72,6 +72,23 @@ def _read_geodata_or_empty(path, columns=None):
     return gpd.GeoDataFrame(columns=columns or [], geometry='geometry', crs='EPSG:4326')
 
 
+def _format_colorbar_tick(value):
+    if np.isclose(value, round(value)):
+        return str(int(round(value)))
+    return f'{value:.1f}'
+
+
+def _get_even_colorbar_ticks(vmin, vmax, tick_count):
+    if not np.isfinite(vmin) or not np.isfinite(vmax):
+        return np.array([])
+
+    if np.isclose(vmin, vmax):
+        return np.array([vmin])
+
+    tick_count = max(2, tick_count)
+    return np.linspace(vmin, vmax, tick_count)
+
+
 def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_name_dictionary,
                       infrastructure_data, complete_infrastructure, boundaries, destination_location, fig_title='',
                       add_legend=True,
@@ -839,38 +856,19 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
         ticks = np.asarray(cbar.get_ticks(), dtype=float)
         vmin, vmax = norm.vmin, norm.vmax
 
-        ticks = ticks[(ticks >= vmin) & (ticks <= vmax)]
+        ticks = _get_even_colorbar_ticks(vmin, vmax, len(ticks))
 
-        if len(ticks) >= 2:
-            tick_dist = np.median(np.diff(ticks))
-
-            # Minimum
-            if ticks[0] - vmin > 0.5 * tick_dist:
-                ticks = np.insert(ticks, 0, vmin)
-            else:
-                ticks[0] = vmin
-
-            # Maximum
-            if vmax - ticks[-1] > 0.5 * tick_dist:
-                ticks = np.append(ticks, vmax)
-            else:
-                ticks[-1] = vmax
-
-        else:
-            ticks = np.array([vmin, vmax])
-
-        ticks = np.unique(np.round(ticks, 0))
-
-        cbar.set_ticks(ticks)
+        if len(ticks) > 0:
+            cbar.set_ticks(ticks)
+            cbar.ax.xaxis.set_major_locator(FixedLocator(ticks))
+            cbar.set_ticklabels([_format_colorbar_tick(tick) for tick in ticks])
 
         labels = cbar.ax.get_xticklabels()
-        labels[0].set_horizontalalignment('left')
+        if labels:
+            labels[0].set_horizontalalignment('left')
 
-        if not limit_scale:
+        if labels and not limit_scale:
             labels[-1].set_horizontalalignment('right')
-
-        # cbar.ax.xaxis.set_major_locator(FixedLocator(ticks))
-        # cbar.update_ticks()
 
     if return_fig:
         return ax

@@ -22,6 +22,7 @@ from statistics import mean
 
 from plotting.get_figures import get_number_figure, get_routes_figure, get_energy_carrier_figure, get_weighted_routes, \
     get_supply_curves
+from data_processing.configuration import CONVERSION_CONFIG, load_yaml
 from data_processing.helpers_geometry import get_destination
 
 
@@ -30,6 +31,35 @@ def _read_csv_or_empty(path, columns=None, index_col=0, dtype=None):
     if os.path.exists(path):
         return pd.read_csv(path, index_col=index_col, dtype=dtype)
     return pd.DataFrame(columns=columns or [])
+
+
+def _load_strike_prices_from_result_path(path_files):
+    project_folder_path = os.path.abspath(os.path.join(path_files, os.pardir, os.pardir))
+    conversion_config = load_yaml(os.path.join(project_folder_path, CONVERSION_CONFIG))
+    return conversion_config.get('strike_prices', {})
+
+
+def _get_final_route_commodity(route, fallback_commodity=None):
+    if isinstance(route, str):
+        try:
+            route = ast.literal_eval(route)
+        except (ValueError, SyntaxError):
+            return fallback_commodity
+
+    if not isinstance(route, list):
+        return fallback_commodity
+
+    commodity = fallback_commodity
+    for route_segment in route:
+        if not isinstance(route_segment, (list, tuple)):
+            continue
+
+        if len(route_segment) == 2:
+            commodity = route_segment[0]
+        elif len(route_segment) == 3:
+            commodity = route_segment[1]
+
+    return commodity
 
 
 def get_geometry_plot_point(geometry):
@@ -695,6 +725,7 @@ def get_ranked_routes(data):
 
 def load_result(r, path_files, config_file_plotting, production_costs, with_routes=True):
     data = pd.read_csv(path_files + r + '_processed_results.csv', index_col=0)
+    strike_prices = _load_strike_prices_from_result_path(path_files)
 
     destination = pd.read_csv(path_files + r + '_destination.csv', index_col=0)
     destination = wkt.loads(destination.values[0][0])
@@ -703,6 +734,12 @@ def load_result(r, path_files, config_file_plotting, production_costs, with_rout
 
     # overwrite production costs with h2 production costs
     data['production_costs'] = production_costs['Hydrogen_Gas']
+    data['final_commodity'] = data.apply(
+        lambda row: _get_final_route_commodity(row.get('routes'), row.get('start_commodity')),
+        axis=1
+    )
+    data['commodity_price'] = data['final_commodity'].map(strike_prices).fillna(0)
+    data['adjusted_costs'] = data['costs'] - data['commodity_price']
 
     min_prod_costs = data['production_costs'].min()
     max_prod_costs = data['production_costs'].max()
@@ -745,6 +782,23 @@ def load_result(r, path_files, config_file_plotting, production_costs, with_rout
 
     norm_total = mpl.colors.Normalize(vmin=min_total_costs, vmax=max_total_costs)
 
+    finite_adjusted_costs = data.loc[np.isfinite(data['adjusted_costs']), 'adjusted_costs']
+    if finite_adjusted_costs.empty:
+        min_adjusted_costs = 0
+        max_adjusted_costs = 0
+    else:
+        min_adjusted_costs = finite_adjusted_costs.min()
+        max_adjusted_costs = finite_adjusted_costs.max()
+
+        if config_file_plotting['limit_scale']:
+            Q1 = finite_adjusted_costs.quantile(0.25)
+            Q3 = finite_adjusted_costs.quantile(0.75)
+            IQR = Q3 - Q1
+
+            max_adjusted_costs = Q3 + 1.5 * IQR
+
+    norm_adjusted_costs = mpl.colors.Normalize(vmin=min_adjusted_costs, vmax=max_adjusted_costs)
+
     min_efficiency = data['efficiency'].min()
     max_efficiency = data['efficiency'].max()
 
@@ -772,7 +826,7 @@ def load_result(r, path_files, config_file_plotting, production_costs, with_rout
 
     ranked_routes = get_ranked_routes(data)
 
-    return data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_efficiency, norm_all, ranked_routes, starting_locations, destination
+    return data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination
 
 
 def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config_file_plotting, production_costs, cmap,
@@ -868,7 +922,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
 
             all_data = pd.DataFrame()
             for r in comparison:
-                data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
+                data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
                     = load_result(r, path_files, config_file_plotting, production_costs)
 
                 all_data = pd.concat([all_data, data])
@@ -893,7 +947,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
         all_data = {}
 
         for m, r in enumerate(comparison):
-            data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
+            data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
                 = load_result(r, path_files, config_file_plotting, production_costs)
 
             current_ax = axes[m]
