@@ -772,9 +772,21 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
     data['color'] = col
     col = col.values.tolist()
     if use_voronoi:
-        voronois = production_costs.loc[data.index, 'geometry'].tolist()
-        voronois = gpd.GeoDataFrame(geometry=voronois)
+        if production_costs is None or 'geometry' not in production_costs.columns:
+            raise ValueError("Voronoi plots require production_costs with a 'geometry' column.")
+
+        valid_locations = data.index.intersection(production_costs.index)
+        data = data.loc[valid_locations].copy()
+        col = data['color'].values.tolist()
+
+        voronois = gpd.GeoDataFrame(data[[column]].copy(),
+                                    geometry=production_costs.loc[data.index, 'geometry'].tolist())
         voronois.plot(ax=ax, color=col, ec='black', linewidth=0.01)
+        if column == 'adjusted_costs':
+            profitable_locations = voronois[voronois[column] <= 0].copy()
+            if not profitable_locations.empty:
+                profitable_locations.boundary.plot(ax=ax, color='deeppink',
+                                                   linewidth=0.08, zorder=5)
         # for color in data['color'].unique():
         #     affected_locations = data[data['color'] == color].index
         #     voronois = production_costs.loc[affected_locations, 'geometry'].tolist()

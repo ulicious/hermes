@@ -46,6 +46,7 @@ required_infrastructure_files = [os.path.join(path_data, file) for file in [
     'oil_pipeline_graphs.csv',
     'ports.csv']]
 missing_infrastructure_files = [file for file in required_infrastructure_files if not os.path.exists(file)]
+infrastructure_data_available = not missing_infrastructure_files
 if missing_infrastructure_files:
     missing_infrastructure_files_text = '\n'.join('- ' + file for file in missing_infrastructure_files)
     print('Optional infrastructure plotting data missing; continuing without these layers:\n'
@@ -53,7 +54,7 @@ if missing_infrastructure_files:
 check_required_files_exist([start_destination_combinations_file], 'start-location plotting')
 
 infrastructure_data, destination = load_data(path_data, config_file_general)
-complete_infrastructure = get_complete_infrastructure(infrastructure_data, destination)
+complete_infrastructure = None
 production_costs = pd.read_csv(start_destination_combinations_file, index_col=0)
 if 'geometry' not in production_costs.columns:
     raise ValueError("Missing data for start-location plotting:\n- column 'geometry' in "
@@ -104,6 +105,23 @@ sankey_plot_results = config_file_plotting['sankey_plot']
 weighted_routes_plot_results = config_file_plotting['weighted_routes_plot']
 supply_curve_results = config_file_plotting['supply_curve_plots']['results']
 
+routes_comparison_plot_results = config_file_plotting['routes_comparison_plot']
+matched_supply_routes_plots = config_file_plotting['matched_supply_routes_plots']
+
+route_infrastructure_plots_requested = (
+    bool(routes_plot_results)
+    or bool(routes_comparison_plot_results)
+    or bool(matched_supply_routes_plots)
+)
+
+if route_infrastructure_plots_requested and infrastructure_data_available:
+    complete_infrastructure = get_complete_infrastructure(infrastructure_data, destination)
+elif route_infrastructure_plots_requested:
+    print('Route infrastructure plots require optional infrastructure data and will be skipped.')
+    routes_plot_results = []
+    routes_comparison_plot_results = []
+    matched_supply_routes_plots = []
+
 all_results = list(set(production_plot_results + conversion_plot_results + transport_plot_results
                        + total_supply_costs_plot_results + profit_plot_results
                        + all_costs_plot_results + commodity_plot_results
@@ -128,8 +146,9 @@ if config_file_plotting['start_locations_infrastructure_destination_plot']:
 for r in all_results:
     print(r)
 
+    with_routes = r in weighted_routes_plot_results
     data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
-        = load_result(r, path_files, config_file_plotting, production_costs, with_routes=True)
+        = load_result(r, path_files, config_file_plotting, production_costs, with_routes=with_routes)
 
     # nice names for results can be undefined --> will be r if not defined
     if r not in [*nice_name_dictionary.keys()]:
@@ -348,7 +367,7 @@ plot_comparison_plot('energy_carrier', config_file_plotting['commodity_compariso
                      config_file_plotting, production_costs, cmap, boundaries,
                      color_dictionary=color_dictionary, nice_name_dictionary=nice_name_dictionary)
 
-plot_comparison_plot('routes', config_file_plotting['routes_comparison_plot'],
+plot_comparison_plot('routes', routes_comparison_plot_results,
                      path_files, path_saving,
                      config_file_plotting, production_costs, cmap, boundaries,
                      color_dictionary=color_dictionary, nice_name_dictionary=nice_name_dictionary,
@@ -364,11 +383,11 @@ for country in config_file_plotting['supply_curve_comparison_plots']['countries'
                          infrastructure_data=infrastructure_data, complete_infrastructure=complete_infrastructure,
                          country=country, distance_between=1, subplot_height=4)
 
-for n, comparison in enumerate(config_file_plotting['matched_supply_routes_plots']):
+for n, comparison in enumerate(matched_supply_routes_plots):
     results_data = []
     for r in comparison:
         data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
-            = load_result(r, path_files, config_file_plotting, production_costs)
+            = load_result(r, path_files, config_file_plotting, production_costs, with_routes=False)
 
         results_data.append(data.copy())
 
@@ -384,7 +403,7 @@ for r in config_file_plotting['compare_costs_and_quantities_plot']:
     # mpl.use('TkAgg')
 
     data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
-        = load_result(r, path_files, config_file_plotting, production_costs)
+        = load_result(r, path_files, config_file_plotting, production_costs, with_routes=True)
 
     diff_lat = boundaries['max_latitude'] - boundaries['min_latitude']
     ratio_lat_lon = diff_lat / (boundaries['max_longitude'] - boundaries['min_longitude'])

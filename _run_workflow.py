@@ -4,7 +4,7 @@ import sys
 
 
 # Adjust this path to your HERMES project folder before running the workflow.
-PROJECT_FOLDER = ''
+PROJECT_FOLDER = 'C:/Users/mt5285/Documents/Transportmodell/'
 
 # Select which workflow steps should run.
 RUN_SETUP_PROJECT_FOLDER = False
@@ -13,7 +13,7 @@ RUN_CREATE_START_LOCATIONS = False
 RUN_MAIN_ALGORITHM = False
 RUN_MIP_OPTIMIZATION = False
 RUN_PROCESS_PLOT_DATA = False
-RUN_PLOT_RESULTS = False
+RUN_PLOT_RESULTS = True
 RUN_ANALYZE_ALGORITHM_TRACKING = False
 
 

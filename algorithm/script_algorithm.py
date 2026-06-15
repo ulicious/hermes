@@ -299,10 +299,6 @@ def run_algorithm(args):
     # adjust minimal distances by checking if distance to destination is minimal distance
     minimal_distances = data['minimal_distances']
 
-    for c in minimal_distances.index:
-        if c not in complete_infrastructure.index:
-            print(c)
-
     minimal_distances['distance_to_destination'] = complete_infrastructure.loc[minimal_distances.index, 'distance_to_destination']
     to_destination_lower = minimal_distances[minimal_distances['minimal_distance'] >= minimal_distances['distance_to_destination']].index
     minimal_distances.loc[to_destination_lower, 'minimal_distance'] = minimal_distances.loc[to_destination_lower, 'distance_to_destination']

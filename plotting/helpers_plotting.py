@@ -184,8 +184,9 @@ def get_complete_infrastructure(data, final_destination):
 
     # create common infrastructure column
     options['infrastructure'] = options.index
-    graph_df = options[options['graph'].apply(lambda x: isinstance(x, list) and all(isinstance(item, str) for item in x) if isinstance(x, (list, float)) else False)]
-    options.loc[graph_df.index, 'infrastructure'] = options.loc[graph_df.index, 'infrastructure']
+    if 'graph' in options.columns:
+        graph_df = options[options['graph'].apply(lambda x: isinstance(x, list) and all(isinstance(item, str) for item in x) if isinstance(x, (list, float)) else False)]
+        options.loc[graph_df.index, 'infrastructure'] = options.loc[graph_df.index, 'infrastructure']
 
     return options
 
@@ -923,7 +924,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
             all_data = pd.DataFrame()
             for r in comparison:
                 data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
-                    = load_result(r, path_files, config_file_plotting, production_costs)
+                    = load_result(r, path_files, config_file_plotting, production_costs, with_routes=False)
 
                 all_data = pd.concat([all_data, data])
 
@@ -948,7 +949,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
 
         for m, r in enumerate(comparison):
             data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
-                = load_result(r, path_files, config_file_plotting, production_costs)
+                = load_result(r, path_files, config_file_plotting, production_costs, with_routes=False)
 
             current_ax = axes[m]
 
