@@ -26,7 +26,7 @@ commodities and transport means, and whether preprocessing artefacts should be
 reused or rebuilt.
 
 ``project_folder_path`` is the only path stored in
-``algorithm_configuration.yaml``. The code derives all required subfolders from
+``1_algorithm_configuration.yaml``. The code derives all required subfolders from
 this project folder. Raw-data file names such as ``location_data.csv`` and
 ``country_data.csv`` are fixed by the code and are therefore not listed as
 configuration parameters.
@@ -104,7 +104,7 @@ The first thing to adjust is the cost type of each feedstock and the capital cos
 Possible are:
 
 - 'location': costs will be looked up for each location (from location_data)
-- 'uniform': as set in techno_economic_data_conversion.yaml (see below)
+- 'uniform': as set in 3_techno_economic_data_conversion.yaml (see below)
 - ['COUNTRY_NAME_1', 'COUNTRY_NAME_2', ...]: costs will be looked up for specific countries in list, for all other based on location data
 - 'all_countries': always country (from country_data)
 
@@ -135,8 +135,8 @@ Strike Prices
 =============
 
 Strike prices are defined per commodity in
-``techno_economic_data_conversion.yaml``. They are used when
-``consider_commodity_prices`` is enabled in ``algorithm_configuration.yaml``.
+``3_techno_economic_data_conversion.yaml``. They are used when
+``consider_commodity_prices`` is enabled in ``1_algorithm_configuration.yaml``.
 Both files are read from ``PROJECT FOLDER/`` during model runs.
 
 .. csv-table::
@@ -190,7 +190,7 @@ Transport assumptions and setting decide on availability of different transport 
         Self_Consumption: loss fraction per km
         Shipping_Speed: km/h
 
-The transport input data is stored in ``techno_economic_data_transportation.yaml``
+The transport input data is stored in ``2_techno_economic_data_transportation.yaml``
 in ``PROJECT FOLDER/``.
 For each commodity, the file defines the admissible transport means together with
 the corresponding cost and loss assumptions.
@@ -207,7 +207,7 @@ the corresponding cost and loss assumptions.
 Plotting Parameter
 ###################
 
-``plotting_configuration.yaml`` in ``PROJECT FOLDER/`` controls which
+``4_plotting_configuration.yaml`` in ``PROJECT FOLDER/`` controls which
 result folders are processed and how plots are styled. The current plotting
 workflow expects the following
 structure:

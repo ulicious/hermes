@@ -57,7 +57,7 @@ First, choose a python interpreter and afterwards, install all requirements with
 ==============================
 
 The code expects a separate project folder referenced by ``project_folder_path``
-in ``algorithm_configuration.yaml``. Template configuration files are stored
+in ``1_algorithm_configuration.yaml``. Template configuration files are stored
 in the repository's ``data/`` directory. Create the project folder before data
 processing by using the central workflow runner. Open ``_run_workflow.py``, set
 ``PROJECT_FOLDER`` to the desired working folder, set
@@ -70,7 +70,7 @@ processing by using the central workflow runner. Open ``_run_workflow.py``, set
 The setup step creates the required folder structure, copies editable
 configuration files directly into ``PROJECT FOLDER/``, copies provided input
 data into ``PROJECT FOLDER/raw_data/``, and writes the given project folder path
-into the copied ``algorithm_configuration.yaml``. If setup is run
+into the copied ``1_algorithm_configuration.yaml``. If setup is run
 again, the copied files are overwritten.
 
 The setup step creates missing folders automatically. The resulting structure
@@ -79,10 +79,10 @@ should look as follows:
 .. code-block:: none
 
     PROJECT FOLDER/
-        algorithm_configuration.yaml
-        plotting_configuration.yaml
-        techno_economic_data_conversion.yaml
-        techno_economic_data_transportation.yaml
+        1_algorithm_configuration.yaml
+        2_techno_economic_data_transportation.yaml
+        3_techno_economic_data_conversion.yaml
+        4_plotting_configuration.yaml
         raw_data/
         processed_data/
             inner_infrastructure_distances/
@@ -108,7 +108,7 @@ run a single step from the repository root via module call, for example
 environment variable can also be used.
 
 Only this central project-folder path is stored as a path in
-``algorithm_configuration.yaml``. All subfolders are derived by the code from
+``1_algorithm_configuration.yaml``. All subfolders are derived by the code from
 that project folder. Raw-data file names are fixed by the code as well and are
 not configured in the YAML file. The standard raw input files copied by
 the setup step include:
@@ -140,7 +140,7 @@ Most settings are controlled through the configuration files in
 - the techno-economic YAML files in ``PROJECT FOLDER/``
 
 Settings such as raw-data file names or whether repository files should be
-copied are not part of ``algorithm_configuration.yaml``. File copying is the
+copied are not part of ``1_algorithm_configuration.yaml``. File copying is the
 responsibility of the setup step; later workflow steps only read from the
 project folder.
 

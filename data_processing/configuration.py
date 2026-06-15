@@ -8,21 +8,25 @@ import yaml
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_CONFIG_FOLDER = os.path.join(PROJECT_ROOT, 'data')
 
-ALGORITHM_CONFIG = 'algorithm_configuration.yaml'
-PLOTTING_CONFIG = 'plotting_configuration.yaml'
-CONVERSION_CONFIG = 'techno_economic_data_conversion.yaml'
-TRANSPORTATION_CONFIG = 'techno_economic_data_transportation.yaml'
+ALGORITHM_CONFIG = '1_algorithm_configuration.yaml'
+TRANSPORTATION_CONFIG = '2_techno_economic_data_transportation.yaml'
+CONVERSION_CONFIG = '3_techno_economic_data_conversion.yaml'
+PLOTTING_CONFIG = '4_plotting_configuration.yaml'
 LOCATION_DATA_FILE = 'location_data.csv'
 COUNTRY_DATA_FILE = 'country_data.csv'
 
 CONFIG_FILENAMES = [
     ALGORITHM_CONFIG,
-    PLOTTING_CONFIG,
-    CONVERSION_CONFIG,
     TRANSPORTATION_CONFIG,
+    CONVERSION_CONFIG,
+    PLOTTING_CONFIG,
 ]
 
 LEGACY_CONFIG_FILENAMES = [
+    'algorithm_configuration.yaml',
+    'techno_economic_data_transportation.yaml',
+    'techno_economic_data_conversion.yaml',
+    'plotting_configuration.yaml',
     '_1_algorithm_configuration.yaml',
     '_5_plotting_configuration.yaml',
 ]
