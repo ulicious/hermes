@@ -86,7 +86,8 @@ def _track_benchmark_mask_step(data, configuration, branches, row_index, column_
     before_mask = np.asarray(before_mask, dtype=bool)
     after_mask = np.asarray(after_mask, dtype=bool)
 
-    removed_candidates = []
+    benchmark_candidates_before = []
+    benchmark_candidates_after = []
     for column_position, branch_index in enumerate(column_index):
         if branch_index not in branches.index:
             continue
@@ -103,22 +104,30 @@ def _track_benchmark_mask_step(data, configuration, branches, row_index, column_
         for row_position, node in enumerate(row_index):
             if node not in benchmark_nodes:
                 continue
-            if before_mask[row_position, column_position] and not after_mask[row_position, column_position]:
-                removed_candidates.append({
-                    'branch': branch_index,
-                    'from_node': branch['current_node'],
-                    'commodity': branch['current_commodity'],
-                    'candidate_node': node,
-                })
+            candidate = {
+                'branch': branch_index,
+                'from_node': branch['current_node'],
+                'commodity': branch['current_commodity'],
+                'candidate_node': node,
+            }
+            if before_mask[row_position, column_position]:
+                benchmark_candidates_before.append(candidate)
+            if after_mask[row_position, column_position]:
+                benchmark_candidates_after.append(candidate)
 
-    if not removed_candidates:
+    if not benchmark_candidates_before or benchmark_candidates_after:
         return
+
+    removed_candidates = []
+    for candidate in benchmark_candidates_before:
+        if candidate not in removed_candidates:
+            removed_candidates.append(candidate)
 
     track_benchmark_removal(
         data, configuration, branches, pd.DataFrame(),
         iteration=iteration, phase='routing_out', method=method, code=code,
         details={
-            'removed_benchmark_candidates': removed_candidates,
+            'benchmark_candidates_before': removed_candidates,
             **(details or {}),
         },
     )
