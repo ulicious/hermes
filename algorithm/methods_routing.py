@@ -184,6 +184,10 @@ def _is_valid_continent(continent):
     return continent is not None and pd.notna(continent) and str(continent).lower() != 'nan'
 
 
+def _branches_are_at_start(branches):
+    return 'current_node' in branches.columns and branches['current_node'].eq('Start').any()
+
+
 def _get_reachable_continents(continent, data):
     if not _is_valid_continent(continent):
         return None
@@ -222,6 +226,8 @@ def _filter_infrastructure_by_reachable_continents(infrastructure_index, complet
         infrastructure_continents.apply(lambda value: not _is_valid_continent(value))
         | infrastructure_continents.astype(str).isin(reachable_union)
     )
+    if _branches_are_at_start(branches) and 'reachable_from_start' in complete_infrastructure.columns:
+        keep_mask = keep_mask | complete_infrastructure.loc[infrastructure_index, 'reachable_from_start'].fillna(False)
     return list(pd.Index(infrastructure_index)[keep_mask.to_numpy()])
 
 
@@ -304,6 +310,10 @@ def _apply_reachable_continent_mask(mask, row_index, column_index, branches, com
 
     before = int(mask.sum())
     branch_continents = branches.reindex(column_index)['current_continent']
+    branch_nodes = branches.reindex(column_index)['current_node'] if 'current_node' in branches.columns else None
+    reachable_from_start = None
+    if 'reachable_from_start' in complete_infrastructure.columns:
+        reachable_from_start = complete_infrastructure.reindex(row_index)['reachable_from_start'].fillna(False).to_numpy()
 
     for continent in branch_continents.dropna().unique():
         reachable = _get_reachable_continents(continent, data)
@@ -318,6 +328,14 @@ def _apply_reachable_continent_mask(mask, row_index, column_index, branches, com
             row_continents.apply(lambda value: not _is_valid_continent(value))
             | row_continents.astype(str).isin(reachable)
         ).to_numpy()
+        if branch_nodes is not None and reachable_from_start is not None:
+            start_columns = branch_nodes.iloc[affected_columns].eq('Start').to_numpy()
+            if np.any(start_columns):
+                allowed_rows_for_start = allowed_rows | reachable_from_start
+                mask[np.ix_(~allowed_rows_for_start, affected_columns[start_columns])] = False
+                affected_columns = affected_columns[~start_columns]
+                if len(affected_columns) == 0:
+                    continue
         mask[np.ix_(~allowed_rows, affected_columns)] = False
 
     return before - int(mask.sum())
