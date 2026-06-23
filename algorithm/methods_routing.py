@@ -20,6 +20,110 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
+def _benchmark_locations(data):
+    benchmark_info = data.get('benchmark_info') if isinstance(data, dict) else None
+    if benchmark_info is None:
+        return set()
+    return set(benchmark_info[2])
+
+
+def _benchmark_branch_indices(branches, data):
+    benchmark_info = data.get('benchmark_info') if isinstance(data, dict) else None
+    if benchmark_info is None or branches is None or branches.empty:
+        return []
+    if 'current_commodity' not in branches.columns or 'current_node' not in branches.columns:
+        return []
+
+    commodities = set(benchmark_info[0])
+    locations = set(benchmark_info[2])
+    benchmark_branches = branches[
+        branches['current_commodity'].isin(commodities)
+        & branches['current_node'].isin(locations)
+    ]
+    return benchmark_branches.index.tolist()
+
+
+def _track_benchmark_node_filter(data, configuration, branches, before_nodes, after_nodes,
+                                 iteration, method, code, details=None):
+    if not configuration.get('print_benchmark_info', False):
+        return
+    benchmark_branches = _benchmark_branch_indices(branches, data)
+    if not benchmark_branches:
+        return
+
+    benchmark_nodes = _benchmark_locations(data)
+    before_benchmark_nodes = benchmark_nodes.intersection(set(before_nodes))
+    if not before_benchmark_nodes:
+        return
+
+    after_benchmark_nodes = benchmark_nodes.intersection(set(after_nodes))
+    if after_benchmark_nodes:
+        return
+
+    track_benchmark_removal(
+        data, configuration, branches, pd.DataFrame(),
+        iteration=iteration, phase='routing_out', method=method, code=code,
+        details={
+            'benchmark_candidate_nodes_before': sorted(before_benchmark_nodes),
+            'benchmark_branches': benchmark_branches,
+            **(details or {}),
+        },
+    )
+
+
+def _track_benchmark_mask_step(data, configuration, branches, row_index, column_index,
+                               before_mask, after_mask, iteration, method, code,
+                               details=None):
+    if not configuration.get('print_benchmark_info', False):
+        return
+
+    benchmark_nodes = _benchmark_locations(data)
+    if not benchmark_nodes:
+        return
+
+    row_index = np.asarray(row_index, dtype=object)
+    column_index = np.asarray(column_index, dtype=object)
+    before_mask = np.asarray(before_mask, dtype=bool)
+    after_mask = np.asarray(after_mask, dtype=bool)
+
+    removed_candidates = []
+    for column_position, branch_index in enumerate(column_index):
+        if branch_index not in branches.index:
+            continue
+
+        branch = branches.loc[branch_index]
+        benchmark_info = data.get('benchmark_info')
+        if benchmark_info is None:
+            continue
+        if branch['current_commodity'] not in set(benchmark_info[0]):
+            continue
+        if branch['current_node'] not in benchmark_nodes:
+            continue
+
+        for row_position, node in enumerate(row_index):
+            if node not in benchmark_nodes:
+                continue
+            if before_mask[row_position, column_position] and not after_mask[row_position, column_position]:
+                removed_candidates.append({
+                    'branch': branch_index,
+                    'from_node': branch['current_node'],
+                    'commodity': branch['current_commodity'],
+                    'candidate_node': node,
+                })
+
+    if not removed_candidates:
+        return
+
+    track_benchmark_removal(
+        data, configuration, branches, pd.DataFrame(),
+        iteration=iteration, phase='routing_out', method=method, code=code,
+        details={
+            'removed_benchmark_candidates': removed_candidates,
+            **(details or {}),
+        },
+    )
+
+
 def _load_shipping_distances(path_processed_data):
     path_file = path_processed_data + 'inner_infrastructure_distances/port_distances.csv'
     if not os.path.exists(path_file):
@@ -305,6 +409,9 @@ def create_branches_from_in_tolerance_locations(data, branches, complete_infrast
     @return: pandas.DataFrame with new zero-distance branches
     """
 
+    method = 'create_branches_from_in_tolerance_locations'
+    iteration = data.get('current_iteration') if isinstance(data, dict) else None
+
     if branches.empty:
         return pd.DataFrame()
 
@@ -342,6 +449,9 @@ def create_branches_from_in_tolerance_locations(data, branches, complete_infrast
             current_nodes.append(next_location)
 
     if not previous_branches:
+        track_benchmark_removal(data, configuration, branches, pd.DataFrame(),
+                                iteration=iteration, phase='routing_in', method=method,
+                                code='no_in_tolerance_next_locations')
         return pd.DataFrame()
 
     direct_branches = pd.DataFrame({
@@ -370,8 +480,8 @@ def create_branches_from_in_tolerance_locations(data, branches, complete_infrast
     direct_before_current_benchmark = direct_branches
     direct_branches = direct_branches[direct_branches['current_total_costs'] <= direct_branches['benchmark']]
     track_benchmark_removal(data, configuration, direct_before_current_benchmark, direct_branches,
-                            iteration=data.get('current_iteration') if isinstance(data, dict) else None,
-                            phase='routing_in', method='create_branches_from_in_tolerance_locations',
+                            iteration=iteration,
+                            phase='routing_in', method=method,
                             code='filter_current_total_vs_benchmark')
 
     if direct_branches.empty:
@@ -385,8 +495,8 @@ def create_branches_from_in_tolerance_locations(data, branches, complete_infrast
     direct_before_dedup = direct_branches
     direct_branches = remove_duplicate_branches(direct_branches)
     track_benchmark_removal(data, configuration, direct_before_dedup, direct_branches,
-                            iteration=data.get('current_iteration') if isinstance(data, dict) else None,
-                            phase='routing_in', method='create_branches_from_in_tolerance_locations',
+                            iteration=iteration,
+                            phase='routing_in', method=method,
                             code='deduplicate_comparison_index')
 
     final_destination = data['destination']['location']
@@ -418,8 +528,8 @@ def create_branches_from_in_tolerance_locations(data, branches, complete_infrast
     direct_before_minimal_benchmark = direct_branches
     direct_branches = direct_branches[direct_branches['minimal_total_costs'] <= direct_branches['benchmark']]
     track_benchmark_removal(data, configuration, direct_before_minimal_benchmark, direct_branches,
-                            iteration=data.get('current_iteration') if isinstance(data, dict) else None,
-                            phase='routing_in', method='create_branches_from_in_tolerance_locations',
+                            iteration=iteration,
+                            phase='routing_in', method=method,
                             code='filter_minimal_total_vs_benchmark')
 
     if direct_branches.empty:
@@ -466,7 +576,15 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         # and calculating distances for these few branches is possible without long computation times
 
         # only use options which are actually reachable from start
+        infrastructure_before_reachable_from_start = complete_infrastructure.index.tolist()
         complete_infrastructure = complete_infrastructure[complete_infrastructure['reachable_from_start']]
+        _track_benchmark_node_filter(
+            data, configuration, branches,
+            infrastructure_before_reachable_from_start,
+            complete_infrastructure.index.tolist(),
+            iteration, method, 'reachable_from_start_filter',
+            details={'use_minimal_distance': use_minimal_distance,
+                     'limitation': limitation})
 
         # always consider infrastructure in destination
         in_tolerance_to_destination_infrastructure = complete_infrastructure[complete_infrastructure['distance_to_destination'] < configuration['to_final_destination_tolerance']].index.tolist()
@@ -517,6 +635,14 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                                                    complete_infrastructure.loc[reduced_infrastructure_index, 'longitude'],
                                                    branches['latitude'], branches['longitude'])
 
+        _track_benchmark_node_filter(
+            data, configuration, branches,
+            complete_infrastructure.index.tolist(),
+            list(reduced_infrastructure_index),
+            iteration, method, 'infrastructure_limitation_or_reachable_continent_filter',
+            details={'use_minimal_distance': use_minimal_distance,
+                     'limitation': limitation})
+
         road_transportation_costs = {}
 
         new_transportation_costs = {}
@@ -548,18 +674,37 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
             road_applicable = road_applicable & was_not_road & was_not_new
 
             # check which infrastructure can be transported via road
+            road_before_transport_filter = np.ones(distance_values.shape, dtype=bool)
             if road_applicable:
                 # branches where last one was not road or new & commodity can be transported via road
                 road_transportation_costs[branch_index]\
                     = current_commodity_object.get_transportation_costs_specific_mean_of_transport('Road')
                 branches_to_keep_road.append(branch_index)
                 road_mask[:, branch_position] = distance_values[:, branch_position] <= max_length_road / no_road_multiplier
+                road_after_transport_filter = road_before_transport_filter.copy()
+                road_after_transport_filter[:, branch_position] = road_mask[:, branch_position]
+                _track_benchmark_mask_step(
+                    data, configuration, branches, reduced_infrastructure_index, branches.index,
+                    road_before_transport_filter, road_after_transport_filter,
+                    iteration, method, 'road_distance_or_max_length_filter',
+                    details={'branch': branch_index,
+                             'max_length_road': max_length_road / no_road_multiplier})
             else:
                 # branches where the above does not allow new road but as infrastructure is within tolerance, we can
                 # ignore transport mean as in this case we assume that we are already there
                 in_tolerance_options = distance_values[:, branch_position] <= configuration['tolerance_distance']
                 road_values[in_tolerance_options, branch_position] = 0
                 road_mask[:, branch_position] = in_tolerance_options
+                road_after_transport_filter = road_before_transport_filter.copy()
+                road_after_transport_filter[:, branch_position] = road_mask[:, branch_position]
+                _track_benchmark_mask_step(
+                    data, configuration, branches, reduced_infrastructure_index, branches.index,
+                    road_before_transport_filter, road_after_transport_filter,
+                    iteration, method, 'road_not_applicable_only_tolerance_filter',
+                    details={'branch': branch_index,
+                             'current_transport_mean': branches.at[branch_index, 'current_transport_mean'],
+                             'road_applicable': road_applicable,
+                             'tolerance_distance': configuration['tolerance_distance']})
 
                 road_transportation_costs[branch_index] = 0
                 branches_to_keep_road.append(branch_index)
@@ -569,6 +714,7 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
             # check if new pipelines are allowed and if so, which branches can use them
             if pipeline_applicable:
+                new_before_transport_filter = np.ones(distance_values.shape, dtype=bool)
                 if current_commodity_object.get_transportation_options_specific_mean_of_transport('New_Pipeline_Gas'):
                     # gas pipeline
                     new_transportation_costs[branch_index] \
@@ -580,12 +726,40 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 branches_to_keep_new.append(branch_index)
                 new_infrastructure_mask[:, branch_position] \
                     = distance_values[:, branch_position] <= max_length_new_segment / no_road_multiplier
+                new_after_transport_filter = new_before_transport_filter.copy()
+                new_after_transport_filter[:, branch_position] = new_infrastructure_mask[:, branch_position]
+                _track_benchmark_mask_step(
+                    data, configuration, branches, reduced_infrastructure_index, branches.index,
+                    new_before_transport_filter, new_after_transport_filter,
+                    iteration, method, 'new_pipeline_distance_or_max_length_filter',
+                    details={'branch': branch_index,
+                             'max_length_new_segment': max_length_new_segment / no_road_multiplier})
+            else:
+                new_before_transport_filter = np.ones(distance_values.shape, dtype=bool)
+                new_after_transport_filter = new_before_transport_filter.copy()
+                new_after_transport_filter[:, branch_position] = False
+                _track_benchmark_mask_step(
+                    data, configuration, branches, reduced_infrastructure_index, branches.index,
+                    new_before_transport_filter, new_after_transport_filter,
+                    iteration, method, 'new_pipeline_not_applicable_filter',
+                    details={'branch': branch_index,
+                             'current_transport_mean': branches.at[branch_index, 'current_transport_mean']})
 
         if not use_minimal_distance:
+            road_mask_before_continent = road_mask.copy()
             _apply_reachable_continent_mask(road_mask, reduced_infrastructure_index, branches.index,
                                             branches, complete_infrastructure, data)
+            _track_benchmark_mask_step(
+                data, configuration, branches, reduced_infrastructure_index, branches.index,
+                road_mask_before_continent, road_mask,
+                iteration, method, 'road_reachable_continent_mask')
+            new_mask_before_continent = new_infrastructure_mask.copy()
             _apply_reachable_continent_mask(new_infrastructure_mask, reduced_infrastructure_index, branches.index,
                                             branches, complete_infrastructure, data)
+            _track_benchmark_mask_step(
+                data, configuration, branches, reduced_infrastructure_index, branches.index,
+                new_mask_before_continent, new_infrastructure_mask,
+                iteration, method, 'new_pipeline_reachable_continent_mask')
 
         road_transportation_costs = pd.Series(road_transportation_costs.values(), index=road_transportation_costs.keys())
         new_transportation_costs = pd.Series(new_transportation_costs.values(), index=new_transportation_costs.keys())
@@ -657,6 +831,14 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
                 reduced_infrastructure_index = _filter_infrastructure_by_reachable_continents(
                     reduced_infrastructure_index, complete_infrastructure, branches, data)
+
+            _track_benchmark_node_filter(
+                data, configuration, branches,
+                complete_infrastructure.index.tolist(),
+                list(reduced_infrastructure_index),
+                iteration, method, 'infrastructure_limitation_or_reachable_continent_filter',
+                details={'use_minimal_distance': use_minimal_distance,
+                         'limitation': limitation})
 
             distance_blocks = _build_reachable_distance_blocks(
                 complete_infrastructure, reduced_infrastructure_index,
@@ -759,10 +941,26 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                 branch_meta = c_branches.loc[column_index]
 
                 # some locations are within tolerance. These are processed separately as we don't need transportation
+                in_tolerance_before = np.ones(distance_values.shape, dtype=bool)
                 in_tolerance_mask = distance_values <= configuration['tolerance_distance']
+                _track_benchmark_mask_step(
+                    data, configuration, branches, row_index, column_index,
+                    in_tolerance_before, in_tolerance_mask,
+                    iteration, method, 'in_tolerance_distance_filter',
+                    details={'commodity': c,
+                             'tolerance_distance': configuration['tolerance_distance'],
+                             'use_minimal_distance': use_minimal_distance,
+                             'limitation': limitation})
                 if not use_minimal_distance:
+                    in_tolerance_before_continent = in_tolerance_mask.copy()
                     _apply_reachable_continent_mask(in_tolerance_mask, row_index, column_index,
                                                     c_branches, complete_infrastructure, data)
+                    _track_benchmark_mask_step(
+                        data, configuration, branches, row_index, column_index,
+                        in_tolerance_before_continent, in_tolerance_mask,
+                        iteration, method, 'in_tolerance_reachable_continent_mask',
+                        details={'commodity': c,
+                                 'limitation': limitation})
                 if np.any(in_tolerance_mask):
                     in_tolerance_distances = _build_options_from_mask(distance_values, row_index, column_index,
                                                                       in_tolerance_mask)
@@ -773,6 +971,15 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
                     # remove all branches where road is not applicable (remove rows)
                     road_applicable = branch_meta['Road_applicable'].to_numpy(dtype=bool)
+                    road_before_applicability = np.ones(distance_values.shape, dtype=bool)
+                    road_after_applicability = road_applicable[None, :] & road_before_applicability
+                    _track_benchmark_mask_step(
+                        data, configuration, branches, row_index, column_index,
+                        road_before_applicability, road_after_applicability,
+                        iteration, method, 'road_applicability_filter',
+                        details={'commodity': c,
+                                 'use_minimal_distance': use_minimal_distance,
+                                 'limitation': limitation})
 
                     # remove all options where max length exceeds distance (remove columns)
                     max_length_road_costs \
@@ -780,14 +987,37 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                         / branch_meta['road_transportation_costs'].to_numpy() / no_road_multiplier
                     max_length_road_array = np.minimum(max_length_road_costs, max_length_road / no_road_multiplier)
                     road_mask = (distance_values <= max_length_road_array[None, :]) & road_applicable[None, :]
+                    _track_benchmark_mask_step(
+                        data, configuration, branches, row_index, column_index,
+                        road_after_applicability, road_mask,
+                        iteration, method, 'road_distance_or_cost_limit_filter',
+                        details={'commodity': c,
+                                 'max_length_road': max_length_road / no_road_multiplier,
+                                 'max_length_road_costs': max_length_road_costs.tolist(),
+                                 'use_minimal_distance': use_minimal_distance,
+                                 'limitation': limitation})
                     if not use_minimal_distance:
+                        road_before_continent = road_mask.copy()
                         _apply_reachable_continent_mask(road_mask, row_index, column_index,
                                                         c_branches, complete_infrastructure, data)
+                        _track_benchmark_mask_step(
+                            data, configuration, branches, row_index, column_index,
+                            road_before_continent, road_mask,
+                            iteration, method, 'road_reachable_continent_mask',
+                            details={'commodity': c,
+                                     'limitation': limitation})
 
                     # remove options based on previous used infrastructure
                     if not use_minimal_distance:
+                        road_before_visited = road_mask.copy()
                         _remove_visited_options_from_mask(road_mask, row_index, column_index,
                                                           branches_to_remove_based_on_visited_infrastructure)
+                        _track_benchmark_mask_step(
+                            data, configuration, branches, row_index, column_index,
+                            road_before_visited, road_mask,
+                            iteration, method, 'road_visited_infrastructure_mask',
+                            details={'commodity': c,
+                                     'limitation': limitation})
 
                     road_distances = _build_options_from_mask(distance_values, row_index, column_index, road_mask)
 
@@ -804,19 +1034,60 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                     pipeline_applicable = (branch_meta['New_Pipeline_Gas_applicable'].to_numpy(dtype=bool)
                                            | branch_meta['New_Pipeline_Liquid_applicable'].to_numpy(dtype=bool))
                     minimal_distance = minimal_distances.loc[columns_to_keep, 'minimal_distance'].to_numpy()
+                    new_before_applicability = np.ones(distance_values.shape, dtype=bool)
+                    new_after_applicability = pipeline_applicable[None, :] & new_before_applicability
+                    _track_benchmark_mask_step(
+                        data, configuration, branches, row_index, column_index,
+                        new_before_applicability, new_after_applicability,
+                        iteration, method, 'new_pipeline_applicability_filter',
+                        details={'commodity': c,
+                                 'use_minimal_distance': use_minimal_distance,
+                                 'limitation': limitation})
 
                     # remove branches where all minimal distances are already higher than minimal distance to next node,
                     # choose branches which are applicable for new infrastructure, and remove distances above max length.
                     new_branch_mask = (minimal_distance <= max_length_new_segment / no_road_multiplier) & pipeline_applicable
+                    new_after_minimal_distance = new_branch_mask[None, :] & new_before_applicability
+                    _track_benchmark_mask_step(
+                        data, configuration, branches, row_index, column_index,
+                        new_after_applicability, new_after_minimal_distance,
+                        iteration, method, 'new_pipeline_minimal_distance_filter',
+                        details={'commodity': c,
+                                 'max_length_new_segment': max_length_new_segment / no_road_multiplier,
+                                 'minimal_distance': minimal_distance.tolist(),
+                                 'use_minimal_distance': use_minimal_distance,
+                                 'limitation': limitation})
                     new_mask = (distance_values <= max_length_new_segment / no_road_multiplier) & new_branch_mask[None, :]
+                    _track_benchmark_mask_step(
+                        data, configuration, branches, row_index, column_index,
+                        new_after_minimal_distance, new_mask,
+                        iteration, method, 'new_pipeline_distance_filter',
+                        details={'commodity': c,
+                                 'max_length_new_segment': max_length_new_segment / no_road_multiplier,
+                                 'use_minimal_distance': use_minimal_distance,
+                                 'limitation': limitation})
                     if not use_minimal_distance:
+                        new_before_continent = new_mask.copy()
                         _apply_reachable_continent_mask(new_mask, row_index, column_index,
                                                         c_branches, complete_infrastructure, data)
+                        _track_benchmark_mask_step(
+                            data, configuration, branches, row_index, column_index,
+                            new_before_continent, new_mask,
+                            iteration, method, 'new_pipeline_reachable_continent_mask',
+                            details={'commodity': c,
+                                     'limitation': limitation})
 
                     # remove used infrastructure
                     if not use_minimal_distance:
+                        new_before_visited = new_mask.copy()
                         _remove_visited_options_from_mask(new_mask, row_index, column_index,
                                                           branches_to_remove_based_on_visited_infrastructure)
+                        _track_benchmark_mask_step(
+                            data, configuration, branches, row_index, column_index,
+                            new_before_visited, new_mask,
+                            iteration, method, 'new_pipeline_visited_infrastructure_mask',
+                            details={'commodity': c,
+                                     'limitation': limitation})
 
                     new_distances = _build_options_from_mask(distance_values, row_index, column_index, new_mask)
                     if not new_distances.empty:
@@ -1028,6 +1299,12 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
                                'new_pipeline_options': branch_count(new_infrastructure_options),
                                'use_minimal_distance': use_minimal_distance,
                                'limitation': limitation})
+    if outside_options.empty:
+        track_benchmark_removal(data, configuration, branches, outside_options,
+                                iteration=iteration, phase='routing_out', method=method,
+                                code='no_road_or_new_pipeline_options_created',
+                                details={'use_minimal_distance': use_minimal_distance,
+                                         'limitation': limitation})
 
     if not outside_options.empty:
 
@@ -1331,6 +1608,10 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                           details={'with_assessment': with_assessment})
 
         if all_infrastructures.empty:
+            track_benchmark_removal(data, configuration, branches, all_infrastructures,
+                                    iteration=iteration, phase='routing_in', method=method,
+                                    code='raw_candidates_empty',
+                                    details={'with_assessment': with_assessment})
             if tracker is not None:
                 tracker.event(iteration=iteration, phase='routing_in', method=method,
                               event='output', after=0,
@@ -1448,6 +1729,10 @@ def process_in_tolerance_branches_high_memory(data, branches, complete_infrastru
                           details={'with_assessment': with_assessment})
         return all_infrastructures
     else:
+        track_benchmark_removal(data, configuration, branches, pd.DataFrame(),
+                                iteration=iteration, phase='routing_in', method=method,
+                                code='no_infrastructure_chunks_created',
+                                details={'with_assessment': with_assessment})
         if tracker is not None:
             tracker.event(iteration=iteration, phase='routing_in', method=method,
                           event='output', after=0,
@@ -1749,6 +2034,10 @@ def process_in_tolerance_branches_low_memory(data, branches, complete_infrastruc
                           runtime_s=0.0,
                           details={'with_assessment': with_assessment})
         return all_infrastructures
+    track_benchmark_removal(data, configuration, branches, pd.DataFrame(),
+                            iteration=iteration, phase='routing_in', method=method,
+                            code='no_infrastructure_chunks_created',
+                            details={'with_assessment': with_assessment})
     if tracker is not None:
         tracker.event(iteration=iteration, phase='routing_in', method=method,
                       event='output', after=0,

@@ -909,6 +909,11 @@ def run_algorithm(args):
                               runtime_s=time.perf_counter() - time_combine_routing)
             else:
                 branches = pd.DataFrame()
+                track_benchmark_removal(data, configuration, old_branches, branches,
+                                        iteration=iteration, phase='routing', method='run_algorithm',
+                                        code='routing_results_empty',
+                                        details={'in_tolerance_options': branch_count(in_tolerance_options),
+                                                 'processed_outside_options': branch_count(processed_outside_options)})
 
         if False and not branches.empty:
 
