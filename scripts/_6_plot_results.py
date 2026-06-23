@@ -15,9 +15,9 @@ from plotting.get_figures import get_number_figure, get_energy_carrier_figure, g
     get_routes_figure, get_weighted_routes, get_commodity_transport_mean_histogram, get_supply_curves, \
     get_used_locations_figure, get_calculation_time, get_sankey_diagram, \
     get_start_locations_infrastructure_destination_figure, \
-    get_tight_boundaries_for_start_locations_infrastructure_destination
-from plotting.helpers_plotting import load_data, get_complete_infrastructure, load_result, plot_comparison_plot, \
-    match_routing_results
+    get_tight_boundaries_for_start_locations_infrastructure_destination, get_water_availability_figure
+from plotting.helpers_plotting import load_infrastructure_data, load_first_available_destination, \
+    get_complete_infrastructure, load_result, plot_comparison_plot, match_routing_results
 from data_processing.configuration import load_algorithm_configuration, load_plotting_configuration
 
 
@@ -53,7 +53,8 @@ if missing_infrastructure_files:
           + missing_infrastructure_files_text)
 check_required_files_exist([start_destination_combinations_file], 'start-location plotting')
 
-infrastructure_data, destination = load_data(path_data, config_file_general)
+infrastructure_data = load_infrastructure_data(path_data)
+destination = None
 complete_infrastructure = None
 production_costs = pd.read_csv(start_destination_combinations_file, index_col=0)
 if 'geometry' not in production_costs.columns:
@@ -108,11 +109,22 @@ supply_curve_results = config_file_plotting['supply_curve_plots']['results']
 routes_comparison_plot_results = config_file_plotting['routes_comparison_plot']
 matched_supply_routes_plots = config_file_plotting['matched_supply_routes_plots']
 
+all_results = list(set(production_plot_results + conversion_plot_results + transport_plot_results
+                       + total_supply_costs_plot_results + profit_plot_results
+                       + all_costs_plot_results + commodity_plot_results
+                       + efficiency_plot_results + sankey_plot_results + routes_plot_results
+                       + full_plot_results + weighted_routes_plot_results + commodity_transport_mean_results
+                       + supply_curve_results))
+
 route_infrastructure_plots_requested = (
     bool(routes_plot_results)
     or bool(routes_comparison_plot_results)
     or bool(matched_supply_routes_plots)
 )
+
+if (config_file_plotting['start_locations_infrastructure_destination_plot']
+        or (route_infrastructure_plots_requested and infrastructure_data_available)):
+    destination = load_first_available_destination(path_files, all_results)
 
 if route_infrastructure_plots_requested and infrastructure_data_available:
     complete_infrastructure = get_complete_infrastructure(infrastructure_data, destination)
@@ -122,18 +134,15 @@ elif route_infrastructure_plots_requested:
     routes_comparison_plot_results = []
     matched_supply_routes_plots = []
 
-all_results = list(set(production_plot_results + conversion_plot_results + transport_plot_results
-                       + total_supply_costs_plot_results + profit_plot_results
-                       + all_costs_plot_results + commodity_plot_results
-                       + efficiency_plot_results + sankey_plot_results
-                       + routes_plot_results + full_plot_results + weighted_routes_plot_results
-                       + commodity_transport_mean_results + supply_curve_results))
-
 # Start plotting
 
 # infrastructure
 if config_file_plotting['infrastructure_plot']:
     get_infrastructure_figure(boundaries, path_data, save=True, path_saving=path_saving)
+
+# water availability
+if config_file_plotting['water_availability_plot']:
+    get_water_availability_figure(boundaries, path_data, save=True, path_saving=path_saving)
 
 # start locations, infrastructure and destination
 if config_file_plotting['start_locations_infrastructure_destination_plot']:

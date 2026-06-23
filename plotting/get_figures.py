@@ -17,12 +17,13 @@ import matplotlib as mpl
 from math import sqrt
 from tqdm import tqdm
 from shapely.geometry import LineString, Point, Polygon, MultiLineString, MultiPolygon, box
-from shapely.ops import linemerge
+from shapely.ops import linemerge, unary_union
 from joblib import Parallel, delayed
 import plotly.graph_objects as go
 from matplotlib.ticker import FixedLocator
 
 import matplotlib.lines as mlines
+import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
 import networkx as nx
 import searoute as sr
@@ -1810,6 +1811,86 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
             fig.savefig(path_saving + 'infrastructure.svg', bbox_inches='tight')
 
             plt.close(fig)
+
+
+def get_water_availability_figure(boundaries, path_data, ax=None, fig=None, fig_title='water_availability',
+                                  width=15.69, height=9, return_fig=False, save=False, path_saving='',
+                                  plot_legend=True, high_resolution_map=True):
+    plt.rcParams.update({'font.size': 13,
+                         'legend.fontsize': 13,
+                         'font.family': 'Times New Roman'})
+    centimeter_to_inch = 1 / 2.54
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(width * centimeter_to_inch, height * centimeter_to_inch))
+
+    water_availability_file = os.path.join(path_data, 'water_availability.gpkg')
+    if not os.path.exists(water_availability_file):
+        raise FileNotFoundError(
+            'Missing water availability plotting data:\n'
+            + water_availability_file
+            + '\nRun scripts/_1_script_process_raw_data.py first to create water_availability.gpkg.'
+        )
+
+    boundary_box = box(boundaries['min_longitude'], boundaries['min_latitude'],
+                       boundaries['max_longitude'], boundaries['max_latitude'])
+
+    countries = _load_plot_world(high_resolution=high_resolution_map)
+    countries = _filter_world_to_boundaries(countries, boundaries)
+    antarctica = countries[countries['continent'] == 'Antarctica'].index
+    countries.drop(antarctica, inplace=True)
+    countries.plot(color='red', edgecolor='none', linewidth=0, ax=ax, zorder=1)
+
+    water_availability = gpd.read_file(water_availability_file, layer='ptx_water_available')
+    if water_availability.crs is None:
+        water_availability = water_availability.set_crs('EPSG:4326')
+    else:
+        water_availability = water_availability.to_crs('EPSG:4326')
+
+    water_availability = water_availability[water_availability.geometry.notna()].copy()
+    water_availability = water_availability[~water_availability.geometry.is_empty].copy()
+    water_availability = water_availability[water_availability.geometry.intersects(boundary_box)].copy()
+
+    if not water_availability.empty:
+        land_geometry = unary_union(countries.geometry)
+        available_geometry = unary_union(water_availability.geometry).intersection(land_geometry)
+        available_area = gpd.GeoDataFrame(geometry=[available_geometry], crs='EPSG:4326')
+        available_area.plot(color='green', edgecolor='none', linewidth=0, ax=ax, zorder=2)
+
+    countries.boundary.plot(color='darkgrey', linewidth=0.2, ax=ax, zorder=3)
+
+    ax.set_ylabel('')
+    ax.set_xlabel('')
+    ax.set_yticklabels([])
+    ax.set_xticklabels([])
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    ax.set_ylim(boundaries['min_latitude'],
+                boundaries['max_latitude'])
+    ax.set_xlim(boundaries['min_longitude'],
+                boundaries['max_longitude'])
+
+    if plot_legend:
+        handles = [
+            mpatches.Patch(color='green', label='Available'),
+            mpatches.Patch(color='red', label='Excluded')
+        ]
+        ax.legend(handles=handles, loc='upper center', ncol=2, bbox_to_anchor=(0.5, -0.02),
+                  frameon=True, labelspacing=0.25, handletextpad=0.35, columnspacing=0.8,
+                  handlelength=1.6, fontsize=13)
+
+    if return_fig:
+        return ax
+
+    if save and fig is not None:
+        fig.tight_layout()
+        plt.subplots_adjust(bottom=0.14)
+
+        fig.savefig(path_saving + fig_title + '.png', bbox_inches='tight', dpi=600)
+        fig.savefig(path_saving + fig_title + '.svg', bbox_inches='tight')
+
+        plt.close(fig)
 
 
 def get_tight_boundaries_for_start_locations_infrastructure_destination(start_locations, infrastructure_boundaries,

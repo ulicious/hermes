@@ -23,7 +23,6 @@ from statistics import mean
 from plotting.get_figures import get_number_figure, get_routes_figure, get_energy_carrier_figure, get_weighted_routes, \
     get_supply_curves
 from data_processing.configuration import CONVERSION_CONFIG, load_yaml
-from data_processing.helpers_geometry import get_destination
 
 
 def _read_csv_or_empty(path, columns=None, index_col=0, dtype=None):
@@ -73,7 +72,30 @@ def get_geometry_plot_point(geometry):
     return geometry.representative_point()
 
 
-def load_data(path_data, config_file):
+def load_destination(path_files, result_name):
+    destination = pd.read_csv(os.path.join(path_files, result_name + '_destination.csv'), index_col=0)
+    return wkt.loads(destination.values[0][0])
+
+
+def load_first_available_destination(path_files, preferred_results=None):
+    if preferred_results is not None:
+        for result_name in preferred_results:
+            destination_file = os.path.join(path_files, result_name + '_destination.csv')
+            if os.path.exists(destination_file):
+                return load_destination(path_files, result_name)
+
+    destination_files = sorted(
+        file for file in os.listdir(path_files)
+        if file.endswith('_destination.csv')
+    )
+    if not destination_files:
+        raise FileNotFoundError('Missing destination data in processed results.')
+
+    result_name = destination_files[0][:-len('_destination.csv')]
+    return load_destination(path_files, result_name)
+
+
+def load_infrastructure_data(path_data):
     node_columns = ['latitude', 'longitude', 'graph', 'continent']
     graph_columns = ['graph', 'node_start', 'node_end', 'distance', 'line']
     port_columns = ['latitude', 'longitude', 'name', 'country', 'continent',
@@ -95,9 +117,7 @@ def load_data(path_data, config_file):
 
     data = process_network_data(data, 'Pipeline_Liquid', pipeline_liquid_node_locations, pipeline_liquid_graphs)
 
-    destination = get_destination(config_file)
-
-    return data, destination
+    return data
 
 
 def process_network_data(data, name, geo_data, graph_data):
@@ -728,10 +748,7 @@ def load_result(r, path_files, config_file_plotting, production_costs, with_rout
     data = pd.read_csv(path_files + r + '_processed_results.csv', index_col=0)
     strike_prices = _load_strike_prices_from_result_path(path_files)
 
-    destination = pd.read_csv(path_files + r + '_destination.csv', index_col=0)
-    destination = wkt.loads(destination.values[0][0])
-    # destination = destination.apply(wkt.loads)
-    # destination = gpd.GeoDataFrame(geometry=[destination])
+    destination = load_destination(path_files, r)
 
     # overwrite production costs with h2 production costs
     data['production_costs'] = production_costs['Hydrogen_Gas']
