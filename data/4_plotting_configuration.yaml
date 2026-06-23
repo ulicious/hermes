@@ -7,6 +7,7 @@ commodity_routes: []
 # plot infrastructure
 infrastructure_plot: False  # plots infrastructure
 start_locations_infrastructure_destination_plot: False  # plots start locations, infrastructure and destination without optimization results
+water_availability_plot: False  # plots water availability based on processed Aqueduct data
 
 # single result plots; ['results_1', 'results_2']
 production_costs_plot: []  # name of results in results/; creates h2 production costs plot for results in csv
