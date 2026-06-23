@@ -3,8 +3,8 @@ import subprocess
 import sys
 
 
-# Adjust this path to your HERMES project folder before running the workflow.
-PROJECT_FOLDER = 'C:/Users/mt5285/Documents/Transportmodell/'
+# Defaults to the folder from which the workflow is started.
+PROJECT_FOLDER = os.getcwd()
 
 # Select which workflow steps should run.
 RUN_SETUP_PROJECT_FOLDER = False

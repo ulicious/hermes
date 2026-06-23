@@ -9,6 +9,7 @@ import numpy as np
 from algorithm.script_algorithm import run_algorithm
 from algorithm.methods_main import prepare_data_and_configuration_dictionary
 from data_processing.configuration import load_algorithm_configuration, load_technology_data
+from algorithm.tracking import is_enabled
 
 # sys.path.append(os.path.dirname(os.getcwd()))
 
@@ -47,29 +48,31 @@ if __name__ == '__main__':
         techno_economic_data_conversion, techno_economic_data_transport = load_technology_data(config_file)
 
         print('Main configuration:')
+        print('Configuration file: ' + str(config_file.get('_configuration_path')))
+        print('Project folder: ' + str(config_file['project_folder_path']))
 
         target_commodity_text = ', '.join(config_file['target_commodity'])
         print('Target commodity: ' + target_commodity_text)
 
-        print('Distance to destination requiring not transport: ' + str(config_file['to_final_destination_tolerance']))
+        print('Distance to destination requiring not transport: ' + str(configuration['to_final_destination_tolerance']))
 
-        print('Distance between infrastructure requiring no transport: ' + str(config_file['tolerance_distance']))
+        print('Distance between infrastructure requiring no transport: ' + str(configuration['tolerance_distance']))
 
-        print('Maximal distance for road transport: ' + str(config_file['max_length_road']))
+        print('Maximal distance for road transport: ' + str(configuration['max_length_road']))
 
-        if config_file['build_new_infrastructure']:
-            print('Distance for new pipeline segments: ' + str(config_file['max_length_new_segment']))
+        if is_enabled(configuration['build_new_infrastructure']):
+            print('Distance for new pipeline segments: ' + str(configuration['max_length_new_segment']))
         else:
             print('New pipeline segments not enabled')
 
-        print('Multiplier to consider obstacles (road transport / new pipeline segments): ' + str(config_file['no_road_multiplier']))
+        print('Multiplier to consider obstacles (road transport / new pipeline segments): ' + str(configuration['no_road_multiplier']))
 
-        if config_file['H2_ready_infrastructure']:
-            print('Retroffiting of gas pipelines enabled')
+        if is_enabled(configuration['H2_ready_infrastructure']):
+            print('Retrofitting of gas pipelines enabled')
         else:
-            print('Retrofitting if gas pipelines not enabled')
+            print('Retrofitting of gas pipelines not enabled')
 
-        if config_file['consider_commodity_prices']:
+        if is_enabled(config_file['consider_commodity_prices']):
             print(techno_economic_data_conversion['strike_prices'])
         else:
             for k in techno_economic_data_conversion['strike_prices'].keys():
@@ -82,7 +85,7 @@ if __name__ == '__main__':
 
     print('start algorithm')
     time_start = time.time()
-    if not config_file['use_low_memory']:
+    if not is_enabled(configuration['use_low_memory']):
 
         num_cores = config_file['number_cores']
         if num_cores == 'max':

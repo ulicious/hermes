@@ -8,6 +8,7 @@ import numpy as np
 import geopandas as gpd
 import networkx as nx
 
+from algorithm.tracking import is_enabled
 from shapely.wkt import loads
 from shapely.geometry import MultiLineString, Point
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure
@@ -133,7 +134,7 @@ def prepare_data_and_configuration_dictionary(config_file):
     strike_prices_commodity = {}
     for c in config_file['available_commodity']:
         if c in final_commodities:
-            if config_file['consider_commodity_prices']:
+            if is_enabled(config_file['consider_commodity_prices']):
                 strike_prices_commodity[c] = techno_economic_data_conversion['strike_prices'][c]
             else:
                 strike_prices_commodity[c] = 0
@@ -250,7 +251,7 @@ def prepare_data_and_configuration_dictionary(config_file):
         configuration['max_length_road'] = math.inf
 
     # if no new pipeline infrastructure can be built, then we set distance to 0
-    if not configuration['build_new_infrastructure']:
+    if not is_enabled(configuration['build_new_infrastructure']):
         configuration['max_length_new_segment'] = 0
 
     return data, configuration, location_data

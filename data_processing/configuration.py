@@ -31,6 +31,38 @@ LEGACY_CONFIG_FILENAMES = [
     '_5_plotting_configuration.yaml',
 ]
 
+BOOLEAN_CONFIG_KEYS = [
+    'use_minimal_example',
+    'use_low_storage',
+    'use_low_memory',
+    'create_mip_data',
+    'start_locations_update_only_conversion_costs_and_efficiency',
+    'use_voronoi_cells',
+    'weight_hydrogen_costs_by_quantity',
+    'each_country_at_least_one_location',
+    'create_locations_for_islands',
+    'low_temp_heat_available_at_start',
+    'mid_temp_heat_available_at_start',
+    'high_temp_heat_available_at_start',
+    'infrastructure_enforce_update_of_data',
+    'infrastructure_update_only_conversion_costs_and_efficiency',
+    'low_temp_heat_available_at_ports',
+    'mid_temp_heat_available_at_ports',
+    'high_temp_heat_available_at_ports',
+    'low_temp_heat_available_at_pipelines',
+    'mid_temp_heat_available_at_pipelines',
+    'high_temp_heat_available_at_pipelines',
+    'use_biggest_landmass',
+    'build_new_infrastructure',
+    'H2_ready_infrastructure',
+    'low_temp_heat_available_at_destination',
+    'mid_temp_heat_available_at_destination',
+    'high_temp_heat_available_at_destination',
+    'consider_commodity_prices',
+    'print_runtime_information',
+    'print_benchmark_info',
+]
+
 PROJECT_STRUCTURE = [
     'raw_data',
     'processed_data',
@@ -50,12 +82,52 @@ def load_yaml(path_file):
         return yaml.load(yaml_file, Loader=yaml.FullLoader)
 
 
+def _as_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {'true', '1', 'yes', 'y', 'on'}:
+            return True
+        if normalized in {'false', '0', 'no', 'n', 'off', ''}:
+            return False
+    return bool(value)
+
+
+def normalize_algorithm_configuration(config_file):
+    for key in BOOLEAN_CONFIG_KEYS:
+        if key in config_file:
+            config_file[key] = _as_bool(config_file[key])
+    return config_file
+
+
 def get_config_folder(project_folder_path):
     return project_folder_path
 
 
 def get_config_path(project_folder_path, filename):
     return os.path.join(get_config_folder(project_folder_path), filename)
+
+
+def _path_is_inside_folder(path_file, path_folder):
+    path_file = os.path.abspath(path_file)
+    path_folder = os.path.abspath(path_folder)
+    return os.path.commonpath([path_file, path_folder]) == path_folder
+
+
+def _load_project_yaml(config_file, filename):
+    project_folder_path = os.path.abspath(config_file['project_folder_path'])
+    config_path = os.path.abspath(os.path.join(get_config_folder(project_folder_path), filename))
+    if not _path_is_inside_folder(config_path, project_folder_path):
+        raise ValueError(
+            'Configuration file is outside the project folder:\n'
+            + config_path
+            + '\nProject folder:\n'
+            + project_folder_path
+        )
+    if not os.path.exists(config_path):
+        raise FileNotFoundError('Missing configuration file:\n' + config_path)
+    return load_yaml(config_path)
 
 
 def _template_config_path(filename):
@@ -170,18 +242,19 @@ def resolve_project_folder_path(project_folder_path=None):
     cli_project_folder = _project_folder_from_cli()
     if cli_project_folder is not None:
         return cli_project_folder
-    template_config = load_yaml(_template_config_path(ALGORITHM_CONFIG))
-    return template_config['project_folder_path']
+    return os.getcwd()
 
 
 def _ensure_trailing_separator(path_folder):
-    if path_folder.endswith(os.sep):
+    if path_folder.endswith(('/', '\\')):
         return path_folder
     return path_folder + os.sep
 
 
 def load_algorithm_configuration(project_folder_path=None):
     project_folder_path = resolve_project_folder_path(project_folder_path)
+    project_folder_path = os.path.abspath(project_folder_path)
+    project_folder_path = _ensure_trailing_separator(project_folder_path)
     config_path = os.path.join(get_config_folder(project_folder_path), ALGORITHM_CONFIG)
     if not os.path.exists(config_path):
         raise FileNotFoundError(
@@ -189,20 +262,19 @@ def load_algorithm_configuration(project_folder_path=None):
             + config_path
             + '\nRun _run_workflow.py with RUN_SETUP_PROJECT_FOLDER = True first.'
         )
-    config_file = load_yaml(config_path)
-    config_file['project_folder_path'] = _ensure_trailing_separator(config_file['project_folder_path'])
+    config_file = normalize_algorithm_configuration(load_yaml(config_path))
+    config_file['project_folder_path'] = project_folder_path
+    config_file['_configuration_path'] = config_path
     return config_file
 
 
 def load_plotting_configuration(config_file=None):
     if config_file is None:
         config_file = load_algorithm_configuration()
-    config_folder = get_config_folder(config_file['project_folder_path'])
-    return load_yaml(os.path.join(config_folder, PLOTTING_CONFIG))
+    return _load_project_yaml(config_file, PLOTTING_CONFIG)
 
 
 def load_technology_data(config_file):
-    config_folder = get_config_folder(config_file['project_folder_path'])
-    conversion_data = load_yaml(os.path.join(config_folder, CONVERSION_CONFIG))
-    transportation_data = load_yaml(os.path.join(config_folder, TRANSPORTATION_CONFIG))
+    conversion_data = _load_project_yaml(config_file, CONVERSION_CONFIG)
+    transportation_data = _load_project_yaml(config_file, TRANSPORTATION_CONFIG)
     return conversion_data, transportation_data
