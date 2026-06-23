@@ -3,15 +3,15 @@
 # Existing source comments disagreed between kW and MW; verify this capacity basis.
 
 strike_prices:
-   Hydrogen_Gas: 66.29  # [EUR/MWh_commodity]; reference: 66.299
-   Hydrogen_Liquid: 67.84  # [EUR/MWh_commodity]; reference: 70.942
-   Ammonia: 119.706  # [EUR/MWh_commodity]; reference: 119.706
-   Methanol: 110.155  # [EUR/MWh_commodity]; reference: 110.155
-   Methane_Gas: 22.68  # [EUR/MWh_commodity]; reference: 22.68
-   Methane_Liquid: 47.896  # [EUR/MWh_commodity]; reference: 47.896
+   Hydrogen_Gas: 66.29  # [EUR/MWh_commodity]
+   Hydrogen_Liquid: 66.299  # [EUR/MWh_commodity]
+   Ammonia: 119.706  # [EUR/MWh_commodity]
+   Methanol: 110.155  # [EUR/MWh_commodity]
+   Methane_Gas: 22.68  # [EUR/MWh_commodity]
+   Methane_Liquid: 47.896  # [EUR/MWh_commodity]
    DBT: 0  # [EUR/MWh_commodity]
    MCH: 0  # [EUR/MWh_commodity]
-   FTF: 33.12  # [EUR/MWh_commodity]; reference: 33.12
+   FTF: 33.12  # [EUR/MWh_commodity]
 
 cost_type:
    # viable options:

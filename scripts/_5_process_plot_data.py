@@ -13,7 +13,8 @@ import geopandas as gpd
 from tqdm import tqdm
 from shapely.geometry import Point
 
-from plotting.helpers_plotting import load_data, get_complete_infrastructure, create_weighted_routing_data_script
+from data_processing.helpers_geometry import get_destination
+from plotting.helpers_plotting import load_infrastructure_data, get_complete_infrastructure, create_weighted_routing_data_script
 from data_processing.configuration import load_algorithm_configuration, load_plotting_configuration
 
 # script to process results
@@ -31,7 +32,8 @@ if config_file['use_voronoi_cells']:
 
 path_processed_data = config_file['project_folder_path'] + 'processed_data/'
 
-infrastructure_data, destination = load_data(path_processed_data, config_file)
+infrastructure_data = load_infrastructure_data(path_processed_data)
+destination = get_destination(config_file)
 complete_infrastructure = get_complete_infrastructure(infrastructure_data, destination)
 
 path_processed_results = config_file['project_folder_path'] + 'results/processed_results/'
