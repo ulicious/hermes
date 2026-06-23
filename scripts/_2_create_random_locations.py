@@ -90,7 +90,48 @@ def calculate_start_mip_distances_like_heuristic(config_file, options, starting_
     return road_distances
 
 
+def print_start_location_configuration(config_file):
+    print('Selected start-location settings:')
+    print('Configuration file: ' + str(config_file.get('_configuration_path')))
+    print('Project folder: ' + str(config_file['project_folder_path']))
+    print('Minimal example: ' + str(config_file['use_minimal_example']))
+    print('Low memory mode: ' + str(config_file['use_low_memory']))
+    print('Configured cores: ' + str(config_file['number_cores']))
+    print('Start-location update mode - conversion costs/efficiencies only: '
+          + str(config_file['start_locations_update_only_conversion_costs_and_efficiency']))
+    print('MIP data enabled: ' + str(config_file['create_mip_data']))
+    print('Start-location count setting: ' + str(config_file['number_locations']))
+    print('Location creation type: ' + str(config_file['location_creation_type']))
+    print('Start area type: ' + str(config_file['start_location_area_type']))
+    print(
+        'Start bounds: lat '
+        + str(config_file['start_location_minimal_latitude'])
+        + ' to '
+        + str(config_file['start_location_maximal_latitude'])
+        + ', lon '
+        + str(config_file['start_location_minimal_longitude'])
+        + ' to '
+        + str(config_file['start_location_maximal_longitude'])
+    )
+    print('Start countries: ' + str(config_file['start_location_countries']))
+    print('Origin continents: ' + str(config_file['origin_continents']))
+    print('Voronoi cells enabled: ' + str(config_file['use_voronoi_cells']))
+    print('Hydrogen cost weighting by quantity: ' + str(config_file['weight_hydrogen_costs_by_quantity']))
+    print('Each-country coverage enabled: ' + str(config_file['each_country_at_least_one_location']))
+    print('Island locations enabled: ' + str(config_file['create_locations_for_islands']))
+    print('Island area threshold: ' + str(config_file['island_area_threshold']))
+    print(
+        'Heat at start low/mid/high: '
+        + str(config_file['low_temp_heat_available_at_start'])
+        + '/'
+        + str(config_file['mid_temp_heat_available_at_start'])
+        + '/'
+        + str(config_file['high_temp_heat_available_at_start'])
+    )
+
+
 config_file = load_algorithm_configuration()
+print_start_location_configuration(config_file)
 
 path_raw_data = config_file['project_folder_path'] + 'raw_data/'
 

@@ -99,8 +99,52 @@ def ensure_processed_infrastructure_files(path_processed):
             json.dump({}, file, indent=2)
 
 
+def print_infrastructure_configuration(config_file):
+    print('Selected infrastructure settings:')
+    print('Configuration file: ' + str(config_file.get('_configuration_path')))
+    print('Project folder: ' + str(config_file['project_folder_path']))
+    print('Minimal example: ' + str(config_file['use_minimal_example']))
+    print('Low storage mode: ' + str(config_file['use_low_storage']))
+    print('Low memory mode: ' + str(config_file['use_low_memory']))
+    print('Configured cores: ' + str(config_file['number_cores']))
+    print('Infrastructure update mode - conversion costs/efficiencies only: '
+          + str(config_file['infrastructure_update_only_conversion_costs_and_efficiency']))
+    print('Infrastructure data force update: ' + str(config_file['infrastructure_enforce_update_of_data']))
+    print('MIP data enabled: ' + str(config_file['create_mip_data']))
+    print(
+        'Infrastructure bounds: lat '
+        + str(config_file['infrastructure_minimal_latitude'])
+        + ' to '
+        + str(config_file['infrastructure_maximal_latitude'])
+        + ', lon '
+        + str(config_file['infrastructure_minimal_longitude'])
+        + ' to '
+        + str(config_file['infrastructure_maximal_longitude'])
+    )
+    print('Pipeline connection point distance setting: '
+          + str(config_file['minimal_distance_between_pipeline_connection_points']))
+    print('Pipeline gap distance setting: ' + str(config_file['gap_distance']))
+    print(
+        'Heat at ports low/mid/high: '
+        + str(config_file['low_temp_heat_available_at_ports'])
+        + '/'
+        + str(config_file['mid_temp_heat_available_at_ports'])
+        + '/'
+        + str(config_file['high_temp_heat_available_at_ports'])
+    )
+    print(
+        'Heat at pipelines low/mid/high: '
+        + str(config_file['low_temp_heat_available_at_pipelines'])
+        + '/'
+        + str(config_file['mid_temp_heat_available_at_pipelines'])
+        + '/'
+        + str(config_file['high_temp_heat_available_at_pipelines'])
+    )
+
+
 # load configuration file
 config_file = load_algorithm_configuration()
+print_infrastructure_configuration(config_file)
 
 use_minimal_example = config_file['use_minimal_example']
 use_low_storage = config_file['use_low_storage']

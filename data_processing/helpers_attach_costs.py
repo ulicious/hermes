@@ -15,6 +15,19 @@ from data_processing.natural_earth_data import load_world
 from data_processing.configuration import COUNTRY_DATA_FILE, LOCATION_DATA_FILE
 
 
+def _config_flag(config_file, key):
+    value = config_file.get(key, False)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {'true', '1', 'yes', 'y', 'on'}:
+            return True
+        if normalized in {'false', '0', 'no', 'n', 'off', ''}:
+            return False
+    return bool(value)
+
+
 def check_if_location_is_valid(techno_economic_data_conversion, country_start, adjusted_latitude,
                                adjusted_longitude, levelized_costs_location, levelized_costs_country):
 
@@ -377,7 +390,7 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
 
             heat_demand_niveau = techno_economic_data_conversion[start_commodity][target_commodity]['heat_demand_niveau']
 
-            if (heat_demand_niveau == 'low_temperature') & config_file['low_temp_heat_available_at_start']:
+            if heat_demand_niveau == 'low_temperature' and _config_flag(config_file, 'low_temp_heat_available_at_start'):
                 heat_costs = locations['Low_Heat_Temperature']
 
                 costs \
@@ -389,7 +402,7 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
                 efficiency = techno_economic_data_conversion[start_commodity][target_commodity][
                     'efficiency_external_heat']
 
-            elif (heat_demand_niveau == 'mid_temperature') & config_file['mid_temp_heat_available_at_start']:
+            elif heat_demand_niveau == 'mid_temperature' and _config_flag(config_file, 'mid_temp_heat_available_at_start'):
                 heat_costs = locations['Mid_Heat_Temperature']
 
                 costs \
@@ -400,7 +413,7 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
                 efficiency \
                     = techno_economic_data_conversion[start_commodity][target_commodity]['efficiency_external_heat']
 
-            elif (heat_demand_niveau == 'high_temperature') & config_file['high_temp_heat_available_at_start']:
+            elif heat_demand_niveau == 'high_temperature' and _config_flag(config_file, 'high_temp_heat_available_at_start'):
                 heat_costs = locations['High_Heat_Temperature']
 
                 costs \
@@ -554,7 +567,7 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
 
                     heat_demand_niveau = techno_economic_data_conversion[c1_local][c2_local]['heat_demand_niveau']
 
-                    if (heat_demand_niveau == 'low_temperature') & config_file['low_temp_heat_available_at_' + location]:
+                    if heat_demand_niveau == 'low_temperature' and _config_flag(config_file, 'low_temp_heat_available_at_' + location):
                         heat_costs = locations_to_process['Low_Temperature_Heat']
 
                         conversion_costs \
@@ -565,7 +578,7 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
 
                         conversion_efficiency = techno_economic_data_conversion[c1_local][c2_local]['efficiency_external_heat']
 
-                    elif (heat_demand_niveau == 'mid_temperature') & config_file['mid_temp_heat_available_at_' + location]:
+                    elif heat_demand_niveau == 'mid_temperature' and _config_flag(config_file, 'mid_temp_heat_available_at_' + location):
                         heat_costs = locations_to_process['Mid_Temperature_Heat']
 
                         conversion_costs \
@@ -575,7 +588,7 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
                                                          nitrogen_costs, nitrogen_demand, heat_demand, heat_costs)
                         conversion_efficiency = techno_economic_data_conversion[c1_local][c2_local]['efficiency_external_heat']
 
-                    elif (heat_demand_niveau == 'high_temperature') & config_file['high_temp_heat_available_at_' + location]:
+                    elif heat_demand_niveau == 'high_temperature' and _config_flag(config_file, 'high_temp_heat_available_at_' + location):
                         heat_costs = locations_to_process['High_Temperature_Heat']
 
                         conversion_costs \
