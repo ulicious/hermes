@@ -127,26 +127,14 @@ def get_benchmark_branches(branches, benchmark_info):
     return pd.concat(benchmark_branches)
 
 
-def print_benchmark_branches(branches, benchmark_info, cumulative_benchmark_costs=None, label=None):
-    if label:
-        print(label)
-
-    benchmark_branches = get_benchmark_branches(branches, benchmark_info)
-    if benchmark_branches.empty:
-        print('benchmark is not part of solution anymore')
-        return
-
-    if cumulative_benchmark_costs is not None:
-        print(cumulative_benchmark_costs)
-    print(benchmark_branches[['current_commodity', 'current_node', 'current_total_costs']])
-
-
 def track_benchmark_removal(data, configuration, before_branches, after_branches,
                             iteration=None, phase=None, method=None, code=None,
                             details=None):
     if not configuration.get('print_benchmark_info', False):
         return
     if not isinstance(data, dict):
+        return
+    if data.get('_benchmark_removal_reported'):
         return
 
     benchmark_info = data.get('benchmark_info')
@@ -157,6 +145,8 @@ def track_benchmark_removal(data, configuration, before_branches, after_branches
     after_benchmark = get_benchmark_branches(after_branches, benchmark_info)
     if not after_benchmark.empty:
         return
+
+    data['_benchmark_removal_reported'] = True
 
     location = data.get('location_index', data.get('k'))
     print('Benchmark removed from branches')
