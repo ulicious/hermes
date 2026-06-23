@@ -17,6 +17,11 @@ The current workflow is split into four main steps:
 3. Run the routing algorithm for all start locations.
 4. Optionally create plots for the generated results.
 
+The main algorithm can also be run for several alternative algorithm
+configuration files in one batch. In that mode each scenario writes its
+``location_results`` and ``algorithm_tracking`` outputs to a result folder named
+exactly like the configuration file.
+
 The documentation in this folder reflects the current repository structure,
 the active YAML configuration files, and the parameter set used by the
 latest code in ``scripts._1_script_process_raw_data``,

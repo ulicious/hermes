@@ -83,6 +83,7 @@ should look as follows:
         2_techno_economic_data_transportation.yaml
         3_techno_economic_data_conversion.yaml
         4_plotting_configuration.yaml
+        algorithm_configurations/  # optional alternative algorithm YAML files
         raw_data/
         processed_data/
             inner_infrastructure_distances/
@@ -90,6 +91,7 @@ should look as follows:
         start_destination_combinations.csv
         results/
             location_results/
+            algorithm_tracking/
             plots/
 
 File copying is handled only by the setup step. The preprocessing step reads
@@ -104,8 +106,10 @@ The setup step writes the path towards ``PROJECT FOLDER`` into
 :ref:`general_configuration`. The workflow scripts are stored in ``scripts/``
 and are normally started through ``_run_workflow.py``. Advanced users can still
 run a single step from the repository root via module call, for example
-``python -m scripts._3_main "PROJECT FOLDER"``. The ``HERMES_PROJECT_FOLDER``
-environment variable can also be used.
+``python -m scripts._3_main "PROJECT FOLDER"``. To run the main algorithm with
+an alternative algorithm configuration file, use
+``python -m scripts._3_main "PROJECT FOLDER" --algorithm-config "path/to/config.yaml"``.
+The ``HERMES_PROJECT_FOLDER`` environment variable can also be used.
 
 Only this central project-folder path is stored as a path in
 ``1_algorithm_configuration.yaml``. All subfolders are derived by the code from
@@ -164,6 +168,26 @@ creation, the main algorithm, MIP optimization, plot-data processing, plotting,
 and algorithm-tracking analysis. Keep only the desired ``RUN_*`` flags set to
 ``True``.
 
+To run several algorithm scenarios without repeatedly editing
+``1_algorithm_configuration.yaml``, set ``RUN_ALGORITHM_CONFIG_BATCH = True`` in
+``_run_workflow.py`` and place alternative algorithm configuration YAML files in
+``PROJECT FOLDER/algorithm_configurations/``. The runner executes
+``scripts._3_main`` once per YAML file for all not-yet-processed start
+locations. Each scenario writes its outputs to a folder named exactly like the
+configuration file:
+
+.. code-block:: none
+
+    PROJECT FOLDER/
+        results/
+            scenario_a.yaml/
+                location_results/
+                algorithm_tracking/
+
+The default ``1_algorithm_configuration.yaml`` still writes to the standard
+``PROJECT FOLDER/results/location_results/`` and
+``PROJECT FOLDER/results/algorithm_tracking/`` folders.
+
 Advanced users can also run individual workflow modules from the repository
 root:
 
@@ -177,7 +201,10 @@ root:
 7. ``python -m scripts._7_analyze_algorithm_tracking "PROJECT FOLDER"``: optionally analyzes algorithm tracking logs
 
 The algorithm creates one result file per start location in
-``PROJECT FOLDER/results/location_results/``.
+``PROJECT FOLDER/results/location_results/``. When ``--algorithm-config`` or
+``RUN_ALGORITHM_CONFIG_BATCH`` is used with an alternative algorithm
+configuration file, the result files are written to
+``PROJECT FOLDER/results/<configuration filename>/location_results/`` instead.
 
 If desired, the plot-data processing and plotting steps can be used afterwards
 to create standard plots in ``PROJECT FOLDER/results/plots/``.

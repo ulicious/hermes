@@ -100,30 +100,17 @@ def ensure_processed_infrastructure_files(path_processed):
 
 
 def print_infrastructure_configuration(config_file):
+    conversion_update_only = (
+        config_file['infrastructure_update_only_conversion_costs_and_efficiency']
+        and not config_file['infrastructure_enforce_update_of_data']
+    )
     print('Selected infrastructure settings:')
     print('Configuration file: ' + str(config_file.get('_configuration_path')))
     print('Project folder: ' + str(config_file['project_folder_path']))
-    print('Minimal example: ' + str(config_file['use_minimal_example']))
-    print('Low storage mode: ' + str(config_file['use_low_storage']))
-    print('Low memory mode: ' + str(config_file['use_low_memory']))
-    print('Configured cores: ' + str(config_file['number_cores']))
     print('Infrastructure update mode - conversion costs/efficiencies only: '
           + str(config_file['infrastructure_update_only_conversion_costs_and_efficiency']))
     print('Infrastructure data force update: ' + str(config_file['infrastructure_enforce_update_of_data']))
     print('MIP data enabled: ' + str(config_file['create_mip_data']))
-    print(
-        'Infrastructure bounds: lat '
-        + str(config_file['infrastructure_minimal_latitude'])
-        + ' to '
-        + str(config_file['infrastructure_maximal_latitude'])
-        + ', lon '
-        + str(config_file['infrastructure_minimal_longitude'])
-        + ' to '
-        + str(config_file['infrastructure_maximal_longitude'])
-    )
-    print('Pipeline connection point distance setting: '
-          + str(config_file['minimal_distance_between_pipeline_connection_points']))
-    print('Pipeline gap distance setting: ' + str(config_file['gap_distance']))
     print(
         'Heat at ports low/mid/high: '
         + str(config_file['low_temp_heat_available_at_ports'])
@@ -140,6 +127,26 @@ def print_infrastructure_configuration(config_file):
         + '/'
         + str(config_file['high_temp_heat_available_at_pipelines'])
     )
+    if conversion_update_only:
+        return
+
+    print('Minimal example: ' + str(config_file['use_minimal_example']))
+    print('Low storage mode: ' + str(config_file['use_low_storage']))
+    print('Low memory mode: ' + str(config_file['use_low_memory']))
+    print('Configured cores: ' + str(config_file['number_cores']))
+    print(
+        'Infrastructure bounds: lat '
+        + str(config_file['infrastructure_minimal_latitude'])
+        + ' to '
+        + str(config_file['infrastructure_maximal_latitude'])
+        + ', lon '
+        + str(config_file['infrastructure_minimal_longitude'])
+        + ' to '
+        + str(config_file['infrastructure_maximal_longitude'])
+    )
+    print('Pipeline connection point distance setting: '
+          + str(config_file['minimal_distance_between_pipeline_connection_points']))
+    print('Pipeline gap distance setting: ' + str(config_file['gap_distance']))
 
 
 # load configuration file
@@ -151,6 +158,16 @@ use_low_storage = config_file['use_low_storage']
 use_low_memory = config_file['use_low_memory']
 infrastructure_update_only_conversion_costs_and_efficiency = \
     config_file['infrastructure_update_only_conversion_costs_and_efficiency']
+logging.info(
+    'Infrastructure conversion update only: %s | heat ports low/mid/high: %s/%s/%s | heat pipelines low/mid/high: %s/%s/%s',
+    infrastructure_update_only_conversion_costs_and_efficiency,
+    config_file['low_temp_heat_available_at_ports'],
+    config_file['mid_temp_heat_available_at_ports'],
+    config_file['high_temp_heat_available_at_ports'],
+    config_file['low_temp_heat_available_at_pipelines'],
+    config_file['mid_temp_heat_available_at_pipelines'],
+    config_file['high_temp_heat_available_at_pipelines'],
+)
 
 infrastructure_boundaries = get_boundaries_from_config(
     config_file, prefix='infrastructure_', use_minimal_example=use_minimal_example)

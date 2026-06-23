@@ -220,17 +220,32 @@ def setup_project_folder(project_folder_path):
 
 def _project_folder_from_cli():
     arguments = sys.argv[1:]
-    for index, argument in enumerate(arguments):
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
         if argument == '--project-folder':
-            value_index = index + 2
-            if value_index < len(sys.argv):
-                return sys.argv[value_index]
+            value_index = index + 1
+            if value_index < len(arguments):
+                return arguments[value_index]
         if argument.startswith('--project-folder='):
             return argument.split('=', 1)[1]
-    for argument in arguments:
-        if argument.startswith('-'):
+        if argument in {'--algorithm-config'}:
+            index += 2
             continue
-        return argument
+        index += 1
+
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument in {'--algorithm-config', '--project-folder'}:
+            index += 2
+            continue
+        if argument.startswith('--algorithm-config=') or argument.startswith('--project-folder='):
+            index += 1
+            continue
+        if not argument.startswith('-'):
+            return argument
+        index += 1
     return None
 
 
@@ -245,17 +260,41 @@ def resolve_project_folder_path(project_folder_path=None):
     return os.getcwd()
 
 
+def _algorithm_config_path_from_cli():
+    arguments = sys.argv[1:]
+    for index, argument in enumerate(arguments):
+        if argument == '--algorithm-config':
+            value_index = index + 1
+            if value_index < len(arguments):
+                return arguments[value_index]
+        if argument.startswith('--algorithm-config='):
+            return argument.split('=', 1)[1]
+    return None
+
+
+def resolve_algorithm_config_path(project_folder_path, algorithm_config_path=None):
+    if algorithm_config_path is None:
+        algorithm_config_path = os.environ.get('HERMES_ALGORITHM_CONFIG')
+    if algorithm_config_path is None:
+        algorithm_config_path = _algorithm_config_path_from_cli()
+    if algorithm_config_path is None:
+        algorithm_config_path = os.path.join(get_config_folder(project_folder_path), ALGORITHM_CONFIG)
+    elif not os.path.isabs(algorithm_config_path):
+        algorithm_config_path = os.path.join(project_folder_path, algorithm_config_path)
+    return os.path.abspath(algorithm_config_path)
+
+
 def _ensure_trailing_separator(path_folder):
     if path_folder.endswith(('/', '\\')):
         return path_folder
     return path_folder + os.sep
 
 
-def load_algorithm_configuration(project_folder_path=None):
+def load_algorithm_configuration(project_folder_path=None, algorithm_config_path=None):
     project_folder_path = resolve_project_folder_path(project_folder_path)
     project_folder_path = os.path.abspath(project_folder_path)
     project_folder_path = _ensure_trailing_separator(project_folder_path)
-    config_path = os.path.join(get_config_folder(project_folder_path), ALGORITHM_CONFIG)
+    config_path = resolve_algorithm_config_path(project_folder_path, algorithm_config_path)
     if not os.path.exists(config_path):
         raise FileNotFoundError(
             'Missing configuration file:\n'

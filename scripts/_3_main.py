@@ -16,24 +16,155 @@ from algorithm.tracking import is_enabled
 import warnings
 warnings.filterwarnings('ignore')
 
+POOL_CHECK_INTERVAL_S = 30
+DEAD_POOL_RESTART_AFTER_S = 300
+MAX_POOL_RESTARTS = 10
+
+
+def _ensure_trailing_separator(path_folder):
+    if path_folder.endswith(('/', '\\')):
+        return path_folder
+    return path_folder + os.sep
+
+
+def _prepare_result_folders(config_file, configuration):
+    path_results = os.path.join(config_file['project_folder_path'], 'results')
+    if config_file.get('_configuration_path'):
+        default_config_path = os.path.join(config_file['project_folder_path'], '1_algorithm_configuration.yaml')
+        if os.path.abspath(config_file['_configuration_path']) != os.path.abspath(default_config_path):
+            path_results = os.path.join(path_results, os.path.basename(config_file['_configuration_path']))
+
+    configuration['path_results'] = _ensure_trailing_separator(path_results)
+    os.makedirs(os.path.join(configuration['path_results'], 'location_results'), exist_ok=True)
+    os.makedirs(os.path.join(configuration['path_results'], 'algorithm_tracking'), exist_ok=True)
+
+
+def _get_processed_locations(configuration):
+    processed_locations = []
+    path_location_results = os.path.join(configuration['path_results'], 'location_results')
+    files = os.listdir(path_location_results)
+    for f in files:
+        if 'global' in f:
+            continue
+
+        try:
+            number = int(f.split('_')[0])
+        except ValueError:
+            continue
+        processed_locations.append(number)
+
+    return processed_locations
+
+
+def _get_unprocessed_location_data(location_data, configuration):
+    processed_locations = _get_processed_locations(configuration)
+    processed_locations = [i for i in processed_locations if i in location_data.index]
+    return location_data.drop(processed_locations)
+
+
+def _get_num_cores(config_file):
+    num_cores = config_file['number_cores']
+    if num_cores == 'max':
+        num_cores = multiprocessing.cpu_count() - 1
+    else:
+        num_cores = min(num_cores, multiprocessing.cpu_count() - 1)
+    return max(1, num_cores)
+
+
+def _pool_has_live_workers(pool):
+    return any(worker.is_alive() for worker in pool._pool)
+
+
+def _run_parallel_algorithm(location_data, data, config_file, configuration):
+    num_cores = _get_num_cores(config_file)
+    restarts = 0
+
+    while True:
+        pending_location_data = _get_unprocessed_location_data(location_data, configuration)
+        if pending_location_data.empty:
+            return
+
+        print('Open locations: ' + str(len(pending_location_data.index)))
+
+        rng = np.random.default_rng(seed=42)
+        indexes = rng.permutation(pending_location_data.index)
+
+        task_args = zip(indexes,
+                        itertools.repeat(pending_location_data),
+                        itertools.repeat(data),
+                        itertools.repeat(config_file),
+                        itertools.repeat(configuration))
+
+        pool = multiprocessing.Pool(processes=num_cores, maxtasksperchild=1)
+        results = pool.imap_unordered(run_algorithm, task_args)
+        dead_pool_since = None
+        pool_finished = False
+
+        try:
+            while True:
+                try:
+                    results.next(timeout=POOL_CHECK_INTERVAL_S)
+                    dead_pool_since = None
+                except StopIteration:
+                    pool.close()
+                    pool.join()
+                    pool_finished = True
+                    break
+                except multiprocessing.TimeoutError:
+                    pending_location_data = _get_unprocessed_location_data(location_data, configuration)
+                    if pending_location_data.empty:
+                        pool.terminate()
+                        pool.join()
+                        pool_finished = True
+                        return
+
+                    if _pool_has_live_workers(pool):
+                        dead_pool_since = None
+                        continue
+
+                    if dead_pool_since is None:
+                        dead_pool_since = time.time()
+                        print('No live worker processes detected. Waiting before restarting pool.')
+                        continue
+
+                    if time.time() - dead_pool_since < DEAD_POOL_RESTART_AFTER_S:
+                        continue
+
+                    restarts += 1
+                    print('No live worker processes for '
+                          + str(DEAD_POOL_RESTART_AFTER_S)
+                          + ' seconds. Restart pool '
+                          + str(restarts)
+                          + '/'
+                          + str(MAX_POOL_RESTARTS)
+                          + '.')
+                    pool.terminate()
+                    pool.join()
+                    pool_finished = True
+
+                    if restarts > MAX_POOL_RESTARTS:
+                        raise RuntimeError(
+                            'Maximum number of pool restarts reached. '
+                            'Remaining locations: ' + str(len(pending_location_data.index))
+                        )
+                    break
+        except Exception:
+            if not pool_finished:
+                pool.terminate()
+                pool.join()
+            raise
+
+
 if __name__ == '__main__':
 
     # load configuration file
     config_file = load_algorithm_configuration()
 
     data, configuration, location_data = prepare_data_and_configuration_dictionary(config_file)
+    _prepare_result_folders(config_file, configuration)
 
     # used to remove processed results
-    processed_locations = []
-    files = os.listdir(configuration['path_results'] + 'location_results/')
-    for f in files:
-        if 'global' in f:
-            continue
-
-        number = int(f.split('_')[0])
-        processed_locations.append(number)
-
-    location_data.drop(processed_locations, inplace=True)
+    location_data = _get_unprocessed_location_data(location_data, configuration)
 
     # location_data = location_data.loc[[5869], :]
 
@@ -86,32 +217,7 @@ if __name__ == '__main__':
     print('start algorithm')
     time_start = time.time()
     if not is_enabled(configuration['use_low_memory']):
-
-        num_cores = config_file['number_cores']
-        if num_cores == 'max':
-            num_cores = multiprocessing.cpu_count() - 1
-        else:
-            num_cores = min(num_cores, multiprocessing.cpu_count() - 1)
-
-        # Create a pool of worker processes
-        pool = multiprocessing.Pool(processes=num_cores, maxtasksperchild=1)
-
-        # Create an iterable of tuples, each containing the task ID and shared_dict
-        rng = np.random.default_rng(seed=42)
-        indexes = rng.permutation(location_data.index)
-
-        task_args = zip(indexes,
-                        itertools.repeat(location_data),
-                        itertools.repeat(data),
-                        itertools.repeat(config_file),
-                        itertools.repeat(configuration))
-
-        # Start processing tasks and ensure parallelism
-        results = list(pool.imap(run_algorithm, task_args))
-
-        # Close and join the worker pool
-        pool.close()
-        pool.join()
+        _run_parallel_algorithm(location_data, data, config_file, configuration)
 
     else:
         for i in location_data.index:

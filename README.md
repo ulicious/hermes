@@ -21,11 +21,13 @@ Users should adjust `1_algorithm_configuration.yaml`, `2_techno_economic_data_tr
 
 If an older project folder still contains numbered configuration files or a `config/` subfolder from a previous layout, the setup step removes the known obsolete configuration files and writes the current files directly into `PROJECT_FOLDER/`.
 
-The workflow scripts are stored in `scripts/` and are normally started through `_run_workflow.py`. Advanced users can still run a single step from the repository root via module call, e.g. `python -m scripts._3_main PROJECT_FOLDER` or `python -m scripts._3_main --project-folder PROJECT_FOLDER`. The `HERMES_PROJECT_FOLDER` environment variable can also be used.
+The workflow scripts are stored in `scripts/` and are normally started through `_run_workflow.py`. Advanced users can still run a single step from the repository root via module call, e.g. `python -m scripts._3_main PROJECT_FOLDER` or `python -m scripts._3_main --project-folder PROJECT_FOLDER`. To run the main algorithm with an alternative algorithm configuration file, use `python -m scripts._3_main PROJECT_FOLDER --algorithm-config path/to/config.yaml`. The `HERMES_PROJECT_FOLDER` environment variable can also be used.
 
 For less experienced users, `_run_workflow.py` provides one central entry point. Set `PROJECT_FOLDER` and the `RUN_*` booleans at the top of the file, then run `python _run_workflow.py`. The script starts the selected workflow modules in order and passes the project folder automatically.
 
 The central runner can start setup, raw-data processing, start-location creation, the main algorithm, MIP optimization, plot-data processing, plotting, and algorithm-tracking analysis. Keep only the desired `RUN_*` flags set to `True`.
+
+For running multiple algorithm scenarios without repeatedly editing `1_algorithm_configuration.yaml`, set `RUN_ALGORITHM_CONFIG_BATCH = True` in `_run_workflow.py` and place alternative algorithm configuration YAML files in `PROJECT_FOLDER/algorithm_configurations/`. The runner executes `scripts._3_main` once per YAML file for all remaining locations. Results for each scenario are written to `PROJECT_FOLDER/results/<configuration filename>/location_results/` and tracking logs to `PROJECT_FOLDER/results/<configuration filename>/algorithm_tracking/`. The default `1_algorithm_configuration.yaml` still writes to the normal `PROJECT_FOLDER/results/location_results/` folder.
 
 This data is the necessary input for the full model and the demo version. For the demo version, please indicate that in the general configuration at: use_minimal_example. This will only consider Europe.
 

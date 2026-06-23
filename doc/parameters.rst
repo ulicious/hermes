@@ -219,6 +219,19 @@ structure:
             location_results/  # per-location result csv files written by scripts._3_main
             plots/  # figures written by scripts._6_plot_results
 
+When ``scripts._3_main`` is started with ``--algorithm-config`` or through
+``RUN_ALGORITHM_CONFIG_BATCH`` in ``_run_workflow.py``, alternative algorithm
+configuration files write to scenario-specific result folders named exactly like
+the configuration file:
+
+.. code-block:: none
+
+    PROJECT FOLDER/
+        results/
+            scenario_a.yaml/
+                location_results/
+                algorithm_tracking/
+
 The ``process_results`` setting is used to name result sets that should be
 processed for later comparison workflows.
 
