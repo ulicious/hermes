@@ -23,7 +23,6 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
     """
 
     # todo: derive benchmark solution in clear structure
-    print_benchmark_info = configuration['print_benchmark_info']
     min_value_overall = math.inf
     min_value_info = None
 
@@ -396,13 +395,6 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
 
     if not math.isinf(min_value_overall):
         benchmark = math.ceil(min_value_overall)
-
-        if print_benchmark_info:
-            print('Location: ' + str(data['location_index']))
-            print(benchmark)
-            for i in min_value_info:
-                print(i)
-            print(dict(benchmarks))
 
     else:
         benchmark = math.inf

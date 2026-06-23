@@ -19,7 +19,7 @@ from algorithm.methods_conversion import apply_conversion
 from algorithm.methods_cost_approximations import calculate_minimal_costs_conversion_for_oil_and_gas_infrastructure
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure, calculate_conversion_costs_and_efficiencies_for_all_combinations
 from data_processing.configuration import load_technology_data
-from algorithm.tracking import AlgorithmTracker, branch_count, print_benchmark_branches, track_benchmark_removal
+from algorithm.tracking import AlgorithmTracker, branch_count, track_benchmark_removal
 
 import logging
 logging.getLogger().setLevel(logging.INFO)
@@ -375,6 +375,7 @@ def run_algorithm(args):
     time_benchmark = time.time()
     benchmark, benchmarks, benchmark_locations, benchmark_info = calculate_benchmark(data, configuration, complete_infrastructure)
     data['benchmark_info'] = benchmark_info
+    data['_benchmark_removal_reported'] = False
     tracker.event(phase='benchmark', method='calculate_benchmark', event='runtime',
                   runtime_s=time.time() - time_benchmark,
                   details={'benchmark': benchmark})
@@ -475,10 +476,6 @@ def run_algorithm(args):
                           after=branch_count(branches),
                           created=branch_count(branches) - before_merge_no_conversion,
                           runtime_s=time.perf_counter() - time_merge_no_conversion)
-
-        # check if benchmark solution is still in branches
-        if not branches.empty and configuration['print_benchmark_info']:
-            print_benchmark_branches(branches, benchmark_info, cumulative_benchmark_costs, label='Conversion')
 
         time_conversion = time.time() - time_conversion
         tracker.event(iteration=iteration, phase='conversion', method='run_algorithm',
@@ -981,9 +978,6 @@ def run_algorithm(args):
             if not branches.empty:
                 branches['benchmark'] = branches['current_commodity'].map(benchmarks)
                 branches = branches[branches['current_total_costs'] <= branches['benchmark']]
-
-        if not branches.empty and configuration['print_benchmark_info']:
-            print_benchmark_branches(branches, benchmark_info, cumulative_benchmark_costs, label='Routing')
 
         time_routing_start = time.time() - time_routing
         tracker.event(iteration=iteration, phase='routing', method='run_algorithm',
