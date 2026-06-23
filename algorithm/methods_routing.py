@@ -14,7 +14,7 @@ from algorithm.methods_geographic import calc_distance_list_to_single, calc_dist
 from algorithm.methods_cost_approximations import calculate_cheapest_option_to_closest_infrastructure, \
     calculate_cheapest_option_to_final_destination
 from algorithm.methods_algorithm import remove_duplicate_branches
-from algorithm.tracking import branch_count, get_tracker, track_benchmark_removal
+from algorithm.tracking import branch_count, get_tracker, is_enabled, track_benchmark_removal
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -45,7 +45,7 @@ def _benchmark_branch_indices(branches, data):
 
 def _track_benchmark_node_filter(data, configuration, branches, before_nodes, after_nodes,
                                  iteration, method, code, details=None):
-    if not configuration.get('print_benchmark_info', False):
+    if not is_enabled(configuration.get('print_benchmark_info', False)):
         return
     benchmark_branches = _benchmark_branch_indices(branches, data)
     if not benchmark_branches:
@@ -75,7 +75,7 @@ def _track_benchmark_node_filter(data, configuration, branches, before_nodes, af
 def _track_benchmark_mask_step(data, configuration, branches, row_index, column_index,
                                before_mask, after_mask, iteration, method, code,
                                details=None):
-    if not configuration.get('print_benchmark_info', False):
+    if not is_enabled(configuration.get('print_benchmark_info', False)):
         return
 
     benchmark_nodes = _benchmark_locations(data)

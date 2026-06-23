@@ -128,6 +128,12 @@ def get_benchmark_branches(branches, benchmark_info):
     return pd.concat(benchmark_branches)
 
 
+def is_enabled(value):
+    if isinstance(value, str):
+        return value.strip().lower() in {'true', '1', 'yes', 'y'}
+    return bool(value)
+
+
 def _get_source_location(stack_depth):
     frame = inspect.currentframe()
     try:
@@ -148,7 +154,7 @@ def _get_source_location(stack_depth):
 def track_benchmark_removal(data, configuration, before_branches, after_branches,
                             iteration=None, phase=None, method=None, code=None,
                             details=None, source_stack_depth=2):
-    if not configuration.get('print_benchmark_info', False):
+    if not is_enabled(configuration.get('print_benchmark_info', False)):
         return
     if not isinstance(data, dict):
         return
