@@ -147,7 +147,7 @@ def _get_source_location(stack_depth):
 
 def track_benchmark_removal(data, configuration, before_branches, after_branches,
                             iteration=None, phase=None, method=None, code=None,
-                            details=None, source_stack_depth=1):
+                            details=None, source_stack_depth=2):
     if not configuration.get('print_benchmark_info', False):
         return
     if not isinstance(data, dict):
@@ -175,7 +175,9 @@ def track_benchmark_removal(data, configuration, before_branches, after_branches
     print('Method: ' + str(method))
     print('Code: ' + str(code))
     if source is not None:
-        print('Source: ' + source['file'] + ':' + str(source['line']))
+        print('Source:')
+        print('  File "' + source['file'] + '", line ' + str(source['line']) + ', in ' + str(method))
+        print('  ' + source['file'] + ':' + str(source['line']))
     if details:
         print('Details: ' + str(details))
     print('Benchmark branches before removal:')
