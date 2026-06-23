@@ -63,6 +63,7 @@ def _track_benchmark_node_filter(data, configuration, branches, before_nodes, af
     track_benchmark_removal(
         data, configuration, branches, pd.DataFrame(),
         iteration=iteration, phase='routing_out', method=method, code=code,
+        source_stack_depth=2,
         details={
             'benchmark_candidate_nodes_before': sorted(before_benchmark_nodes),
             'benchmark_branches': benchmark_branches,
@@ -126,6 +127,7 @@ def _track_benchmark_mask_step(data, configuration, branches, row_index, column_
     track_benchmark_removal(
         data, configuration, branches, pd.DataFrame(),
         iteration=iteration, phase='routing_out', method=method, code=code,
+        source_stack_depth=2,
         details={
             'benchmark_candidates_before': removed_candidates,
             **(details or {}),

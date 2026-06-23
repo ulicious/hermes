@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import inspect
 import time
 from contextlib import contextmanager
 
@@ -127,9 +128,26 @@ def get_benchmark_branches(branches, benchmark_info):
     return pd.concat(benchmark_branches)
 
 
+def _get_source_location(stack_depth):
+    frame = inspect.currentframe()
+    try:
+        for _ in range(stack_depth):
+            if frame is None:
+                return None
+            frame = frame.f_back
+        if frame is None:
+            return None
+        return {
+            'file': os.path.abspath(frame.f_code.co_filename),
+            'line': frame.f_lineno,
+        }
+    finally:
+        del frame
+
+
 def track_benchmark_removal(data, configuration, before_branches, after_branches,
                             iteration=None, phase=None, method=None, code=None,
-                            details=None):
+                            details=None, source_stack_depth=1):
     if not configuration.get('print_benchmark_info', False):
         return
     if not isinstance(data, dict):
@@ -148,6 +166,7 @@ def track_benchmark_removal(data, configuration, before_branches, after_branches
 
     data['_benchmark_removal_reported'] = True
 
+    source = _get_source_location(source_stack_depth)
     location = data.get('location_index', data.get('k'))
     print('Benchmark removed from branches')
     print('Location: ' + str(location))
@@ -155,6 +174,8 @@ def track_benchmark_removal(data, configuration, before_branches, after_branches
     print('Phase: ' + str(phase))
     print('Method: ' + str(method))
     print('Code: ' + str(code))
+    if source is not None:
+        print('Source: ' + source['file'] + ':' + str(source['line']))
     if details:
         print('Details: ' + str(details))
     print('Benchmark branches before removal:')
@@ -168,6 +189,7 @@ def track_benchmark_removal(data, configuration, before_branches, after_branches
                       removed=branch_count(before_branches) - branch_count(after_branches),
                       details={
                           'code': code,
+                          'source': source,
                           'benchmark_rows_before': branch_count(before_benchmark),
                           **(details or {}),
                       })
