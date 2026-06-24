@@ -33,6 +33,14 @@ import math
 from data_processing.natural_earth_data import load_world, load_world_lowres
 
 
+DEFAULT_PLOT_BOUNDARIES = {
+    'min_latitude': -70.0,
+    'max_latitude': 70.0,
+    'min_longitude': -180.0,
+    'max_longitude': 180.0,
+}
+
+
 # from plotting.helpers_plotting import get_geometry_segments
 
 
@@ -59,6 +67,176 @@ def _filter_world_to_boundaries(world, boundaries):
     boundary_box = box(boundaries['min_longitude'], boundaries['min_latitude'],
                        boundaries['max_longitude'], boundaries['max_latitude'])
     return world[world.geometry.intersects(boundary_box)].copy()
+
+
+def _validated_custom_plot_boundaries(plotting_config):
+    custom_boundaries = plotting_config.get('custom_plot_extent', {})
+    required_keys = list(DEFAULT_PLOT_BOUNDARIES)
+    missing_keys = [
+        key for key in required_keys
+        if key not in custom_boundaries or custom_boundaries[key] is None
+    ]
+    if missing_keys:
+        raise ValueError(
+            "plot_extent is 'custom', but custom_plot_extent is missing values for: "
+            + ', '.join(missing_keys)
+        )
+
+    boundaries = {}
+    for key in required_keys:
+        try:
+            boundaries[key] = float(custom_boundaries[key])
+        except (TypeError, ValueError) as error:
+            raise ValueError('custom_plot_extent.' + key + ' must be numeric.') from error
+
+    if boundaries['min_latitude'] >= boundaries['max_latitude']:
+        raise ValueError('custom_plot_extent requires min_latitude < max_latitude.')
+    if boundaries['min_longitude'] >= boundaries['max_longitude']:
+        raise ValueError('custom_plot_extent requires min_longitude < max_longitude.')
+    if boundaries['min_latitude'] < -90 or boundaries['max_latitude'] > 90:
+        raise ValueError('custom_plot_extent latitude values must be within -90 and 90.')
+    if boundaries['min_longitude'] < -180 or boundaries['max_longitude'] > 180:
+        raise ValueError('custom_plot_extent longitude values must be within -180 and 180.')
+
+    return boundaries
+
+
+def get_configured_plot_boundaries(plotting_config, allow_results=True):
+    mode = str(plotting_config.get('plot_extent', 'default')).strip().lower()
+    valid_modes = {'default', 'results', 'custom'}
+    if mode not in valid_modes:
+        raise ValueError(
+            "plot_extent must be one of 'default', 'results' or 'custom', not: "
+            + str(mode)
+        )
+
+    if mode == 'custom':
+        boundaries = _validated_custom_plot_boundaries(plotting_config)
+    else:
+        boundaries = DEFAULT_PLOT_BOUNDARIES.copy()
+
+    if mode == 'results' and not allow_results:
+        mode = 'default'
+
+    boundaries['_mode'] = mode
+    return boundaries
+
+
+def _geometry_bounds(geometry):
+    if geometry is None:
+        return None
+    if isinstance(geometry, gpd.GeoDataFrame) or isinstance(geometry, gpd.GeoSeries):
+        if geometry.empty:
+            return None
+        return tuple(geometry.total_bounds)
+    if isinstance(geometry, pd.Series):
+        geometry = geometry.dropna()
+        if geometry.empty:
+            return None
+        return tuple(gpd.GeoSeries(geometry).total_bounds)
+    if isinstance(geometry, (list, tuple)):
+        geometries = [item for item in geometry if item is not None and not item.is_empty]
+        if not geometries:
+            return None
+        return tuple(gpd.GeoSeries(geometries).total_bounds)
+    if hasattr(geometry, 'is_empty') and not geometry.is_empty:
+        return geometry.bounds
+    return None
+
+
+def get_result_plot_boundaries(data=None, destination_location=None, route_geometries=None,
+                               padding_fraction=0.03, minimum_padding=1.0):
+    bounds = []
+
+    if data is not None and not data.empty and {'longitude', 'latitude'}.issubset(data.columns):
+        coordinates = data[['longitude', 'latitude']].replace([np.inf, -np.inf], np.nan).dropna()
+        if not coordinates.empty:
+            bounds.append((
+                coordinates['longitude'].min(),
+                coordinates['latitude'].min(),
+                coordinates['longitude'].max(),
+                coordinates['latitude'].max(),
+            ))
+
+    for geometry in [destination_location, route_geometries]:
+        geometry_bound = _geometry_bounds(geometry)
+        if geometry_bound is not None:
+            bounds.append(geometry_bound)
+
+    if not bounds:
+        result = DEFAULT_PLOT_BOUNDARIES.copy()
+        result['_mode'] = 'results'
+        return result
+
+    min_longitude = min(bound[0] for bound in bounds)
+    min_latitude = min(bound[1] for bound in bounds)
+    max_longitude = max(bound[2] for bound in bounds)
+    max_latitude = max(bound[3] for bound in bounds)
+
+    longitude_padding = max((max_longitude - min_longitude) * padding_fraction, minimum_padding)
+    latitude_padding = max((max_latitude - min_latitude) * padding_fraction, minimum_padding)
+
+    result = {
+        'min_latitude': max(min_latitude - latitude_padding, -90.0),
+        'max_latitude': min(max_latitude + latitude_padding, 90.0),
+        'min_longitude': min_longitude - longitude_padding,
+        'max_longitude': max_longitude + longitude_padding,
+        '_mode': 'results',
+    }
+    return result
+
+
+def resolve_plot_boundaries(plotting_config, data=None, destination_location=None,
+                            route_geometries=None, allow_results=True):
+    configured_boundaries = get_configured_plot_boundaries(
+        plotting_config, allow_results=allow_results)
+    if configured_boundaries['_mode'] != 'results':
+        return configured_boundaries
+    return get_result_plot_boundaries(
+        data=data,
+        destination_location=destination_location,
+        route_geometries=route_geometries,
+    )
+
+
+def expand_result_boundaries(boundaries, route_geometries):
+    if boundaries.get('_mode') != 'results':
+        return boundaries
+
+    current_box = box(
+        boundaries['min_longitude'],
+        boundaries['min_latitude'],
+        boundaries['max_longitude'],
+        boundaries['max_latitude'],
+    )
+    return get_result_plot_boundaries(
+        destination_location=current_box,
+        route_geometries=route_geometries,
+    )
+
+
+def _sanitize_filename(filename):
+    """Replace characters that are invalid or path-separating on common operating systems."""
+    invalid_characters = '<>:"/\\|?*'
+    translation = str.maketrans({character: '_' for character in invalid_characters})
+    filename = ''.join('_' if ord(character) < 32 else character for character in str(filename))
+    filename = filename.translate(translation).strip().rstrip(' .')
+
+    stem = os.path.splitext(filename)[0].upper()
+    reserved_names = {'CON', 'PRN', 'AUX', 'NUL'}
+    reserved_names.update('COM' + str(number) for number in range(1, 10))
+    reserved_names.update('LPT' + str(number) for number in range(1, 10))
+    if stem in reserved_names:
+        filename = '_' + filename
+
+    return filename or 'output'
+
+
+def safe_output_path(directory, filename):
+    """Build a platform-independent output path with a safe filename."""
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    return os.path.join(directory, _sanitize_filename(filename))
 
 
 def _read_csv_or_empty(path, columns=None, index_col=0):
@@ -356,6 +534,10 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
 
         all_networks.append(line_gdf)
 
+    if all_networks:
+        route_geometries = pd.concat(all_networks, ignore_index=True)['geometry']
+        boundaries = expand_result_boundaries(boundaries, route_geometries)
+
     # plot destination location / polygon
     if isinstance(destination_location, Point):
         destination_location = gpd.GeoDataFrame(geometry=[destination_location])
@@ -415,13 +597,13 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
             fig.tight_layout()
             plt.subplots_adjust(bottom=0.3)
 
-            fig.savefig(path_saving + fig_title + '.png', bbox_inches='tight', dpi=600)
-            fig.savefig(path_saving + fig_title + '.svg', bbox_inches='tight')
+            fig.savefig(safe_output_path(path_saving, fig_title + '.png'), bbox_inches='tight', dpi=600)
+            fig.savefig(safe_output_path(path_saving, fig_title + '.svg'), bbox_inches='tight')
 
             plt.close(fig)
 
             all_networks = pd.concat(all_networks)
-            all_networks.to_excel(path_saving + fig_title + '.xlsx', index=True)
+            all_networks.to_excel(safe_output_path(path_saving, fig_title + '.xlsx'), index=True)
 
 
 def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionary,
@@ -464,6 +646,8 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
 
     # commodity_data = commodity_data.iloc[0:10]
     commodity_data = commodity_data[commodity_data['quantity'] > 0]
+    if not commodity_data.empty:
+        boundaries = expand_result_boundaries(boundaries, commodity_data['geometry'])
 
     if existing_commodities is None:
         existing_commodities = []
@@ -734,10 +918,11 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
             plt.subplots_adjust(bottom=0.4)
 
             if ignore_commodity:
-                name = path_saving + fig_title + '_no_com'
+                filename = fig_title + '_no_com'
             else:
-                name = path_saving + fig_title
+                filename = fig_title
 
+            name = safe_output_path(path_saving, filename)
             fig.savefig(name + '.png', bbox_inches='tight', dpi=600)
             fig.savefig(name + '.svg', bbox_inches='tight')
 
@@ -892,13 +1077,13 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
             fig.tight_layout()
             # plt.subplots_adjust(bottom=0.2)
 
-            # fig.savefig(save_path + fig_title + '.png', dpi=600)
-            fig.savefig(save_path + fig_title + '.png', bbox_inches='tight', dpi=600)
-            fig.savefig(save_path + fig_title + '.svg', bbox_inches='tight')
+            fig.savefig(safe_output_path(save_path, fig_title + '.png'), bbox_inches='tight', dpi=600)
+            fig.savefig(safe_output_path(save_path, fig_title + '.svg'), bbox_inches='tight')
 
             plt.close(fig)
 
-            data[['latitude', 'longitude', column]].to_excel(save_path + fig_title + '.xlsx')
+            data[['latitude', 'longitude', column]].to_excel(
+                safe_output_path(save_path, fig_title + '.xlsx'))
 
 
 def get_used_locations_figure(data, boundaries, destination_location, quantity, ax=None,
@@ -994,8 +1179,8 @@ def get_used_locations_figure(data, boundaries, destination_location, quantity, 
 
     if save:
         if fig is not None:
-            fig.savefig(save_path + fig_title + '.png', bbox_inches='tight', dpi=600)
-            fig.savefig(save_path + fig_title + '.svg', bbox_inches='tight')
+            fig.savefig(safe_output_path(save_path, fig_title + '.png'), bbox_inches='tight', dpi=600)
+            fig.savefig(safe_output_path(save_path, fig_title + '.svg'), bbox_inches='tight')
 
             plt.close(fig)
 
@@ -1521,17 +1706,17 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
             plt.subplots_adjust(bottom=0.28)
 
             fig.savefig(
-                path_saving + fig_title + '.png',
+                safe_output_path(path_saving, fig_title + '.png'),
                 bbox_inches='tight',
                 dpi=600
             )
 
             fig.savefig(
-                path_saving + fig_title + '.svg',
+                safe_output_path(path_saving, fig_title + '.svg'),
                 bbox_inches='tight'
             )
 
-        data.to_excel(path_saving + fig_title + '.xlsx')
+        data.to_excel(safe_output_path(path_saving, fig_title + '.xlsx'))
 
 
 def get_production_costs_figure(sub_axes, data, norm, cmap_chosen, boundaries, destination_location,
@@ -1697,10 +1882,11 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
     if save:
         if fig is not None:
             fig.tight_layout()
-            fig.savefig(path_saving + fig_title + '.png', bbox_inches='tight', dpi=600)
-            fig.savefig(path_saving + fig_title + '.svg', bbox_inches='tight')
+            fig.savefig(safe_output_path(path_saving, fig_title + '.png'), bbox_inches='tight', dpi=600)
+            fig.savefig(safe_output_path(path_saving, fig_title + '.svg'), bbox_inches='tight')
 
-            data[['latitude', 'longitude', 'start_commodity']].to_excel(path_saving + fig_title + '.xlsx')
+            data[['latitude', 'longitude', 'start_commodity']].to_excel(
+                safe_output_path(path_saving, fig_title + '.xlsx'))
 
 
 def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_title='', width=15.69, height=9,
@@ -1717,12 +1903,12 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
     data_pipeline_gas = 'gas_pipeline_graphs.csv'
     data_pipeline_oil = 'oil_pipeline_graphs.csv'
 
-    data_ports = _read_csv_or_empty(path_data + data_ports,
+    data_ports = _read_csv_or_empty(os.path.join(path_data, data_ports),
                                     columns=['latitude', 'longitude', 'name', 'country', 'continent'])
-    data_pipeline_gas = _read_geodata_or_empty(path_data + data_pipeline_gas,
+    data_pipeline_gas = _read_geodata_or_empty(os.path.join(path_data, data_pipeline_gas),
                                                columns=['graph', 'node_start', 'node_end', 'distance', 'line',
                                                         'geometry'])
-    data_pipeline_oil = _read_geodata_or_empty(path_data + data_pipeline_oil,
+    data_pipeline_oil = _read_geodata_or_empty(os.path.join(path_data, data_pipeline_oil),
                                                columns=['graph', 'node_start', 'node_end', 'distance', 'line',
                                                         'geometry'])
 
@@ -1807,8 +1993,8 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
             fig.tight_layout()
             plt.subplots_adjust(bottom=0.1)
 
-            fig.savefig(path_saving + 'infrastructure.png', bbox_inches='tight', dpi=600)
-            fig.savefig(path_saving + 'infrastructure.svg', bbox_inches='tight')
+            fig.savefig(safe_output_path(path_saving, 'infrastructure.png'), bbox_inches='tight', dpi=600)
+            fig.savefig(safe_output_path(path_saving, 'infrastructure.svg'), bbox_inches='tight')
 
             plt.close(fig)
 
@@ -1887,8 +2073,8 @@ def get_water_availability_figure(boundaries, path_data, ax=None, fig=None, fig_
         fig.tight_layout()
         plt.subplots_adjust(bottom=0.14)
 
-        fig.savefig(path_saving + fig_title + '.png', bbox_inches='tight', dpi=600)
-        fig.savefig(path_saving + fig_title + '.svg', bbox_inches='tight')
+        fig.savefig(safe_output_path(path_saving, fig_title + '.png'), bbox_inches='tight', dpi=600)
+        fig.savefig(safe_output_path(path_saving, fig_title + '.svg'), bbox_inches='tight')
 
         plt.close(fig)
 
@@ -2001,8 +2187,8 @@ def get_start_locations_infrastructure_destination_figure(start_locations, bound
         fig.tight_layout()
         plt.subplots_adjust(bottom=0.1)
 
-        fig.savefig(path_saving + fig_title + '.png', bbox_inches='tight', dpi=600)
-        fig.savefig(path_saving + fig_title + '.svg', bbox_inches='tight')
+        fig.savefig(safe_output_path(path_saving, fig_title + '.png'), bbox_inches='tight', dpi=600)
+        fig.savefig(safe_output_path(path_saving, fig_title + '.svg'), bbox_inches='tight')
 
         plt.close(fig)
 
@@ -2181,20 +2367,26 @@ def get_commodity_transport_mean_histogram(data, color_dictionary, nice_names, p
 
         # Save the plot as PNG and SVG
         if True:
-            fig.savefig(path_saving + scenario_name + '_' + k1 + '_distances_histogram.png', bbox_inches='tight', dpi=600)
-            fig.savefig(path_saving + scenario_name + '_' + k1 + '_distances_histogram.svg', bbox_inches='tight')
+            fig.savefig(
+                safe_output_path(path_saving, scenario_name + '_' + k1 + '_distances_histogram.png'),
+                bbox_inches='tight', dpi=600)
+            fig.savefig(
+                safe_output_path(path_saving, scenario_name + '_' + k1 + '_distances_histogram.svg'),
+                bbox_inches='tight')
 
         plt.close(fig)
     fig_total.align_ylabels()
 
     plt.figtext(0.5, 0.05, 'Distance [km]', wrap=True, horizontalalignment='center', fontsize=9)
 
-    fig_total.savefig(path_saving + scenario_name + '_distances_histogram.png', bbox_inches='tight', dpi=600)
-    fig_total.savefig(path_saving + scenario_name + '_distances_histogram.svg', bbox_inches='tight')
+    fig_total.savefig(safe_output_path(path_saving, scenario_name + '_distances_histogram.png'),
+                      bbox_inches='tight', dpi=600)
+    fig_total.savefig(safe_output_path(path_saving, scenario_name + '_distances_histogram.svg'),
+                      bbox_inches='tight')
 
     plt.close(fig_total)
 
-    with pd.ExcelWriter(path_saving + scenario_name + '_distances_histogram.xlsx') as writer:
+    with pd.ExcelWriter(safe_output_path(path_saving, scenario_name + '_distances_histogram.xlsx')) as writer:
 
         for sheet_name, nested_dict in data_dict.items():
             # Inneres Dict -> DataFrame
@@ -2251,7 +2443,7 @@ def get_calculation_time(result_files, results, path_saving, fig_title, nice_nam
 
     plot.set_xlim([0, all_runtimes['solving_time'].max() * 1.05])
 
-    fig.savefig(path_saving + fig_title + '.png', bbox_inches='tight', dpi=600)
+    fig.savefig(safe_output_path(path_saving, fig_title + '.png'), bbox_inches='tight', dpi=600)
 
 
 import plotly.graph_objects as go
@@ -2663,17 +2855,17 @@ def get_sankey_diagram(ranked_routes, commodity_colors, nice_name_dictionary, pa
         shapes=shapes,
     )
 
-    fig.write_html(path_saving + "/" + fig_title + ".html", include_plotlyjs="cdn")
+    fig.write_html(safe_output_path(path_saving, fig_title + ".html"), include_plotlyjs="cdn")
 
     fig.write_image(
-        path_saving + "/" + fig_title + ".png",
+        safe_output_path(path_saving, fig_title + ".png"),
         width=plot_width_px,
         height=plot_height_px,
         scale=3,
     )
 
     fig.write_image(
-        path_saving + "/" + fig_title + ".svg",
+        safe_output_path(path_saving, fig_title + ".svg"),
         width=plot_width_px,
         height=plot_height_px,
     )

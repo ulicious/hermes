@@ -21,7 +21,7 @@ from collections import defaultdict
 from statistics import mean
 
 from plotting.get_figures import get_number_figure, get_routes_figure, get_energy_carrier_figure, get_weighted_routes, \
-    get_supply_curves
+    get_supply_curves, safe_output_path, resolve_plot_boundaries
 from data_processing.configuration import CONVERSION_CONFIG, load_yaml
 
 
@@ -102,14 +102,16 @@ def load_infrastructure_data(path_data):
                     'longitude_on_coastline', 'latitude_on_coastline']
 
     pipeline_gas_node_locations = _read_csv_or_empty(
-        path_data + 'gas_pipeline_node_locations.csv', columns=node_columns,
+        os.path.join(path_data, 'gas_pipeline_node_locations.csv'), columns=node_columns,
         dtype={'latitude': np.float16, 'longitude': np.float16})
-    pipeline_gas_graphs = _read_csv_or_empty(path_data + 'gas_pipeline_graphs.csv', columns=graph_columns)
+    pipeline_gas_graphs = _read_csv_or_empty(
+        os.path.join(path_data, 'gas_pipeline_graphs.csv'), columns=graph_columns)
     pipeline_liquid_node_locations = _read_csv_or_empty(
-        path_data + 'oil_pipeline_node_locations.csv', columns=node_columns,
+        os.path.join(path_data, 'oil_pipeline_node_locations.csv'), columns=node_columns,
         dtype={'latitude': np.float16, 'longitude': np.float16})
-    pipeline_liquid_graphs = _read_csv_or_empty(path_data + 'oil_pipeline_graphs.csv', columns=graph_columns)
-    ports = _read_csv_or_empty(path_data + 'ports.csv', columns=port_columns)
+    pipeline_liquid_graphs = _read_csv_or_empty(
+        os.path.join(path_data, 'oil_pipeline_graphs.csv'), columns=graph_columns)
+    ports = _read_csv_or_empty(os.path.join(path_data, 'ports.csv'), columns=port_columns)
 
     data = {'Shipping': {'ports': ports}}
 
@@ -272,7 +274,8 @@ def create_weighted_routing_data_script(data, complete_infrastructure, infrastru
         reversed_dict = dict((v, k) for k, v in replacement_dict.items())
         result_dfs['geometry'] = result_dfs['geometry'].map(reversed_dict)
 
-        result_dfs.to_csv(path_processed_results + folder + '_routes_and_quantities.csv')
+        result_dfs.to_csv(safe_output_path(
+            path_processed_results, folder + '_routes_and_quantities.csv'))
 
     else:
         individual_data_dfs = []
@@ -351,7 +354,8 @@ def create_weighted_routing_data_script(data, complete_infrastructure, infrastru
         weighted_routes = pd.concat(individual_data_dfs)
         weighted_routes.reset_index(drop=True, inplace=True)
 
-        weighted_routes.to_csv(path_processed_results + folder + '_routes_and_quantities.csv')
+        weighted_routes.to_csv(safe_output_path(
+            path_processed_results, folder + '_routes_and_quantities.csv'))
 
 
 def get_geometry_segments(args):
@@ -745,7 +749,7 @@ def get_ranked_routes(data):
 
 
 def load_result(r, path_files, config_file_plotting, production_costs, with_routes=True):
-    data = pd.read_csv(path_files + r + '_processed_results.csv', index_col=0)
+    data = pd.read_csv(os.path.join(path_files, r + '_processed_results.csv'), index_col=0)
     strike_prices = _load_strike_prices_from_result_path(path_files)
 
     destination = load_destination(path_files, r)
@@ -836,7 +840,8 @@ def load_result(r, path_files, config_file_plotting, production_costs, with_rout
     starting_locations = zip(data['longitude'].tolist(), data['latitude'].tolist())
 
     if with_routes:
-        weighted_routes = pd.read_csv(path_files + r + '_routes_and_quantities.csv', index_col=0)
+        weighted_routes = pd.read_csv(
+            os.path.join(path_files, r + '_routes_and_quantities.csv'), index_col=0)
         weighted_routes = weighted_routes.sort_values(by=['quantity'], ascending=False)
         weighted_routes['geometry'] = weighted_routes['geometry'].apply(shapely.wkt.loads)
     else:
@@ -967,6 +972,11 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
         for m, r in enumerate(comparison):
             data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
                 = load_result(r, path_files, config_file_plotting, production_costs, with_routes=False)
+            current_boundaries = resolve_plot_boundaries(
+                config_file_plotting,
+                data=data,
+                destination_location=destination_location,
+            )
 
             current_ax = axes[m]
 
@@ -981,7 +991,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                 nice_name_dictionary[r] = r
 
             if plot_type == 'costs':
-                current_ax = get_number_figure(data, norm, cmap, boundaries, destination_location,
+                current_ax = get_number_figure(data, norm, cmap, current_boundaries, destination_location,
                                                column=cost_type, use_voronoi=True,
                                                production_costs=production_costs,
                                                ax=current_ax, return_fig=True, fig=fig, add_colorbar=False,
@@ -993,7 +1003,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
 
 
             elif plot_type == 'efficiency':
-                current_ax = get_number_figure(data, norm, cmap, boundaries, destination_location,
+                current_ax = get_number_figure(data, norm, cmap, current_boundaries, destination_location,
                                                column=plot_type, use_voronoi=True,
                                                production_costs=production_costs,
                                                ax=current_ax, return_fig=True, fig=fig, add_colorbar=False,
@@ -1005,7 +1015,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
 
             elif plot_type == 'energy_carrier':
                 current_ax, commodities \
-                    = get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dictionary,
+                    = get_energy_carrier_figure(data, current_boundaries, color_dictionary, nice_name_dictionary,
                                                 destination_location, use_voronoi=True,
                                                 production_costs=production_costs, ax=current_ax, fig=fig,
                                                 fig_title=nice_name_dictionary[r], add_fig_title=True,
@@ -1018,7 +1028,8 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
             elif plot_type == 'routes':
                 current_ax, commodities, transport_means \
                     = get_routes_figure(data, transport_mean_line_styles, line_widths, color_dictionary,
-                                        nice_name_dictionary, infrastructure_data, complete_infrastructure, boundaries,
+                                        nice_name_dictionary, infrastructure_data, complete_infrastructure,
+                                        current_boundaries,
                                         destination_location, fig_title=nice_name_dictionary[r], ax=current_ax,
                                         return_fig=True,  add_legend=False, return_handles=True,
                                         existing_commodities=commodities, existing_transport_means=transport_means,
@@ -1201,8 +1212,11 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
             # fig.set_ylabel('€ / MWh', fontdict={'fontsize': 9})
             # fig.set_xlabel('TWh', fontdict={'fontsize': 9})
 
-        fig.savefig(path_saving + str(n) + '_' + saving_name + '_comparison.png', bbox_inches='tight', dpi=600)
-        fig.savefig(path_saving + str(n) + '_' + saving_name + '_comparison.svg', bbox_inches='tight')
+        comparison_filename = str(n) + '_' + saving_name + '_comparison'
+        fig.savefig(safe_output_path(path_saving, comparison_filename + '.png'),
+                    bbox_inches='tight', dpi=600)
+        fig.savefig(safe_output_path(path_saving, comparison_filename + '.svg'),
+                    bbox_inches='tight')
 
         plt.close(fig)
 
@@ -1218,7 +1232,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                     how="outer"
                 )
 
-        all_data_df.to_excel(path_saving + str(n) + '_' + saving_name + '_comparison.xlsx')
+        all_data_df.to_excel(safe_output_path(path_saving, comparison_filename + '.xlsx'))
 
 
 def match_routing_results(result_list, result_names, complete_infrastructure, infrastructure_data):

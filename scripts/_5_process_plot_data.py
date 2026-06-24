@@ -15,12 +15,17 @@ from shapely.geometry import Point
 
 from data_processing.helpers_geometry import get_destination
 from plotting.helpers_plotting import load_infrastructure_data, get_complete_infrastructure, create_weighted_routing_data_script
-from data_processing.configuration import load_algorithm_configuration, load_plotting_configuration
+from data_processing.configuration import (
+    load_algorithm_configuration,
+    load_plotting_configuration,
+    validate_plotting_result_cases,
+)
 
 # script to process results
 # load configuration file
 config_file = load_algorithm_configuration()
 config_file_plotting = load_plotting_configuration(config_file)
+validate_plotting_result_cases(config_file, config_file_plotting)
 
 path_production_costs = config_file['project_folder_path'] + 'start_destination_combinations.csv'
 production_costs = pd.read_csv(path_production_costs, index_col=0)

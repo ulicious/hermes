@@ -313,6 +313,39 @@ def load_plotting_configuration(config_file=None):
     return _load_project_yaml(config_file, PLOTTING_CONFIG)
 
 
+def validate_plotting_result_cases(config_file, plotting_config):
+    results_folder = os.path.join(
+        config_file['project_folder_path'],
+        'results',
+        'unprocessed_results',
+    )
+    configured_cases = plotting_config.get('process_results', [])
+
+    if not isinstance(configured_cases, list):
+        raise TypeError(
+            "'process_results' in "
+            + PLOTTING_CONFIG
+            + ' must be a YAML list.'
+        )
+
+    missing_cases = [
+        case_name
+        for case_name in configured_cases
+        if not os.path.isdir(os.path.join(results_folder, case_name))
+    ]
+    if missing_cases:
+        formatted_cases = '\n'.join('  - ' + str(case_name) for case_name in missing_cases)
+        raise FileNotFoundError(
+            'Cannot process plotting results because configured case folders are missing:\n'
+            + formatted_cases
+            + '\n\nExpected in:\n'
+            + results_folder
+            + '\n\nUpdate process_results in '
+            + PLOTTING_CONFIG
+            + ' or create the missing result folders.'
+        )
+
+
 def load_technology_data(config_file):
     conversion_data = _load_project_yaml(config_file, CONVERSION_CONFIG)
     transportation_data = _load_project_yaml(config_file, TRANSPORTATION_CONFIG)

@@ -10,12 +10,12 @@ import matplotlib.lines as mlines
 
 from math import sqrt
 
-from data_processing.helpers_geometry import get_boundaries_from_config
 from plotting.get_figures import get_number_figure, get_energy_carrier_figure, get_infrastructure_figure, \
     get_routes_figure, get_weighted_routes, get_commodity_transport_mean_histogram, get_supply_curves, \
     get_used_locations_figure, get_calculation_time, get_sankey_diagram, \
     get_start_locations_infrastructure_destination_figure, \
-    get_tight_boundaries_for_start_locations_infrastructure_destination, get_water_availability_figure
+    get_tight_boundaries_for_start_locations_infrastructure_destination, get_water_availability_figure, \
+    safe_output_path, resolve_plot_boundaries
 from plotting.helpers_plotting import load_infrastructure_data, load_first_available_destination, \
     get_complete_infrastructure, load_result, plot_comparison_plot, match_routing_results
 from data_processing.configuration import load_algorithm_configuration, load_plotting_configuration
@@ -31,9 +31,10 @@ def check_required_files_exist(required_files, purpose):
 # get general configuration
 config_file_general = load_algorithm_configuration()
 
-path_data = config_file_general['project_folder_path'] + 'processed_data/'
-path_files = config_file_general['project_folder_path'] + 'results/processed_results/'
-path_saving = config_file_general['project_folder_path'] + 'results/plots/'
+project_folder_path = config_file_general['project_folder_path']
+path_data = os.path.join(project_folder_path, 'processed_data')
+path_files = os.path.join(project_folder_path, 'results', 'processed_results')
+path_saving = os.path.join(project_folder_path, 'results', 'plots')
 
 config_file_plotting = load_plotting_configuration(config_file_general)
 
@@ -65,18 +66,10 @@ production_costs['geometry'] = production_costs['geometry'].apply(shapely.wkt.lo
 cmap = mpl.colormaps[config_file_plotting['colormap']]
 cmap.set_over('red')
 
-min_lat, max_lat, min_lon, max_lon = get_boundaries_from_config(
-    config_file_general, prefix='infrastructure_')
-
-infrastructure_boundaries = {'min_latitude': min_lat,
-                             'max_latitude': max_lat,
-                             'min_longitude': min_lon,
-                             'max_longitude': max_lon}
-
-boundaries = {'min_latitude': min_lat - 2,
-              'max_latitude': max_lat + 2,
-              'min_longitude': min_lon - 2,
-              'max_longitude': max_lon + 2}
+global_plot_boundaries = resolve_plot_boundaries(
+    config_file_plotting,
+    allow_results=False,
+)
 
 color_dictionary = config_file_plotting['commodity_colors']
 nice_name_dictionary = config_file_plotting['nice_name_dictionary']
@@ -104,6 +97,7 @@ commodity_transport_mean_results = config_file_plotting['commodity_transport_mea
 routes_plot_results = config_file_plotting['routes_plot']
 sankey_plot_results = config_file_plotting['sankey_plot']
 weighted_routes_plot_results = config_file_plotting['weighted_routes_plot']
+compare_costs_and_quantities_results = config_file_plotting['compare_costs_and_quantities_plot']
 supply_curve_results = config_file_plotting['supply_curve_plots']['results']
 
 routes_comparison_plot_results = config_file_plotting['routes_comparison_plot']
@@ -138,18 +132,19 @@ elif route_infrastructure_plots_requested:
 
 # infrastructure
 if config_file_plotting['infrastructure_plot']:
-    get_infrastructure_figure(boundaries, path_data, save=True, path_saving=path_saving)
+    get_infrastructure_figure(
+        global_plot_boundaries, path_data, save=True, path_saving=path_saving)
 
 # water availability
 if config_file_plotting['water_availability_plot']:
-    get_water_availability_figure(boundaries, path_data, save=True, path_saving=path_saving)
+    get_water_availability_figure(
+        global_plot_boundaries, path_data, save=True, path_saving=path_saving)
 
 # start locations, infrastructure and destination
 if config_file_plotting['start_locations_infrastructure_destination_plot']:
-    tight_boundaries = get_tight_boundaries_for_start_locations_infrastructure_destination(
-        production_costs, infrastructure_boundaries, destination)
     get_start_locations_infrastructure_destination_figure(
-        production_costs, tight_boundaries, path_data, destination, save=True, path_saving=path_saving)
+        production_costs, global_plot_boundaries, path_data, destination,
+        save=True, path_saving=path_saving)
 
 # result plots
 for r in all_results:
@@ -158,53 +153,58 @@ for r in all_results:
     with_routes = r in weighted_routes_plot_results
     data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
         = load_result(r, path_files, config_file_plotting, production_costs, with_routes=with_routes)
+    scenario_boundaries = resolve_plot_boundaries(
+        config_file_plotting,
+        data=data,
+        destination_location=destination_location,
+    )
 
     # nice names for results can be undefined --> will be r if not defined
     if r not in [*nice_name_dictionary.keys()]:
         nice_name_dictionary[r] = r
 
     if r in production_plot_results:
-        get_number_figure(data.copy(), norm_prod, cmap, boundaries, destination_location, column='production_costs',
+        get_number_figure(data.copy(), norm_prod, cmap, scenario_boundaries, destination_location, column='production_costs',
                           use_voronoi=True, production_costs=production_costs, limit_scale=config_file_plotting['limit_scale'],
                           save=True, save_path=path_saving, fig_title=r + '_production_costs')
 
     if r in conversion_plot_results:
-        get_number_figure(data.copy(), norm_conv, cmap, boundaries, destination_location, column='conversion_costs',
+        get_number_figure(data.copy(), norm_conv, cmap, scenario_boundaries, destination_location, column='conversion_costs',
                           use_voronoi=True, production_costs=production_costs,
                           save=True, save_path=path_saving, fig_title=r + '_conversion_costs')
 
     if r in transport_plot_results:
-        get_number_figure(data.copy(), norm_trans, cmap, boundaries, destination_location, column='transportation_costs',
+        get_number_figure(data.copy(), norm_trans, cmap, scenario_boundaries, destination_location, column='transportation_costs',
                           use_voronoi=True, production_costs=production_costs,
                           limit_scale=config_file_plotting['limit_scale'], save=True, save_path=path_saving,
                           fig_title=r + '_transport_costs')
 
     if r in total_supply_costs_plot_results:
-        get_number_figure(data.copy(), norm_total, cmap, boundaries, destination_location,
+        get_number_figure(data.copy(), norm_total, cmap, scenario_boundaries, destination_location,
                           use_voronoi=True, production_costs=production_costs,
                           limit_scale=config_file_plotting['limit_scale'],
                           save=True, save_path=path_saving, fig_title=r + '_total_costs')
 
     if r in profit_plot_results:
-        get_number_figure(data.copy(), norm_adjusted_costs, cmap, boundaries, destination_location,
+        get_number_figure(data.copy(), norm_adjusted_costs, cmap, scenario_boundaries, destination_location,
                           column='adjusted_costs',
                           use_voronoi=True, production_costs=production_costs,
                           limit_scale=config_file_plotting['limit_scale'],
                           save=True, save_path=path_saving, fig_title=r + '_profit')
 
     if r in commodity_plot_results:
-        get_energy_carrier_figure(data.copy(), boundaries, color_dictionary, nice_name_dictionary, destination_location,
+        get_energy_carrier_figure(data.copy(), scenario_boundaries, color_dictionary, nice_name_dictionary, destination_location,
                                   use_voronoi=True, production_costs=production_costs,
                                   save=True, path_saving=path_saving, fig_title=r + '_energy_carrier')
 
     if r in efficiency_plot_results:
-        get_number_figure(data.copy(), norm_efficiency, cmap, boundaries, destination_location, column='efficiency',
+        get_number_figure(data.copy(), norm_efficiency, cmap, scenario_boundaries, destination_location, column='efficiency',
                           use_voronoi=True, production_costs=production_costs,
                           save=True, save_path=path_saving, fig_title=r + '_efficiency')
 
     if r in routes_plot_results:
         get_routes_figure(data.copy(), transport_mean_line_styles, line_widths, color_dictionary, nice_name_dictionary,
-                          infrastructure_data, complete_infrastructure, boundaries, destination_location,
+                          infrastructure_data, complete_infrastructure, scenario_boundaries, destination_location,
                           save=True, path_saving=path_saving, fig_title=r + '_routes')
 
     if r in sankey_plot_results:
@@ -213,19 +213,19 @@ for r in all_results:
     if r in weighted_routes_plot_results:
         for commodity in weighted_routes['commodity'].unique():
             sub_data = weighted_routes[weighted_routes['commodity'] == commodity]
-            get_weighted_routes(sub_data, boundaries,
+            get_weighted_routes(sub_data, scenario_boundaries,
                                 transport_mean_line_styles, color_dictionary,
                                 nice_name_dictionary, destination_location=destination_location, save=True,
                                 path_saving=path_saving, fig_title=r + '_' + str(commodity) + '_weighted_routes',
                                 country_comparison=True)
 
-        get_weighted_routes(weighted_routes, boundaries,
+        get_weighted_routes(weighted_routes, scenario_boundaries,
                             transport_mean_line_styles, color_dictionary,
                             nice_name_dictionary, destination_location=destination_location, save=True,
                             path_saving=path_saving, fig_title=r + '_weighted_routes',
                             country_comparison=True)
 
-        get_weighted_routes(weighted_routes, boundaries,
+        get_weighted_routes(weighted_routes, scenario_boundaries,
                             transport_mean_line_styles, color_dictionary,
                             nice_name_dictionary, destination_location=destination_location, save=True,
                             path_saving=path_saving, ignore_commodity=True,
@@ -241,8 +241,9 @@ for r in all_results:
                               path_saving=path_saving, country=c, production_costs=production_costs)
 
     if r in all_costs_plot_results:
-        diff_lat = boundaries['max_latitude'] - boundaries['min_latitude']
-        ratio_lat_lon = diff_lat / (boundaries['max_longitude'] - boundaries['min_longitude'])
+        diff_lat = scenario_boundaries['max_latitude'] - scenario_boundaries['min_latitude']
+        ratio_lat_lon = diff_lat / (
+            scenario_boundaries['max_longitude'] - scenario_boundaries['min_longitude'])
 
         plot_width = 15.69  # todo: sollte auch als parameter im plot configuration sein
         distance_between = 0.25  # todo: sollte auch als parameter im plot configuration sein
@@ -273,31 +274,32 @@ for r in all_results:
                             relative_distance_between_height,
                             relative_subplot_width, relative_subplot_height))
 
-        ax1 = get_number_figure(data.copy(), norm_prod, cmap, boundaries, destination_location,
+        ax1 = get_number_figure(data.copy(), norm_prod, cmap, scenario_boundaries, destination_location,
                                 use_voronoi=True, column='production_costs', production_costs=production_costs,
                                 limit_scale=config_file_plotting['limit_scale'], ax=ax1, return_fig=True, fig=fig,
                                 fig_title='H2 Production Costs', add_fig_title=True)
 
-        ax2 = get_number_figure(data.copy(), norm_conv, cmap, boundaries, destination_location,
+        ax2 = get_number_figure(data.copy(), norm_conv, cmap, scenario_boundaries, destination_location,
                                 column='conversion_costs', use_voronoi=True, production_costs=production_costs,
                                 ax=ax2, return_fig=True, fig=fig, fig_title='Conversion Costs', add_fig_title=True)
 
-        ax3 = get_number_figure(data.copy(), norm_trans, cmap, boundaries, destination_location,
+        ax3 = get_number_figure(data.copy(), norm_trans, cmap, scenario_boundaries, destination_location,
                                 column='transportation_costs', use_voronoi=True, production_costs=production_costs,
                                 ax=ax3, limit_scale=config_file_plotting['limit_scale'], return_fig=True, fig=fig,
                                 fig_title='Transport Costs', add_fig_title=True)
 
-        ax4 = get_number_figure(data.copy(), norm_total, cmap, boundaries, destination_location, ax=ax4,
+        ax4 = get_number_figure(data.copy(), norm_total, cmap, scenario_boundaries, destination_location, ax=ax4,
                                 use_voronoi=True, production_costs=production_costs,
                                 limit_scale=config_file_plotting['limit_scale'], return_fig=True, fig=fig,
                                 fig_title='Total Supply Costs', add_fig_title=True)
 
-        fig.savefig(path_saving + r + '_all_costs.png', bbox_inches='tight', dpi=600)
-        fig.savefig(path_saving + r + '_all_costs.svg', bbox_inches='tight')
+        fig.savefig(safe_output_path(path_saving, r + '_all_costs.png'), bbox_inches='tight', dpi=600)
+        fig.savefig(safe_output_path(path_saving, r + '_all_costs.svg'), bbox_inches='tight')
 
     if r in full_plot_results:
-        diff_lat = boundaries['max_latitude'] - boundaries['min_latitude']
-        ratio_lat_lon = diff_lat / (boundaries['max_longitude'] - boundaries['min_longitude'])
+        diff_lat = scenario_boundaries['max_latitude'] - scenario_boundaries['min_latitude']
+        ratio_lat_lon = diff_lat / (
+            scenario_boundaries['max_longitude'] - scenario_boundaries['min_longitude'])
 
         plot_width = 15.69  # todo: sollte auch als parameter im plot configuration sein
         distance_between = 0.25  # todo: sollte auch als parameter im plot configuration sein
@@ -328,57 +330,58 @@ for r in all_results:
                             relative_distance_between_height,
                             relative_subplot_width, relative_subplot_height))
 
-        ax1 = get_number_figure(data.copy(), norm_prod, cmap, boundaries, destination_location,
+        ax1 = get_number_figure(data.copy(), norm_prod, cmap, scenario_boundaries, destination_location,
                                 column='production_costs', use_voronoi=True,
                                 production_costs=production_costs, limit_scale=config_file_plotting['limit_scale'],
                                 ax=ax1, return_fig=True, fig=fig, fig_title='H2 Production Costs', add_fig_title=True)
 
-        ax2 = get_number_figure(data.copy(), norm_total, cmap, boundaries, destination_location,
+        ax2 = get_number_figure(data.copy(), norm_total, cmap, scenario_boundaries, destination_location,
                                 use_voronoi=True, production_costs=production_costs,
                                 limit_scale=config_file_plotting['limit_scale'],
                                 ax=ax2, return_fig=True, fig=fig, fig_title='Total Supply Costs', add_fig_title=True)
 
-        ax3 = get_energy_carrier_figure(data.copy(), boundaries, color_dictionary, nice_name_dictionary,
+        ax3 = get_energy_carrier_figure(data.copy(), scenario_boundaries, color_dictionary, nice_name_dictionary,
                                         destination_location, use_voronoi=True,
                                         production_costs=production_costs, ax=ax3, fig=fig)
 
-        ax4 = get_infrastructure_figure(boundaries, path_data, ax=ax4, return_fig=True, fig=fig)
+        ax4 = get_infrastructure_figure(
+            scenario_boundaries, path_data, ax=ax4, return_fig=True, fig=fig)
 
-        fig.savefig(path_saving + r + '_mixed_overview.png', bbox_inches='tight', dpi=600)
-        fig.savefig(path_saving + r + '_mixed_overview.svg', bbox_inches='tight')
+        fig.savefig(safe_output_path(path_saving, r + '_mixed_overview.png'), bbox_inches='tight', dpi=600)
+        fig.savefig(safe_output_path(path_saving, r + '_mixed_overview.svg'), bbox_inches='tight')
 
 plot_comparison_plot('costs', config_file_plotting['conversion_costs_comparison_plot'],
                      path_files, path_saving,
-                     config_file_plotting, production_costs, cmap, boundaries,
+                     config_file_plotting, production_costs, cmap, global_plot_boundaries,
                      nice_name_dictionary=nice_name_dictionary,
                      cost_type='conversion_costs')
 
 plot_comparison_plot('costs', config_file_plotting['transport_costs_comparison_plot'],
                      path_files, path_saving,
-                     config_file_plotting, production_costs, cmap, boundaries,
+                     config_file_plotting, production_costs, cmap, global_plot_boundaries,
                      nice_name_dictionary=nice_name_dictionary,
                      cost_type='transportation_costs')
 
 plot_comparison_plot('costs', config_file_plotting['total_supply_costs_comparison_plot'],
                      path_files, path_saving,
-                     config_file_plotting, production_costs, cmap, boundaries,
+                     config_file_plotting, production_costs, cmap, global_plot_boundaries,
                      nice_name_dictionary=nice_name_dictionary,
                      cost_type='')
 
 plot_comparison_plot('costs', config_file_plotting['profit_comparison_plots'],
                      path_files, path_saving,
-                     config_file_plotting, production_costs, cmap, boundaries,
+                     config_file_plotting, production_costs, cmap, global_plot_boundaries,
                      nice_name_dictionary=nice_name_dictionary,
                      cost_type='adjusted_costs')
 
 plot_comparison_plot('energy_carrier', config_file_plotting['commodity_comparison_plot'],
                      path_files, path_saving,
-                     config_file_plotting, production_costs, cmap, boundaries,
+                     config_file_plotting, production_costs, cmap, global_plot_boundaries,
                      color_dictionary=color_dictionary, nice_name_dictionary=nice_name_dictionary)
 
 plot_comparison_plot('routes', routes_comparison_plot_results,
                      path_files, path_saving,
-                     config_file_plotting, production_costs, cmap, boundaries,
+                     config_file_plotting, production_costs, cmap, global_plot_boundaries,
                      color_dictionary=color_dictionary, nice_name_dictionary=nice_name_dictionary,
                      transport_mean_line_styles=transport_mean_line_styles, line_widths=line_widths,
                      infrastructure_data=infrastructure_data, complete_infrastructure=complete_infrastructure)
@@ -386,7 +389,7 @@ plot_comparison_plot('routes', routes_comparison_plot_results,
 for country in config_file_plotting['supply_curve_comparison_plots']['countries']:
     plot_comparison_plot('supply_curves', config_file_plotting['supply_curve_comparison_plots']['results'],
                          path_files, path_saving,
-                         config_file_plotting, production_costs, cmap, boundaries,
+                         config_file_plotting, production_costs, cmap, global_plot_boundaries,
                          color_dictionary=color_dictionary, nice_name_dictionary=nice_name_dictionary,
                          transport_mean_line_styles=transport_mean_line_styles, line_widths=line_widths,
                          infrastructure_data=infrastructure_data, complete_infrastructure=complete_infrastructure,
@@ -402,20 +405,45 @@ for n, comparison in enumerate(matched_supply_routes_plots):
 
     matched_df = match_routing_results(results_data, comparison,
                                        complete_infrastructure, infrastructure_data)
+    matched_boundaries = resolve_plot_boundaries(
+        config_file_plotting,
+        route_geometries=matched_df['geometry'],
+    )
 
-    get_weighted_routes(matched_df, boundaries, transport_mean_line_styles, color_dictionary,
+    get_weighted_routes(matched_df, matched_boundaries, transport_mean_line_styles, color_dictionary,
                         nice_name_dictionary, fig_title=str(n) + '_matched_weighted_routes',
                         save=True, path_saving=path_saving, country_comparison=True)
 
-for r in config_file_plotting['compare_costs_and_quantities_plot']:
+for r in compare_costs_and_quantities_results:
+    weighted_routes_file = os.path.join(path_files, r + '_routes_and_quantities.csv')
+    if not os.path.exists(weighted_routes_file):
+        raise FileNotFoundError(
+            "Cannot create 'compare_costs_and_quantities_plot' for "
+            + str(r)
+            + ' because the required categorized routes file is missing:\n'
+            + weighted_routes_file
+            + "\n\nGenerate it first by adding the scenario to both 'process_results' and "
+              "'categorical_routes' in 4_plotting_configuration.yaml and running "
+              "scripts._5_process_plot_data."
+        )
+
+    output_path = safe_output_path(path_saving, r + '_distribution_cost_and_quantities.png')
+    print("Creating 'compare_costs_and_quantities_plot' for " + str(r))
 
     # mpl.use('TkAgg')
 
     data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
         = load_result(r, path_files, config_file_plotting, production_costs, with_routes=True)
+    scenario_boundaries = resolve_plot_boundaries(
+        config_file_plotting,
+        data=data,
+        destination_location=destination_location,
+        route_geometries=weighted_routes['geometry'],
+    )
 
-    diff_lat = boundaries['max_latitude'] - boundaries['min_latitude']
-    ratio_lat_lon = diff_lat / (boundaries['max_longitude'] - boundaries['min_longitude'])
+    diff_lat = scenario_boundaries['max_latitude'] - scenario_boundaries['min_latitude']
+    ratio_lat_lon = diff_lat / (
+        scenario_boundaries['max_longitude'] - scenario_boundaries['min_longitude'])
 
     plot_width = 15.69
     distance_between = 0.25
@@ -477,7 +505,7 @@ for r in config_file_plotting['compare_costs_and_quantities_plot']:
         color = colors[n]
 
         sub_data = weighted_routes[weighted_routes['commodity'] == commodity]
-        ax = get_weighted_routes(sub_data, boundaries,
+        ax = get_weighted_routes(sub_data, scenario_boundaries,
                                  transport_mean_line_styles, color_dictionary,
                                  nice_name_dictionary, destination_location=destination_location,
                                  fig_title=commodity, add_fig_title=True, ax=ax,
@@ -567,10 +595,10 @@ for r in config_file_plotting['compare_costs_and_quantities_plot']:
     # mpl.rcParams['path.simplify_threshold'] = 0.1
     mpl.rcParams['agg.path.chunksize'] = 20000
 
-    fig.savefig(path_saving + r + '_distribution_cost_and_quantities.png', bbox_inches='tight', dpi=600)
-    # fig.savefig(path_saving + r + '_distribution_cost_and_quantities.svg', bbox_inches='tight')
+    fig.savefig(output_path, bbox_inches='tight', dpi=600)
 
     plt.close(fig)
+    print('Saved cost and quantity comparison plot:\n' + output_path)
 
 for n, comparison in enumerate(config_file_plotting['solving_time_plot']):
     all_data = []

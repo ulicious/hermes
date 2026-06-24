@@ -1,8 +1,21 @@
-# plotting settings
+## DATA PROCESSING ##
 scenarios_with_water_availability_consideration: []
 process_results: []  # folder(s) in results/; creates csv file containing all results of respective folders
 categorical_routes: [] # ['DE_all_ready', 'DE_all_not_ready', 'DE_hydrogen_ready', 'DE_hydrogen_not_ready', 'DE_heat', 'DE_fuel', 'USA', 'China', 'Japan', 'India']
 commodity_routes: []
+
+# ----------
+## PLOTTING ##
+# map extent: 'default', 'results' or 'custom'
+# default: longitude -180 to 180 and latitude -70 to 70
+# results: scenario-specific result locations; route plots additionally include all route geometries
+# custom: uses all four values from custom_plot_extent
+plot_extent: 'default'
+custom_plot_extent:
+  min_latitude:
+  max_latitude:
+  min_longitude:
+  max_longitude:
 
 # plot infrastructure
 infrastructure_plot: False  # plots infrastructure
@@ -14,7 +27,7 @@ production_costs_plot: []  # name of results in results/; creates h2 production 
 conversion_costs_plot: []  # name of results in results/; creates conversion costs plot for results in csv
 transport_costs_plot: []  # name of results in results/; creates transport costs plot for results in csv
 total_supply_costs_plot: []  # name of results in results/; creates total_supply costs plot for results in csv
-profit_plots: []  # name of results in results/; creates adjusted costs plot (costs minus commodity price) for results in csv
+profit_plot: []  # name of results in results/; creates adjusted costs plot (costs minus commodity price) for results in csv
 all_costs_plot: []  # name of results in results/; creates plot for results in csv containing h2 production, conversion, transport and total supply costs
 commodity_plot: []  # name of results in results/; creates starting commodity plot for results in csv
 efficiency_plot: [] # name of results in results/; creates efficiency plot for results in csv
@@ -23,6 +36,7 @@ commodity_transport_mean_plot: []
 routes_plot: []  # name of results in results/; creates routes plot for results in csv
 sankey_plot: []
 weighted_routes_plot: []  # name of results in results/; creates most used routes plot for results in csv
+compare_costs_and_quantities_plot : []  # clusters total supply costs in cost categories and shows routes and quantities
 supply_curve_plots:
   results: [] # name of results in results/; creates most used routes plot for results in csv
   countries: [] # list of countries which are used to derive supply costs to the destination in the results
@@ -31,11 +45,10 @@ supply_curve_plots:
 conversion_costs_comparison_plot: []  # creates conversion costs plot for results in csv
 transport_costs_comparison_plot: []  # creates transport costs plot for results in csv
 total_supply_costs_comparison_plot: [] # creates total supply costs plot for results in csv
-profit_comparison_plots: [] # creates adjusted costs comparison plot (costs minus commodity price) for results in csv
+profit_comparison_plot: [] # creates adjusted costs comparison plot (costs minus commodity price) for results in csv
 commodity_comparison_plot: []  # creates starting commodity plot for results in csv
 routes_comparison_plot: []  # creates routes plot for results in csv
 weighted_routes_comparison_plot: []  # creates routes plot for results in csv  # todo: not implemented
-compare_costs_and_quantities_plot : []  # todo: this does not compare results with each other --> move?
 supply_curve_comparison_plots:
   results: [] # name of results in results/; creates most used routes plot for results in csv
   countries: [] # list of countries which are used to derive supply costs to the destination in the results
