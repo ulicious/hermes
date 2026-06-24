@@ -34,8 +34,8 @@ from data_processing.natural_earth_data import load_world, load_world_lowres
 
 
 DEFAULT_PLOT_BOUNDARIES = {
-    'min_latitude': -70.0,
-    'max_latitude': 70.0,
+    'min_latitude': -90.0,
+    'max_latitude': 90.0,
     'min_longitude': -180.0,
     'max_longitude': 180.0,
 }
@@ -616,6 +616,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
     plt.rcParams.update({'font.size': 9,
                          'legend.title_fontsize': 9,
                          'font.family': 'Times New Roman'})
+    commodity_data = commodity_data.copy()
 
     if ignore_commodity:
         replacement_dict = {}
@@ -645,7 +646,12 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
             color_dictionary[key] = color
 
     # commodity_data = commodity_data.iloc[0:10]
-    commodity_data = commodity_data[commodity_data['quantity'] > 0]
+    commodity_data = commodity_data[commodity_data['quantity'] > 0].copy()
+    if 'quantity_MWh' in commodity_data.columns:
+        commodity_data['quantity'] = commodity_data['quantity_MWh']
+    else:
+        commodity_data['quantity_MWh'] = commodity_data['quantity']
+    commodity_data['quantity_TWh'] = commodity_data['quantity_MWh'] / 1_000_000
     if not commodity_data.empty:
         boundaries = expand_result_boundaries(boundaries, commodity_data['geometry'])
 
@@ -711,7 +717,8 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
     sizes = []
     for s in [target_quantity * 0.25, target_quantity * 0.5, target_quantity]:
         sizes.append(mlines.Line2D([], [], color='black', linestyle='-', markersize=5,
-                                   label=str(int(s / 1000000)), linewidth=sqrt(s * scale)))
+                                   label=_format_colorbar_tick(s / 1_000_000),
+                                   linewidth=sqrt(s * scale)))
 
     # plot results
     map_plot = _load_plot_world()
@@ -723,8 +730,11 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
 
     # cmap = mpl.colormaps['coolwarm']
     cmap = mpl.colors.LinearSegmentedColormap.from_list("", ["royalblue", "violet", "darkred"])
-    norm = mpl.colors.Normalize(vmin=min_quantity, vmax=max_quantity)
-    col = commodity_data.quantity.map(norm).map(cmap)
+    norm = mpl.colors.Normalize(
+        vmin=min_quantity / 1_000_000,
+        vmax=max_quantity / 1_000_000,
+    )
+    col = commodity_data.quantity_TWh.map(norm).map(cmap)
     commodity_data['color'] = col
 
     commodity_data.sort_values(by=['quantity'], inplace=True, ascending=True)
@@ -947,7 +957,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
     countries.drop([antarctica], inplace=True)
     countries.plot(color="silver", ax=ax)
 
-    data = data[data['costs'] != math.inf]
+    data = data[data['costs'] != math.inf].copy()
     col = data[column].map(norm).map(cmap_chosen)
 
     if 'costs' in column:
@@ -1225,7 +1235,7 @@ def get_cost_and_quantity_figure(sub_axes, data, norm, cmap_chosen, boundaries, 
     # countries = gpd.GeoDataFrame(geometry=adjusted_countries)
     # countries.plot(ax=ax, color='silver')
 
-    data = data[data['costs'] != math.inf]
+    data = data[data['costs'] != math.inf].copy()
     if cost_type == 'total_costs':
         col = data.costs.map(norm).map(cmap_chosen)
     elif cost_type == 'transportation_costs':
@@ -1405,29 +1415,43 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
             set(country_locations).intersection(data.index.tolist())
         )
 
-        data = data.loc[country_locations, :]
+        data = data.loc[country_locations, :].copy()
+    else:
+        data = data.copy()
 
     data.sort_values(by=['costs'], inplace=True)
     data.reset_index(drop=True, inplace=True)
 
-    data['quantity'] = data['quantity'] * data['efficiency']
+    data['input_quantity_MWh'] = data['quantity']
+    data['efficiency_percent'] = data['efficiency']
+    invalid_efficiency = (
+        data['efficiency_percent'].isna()
+        | (data['efficiency_percent'] < 0)
+        | (data['efficiency_percent'] > 100)
+    )
+    if invalid_efficiency.any():
+        raise ValueError('Supply-curve efficiencies must be percentages between 0 and 100.')
+    data['delivered_quantity_TWh'] = (
+        data['input_quantity_MWh']
+        * data['efficiency_percent']
+        / 100
+        / 1_000_000
+    )
 
-    data['quantity'] = data['quantity'] / 1000000
-
-    max_value = data['quantity'].max()
-    exponent = int(math.floor(math.log10(max_value)))
+    max_value = data['delivered_quantity_TWh'].max()
+    exponent = int(math.floor(math.log10(max_value))) if max_value > 0 else 0
 
     divisor = 10 ** exponent
 
-    data['quantity'] = data['quantity'] / divisor
+    data['plot_quantity'] = data['delivered_quantity_TWh'] / divisor
 
-    total_quantity = data['quantity'].sum()
+    total_quantity = data['plot_quantity'].sum()
 
     # ------------------------------------------------------------
     # Define cost columns and bar widths
     # ------------------------------------------------------------
 
-    dynamic_widths = data['quantity']
+    dynamic_widths = data['plot_quantity']
 
     # ------------------------------------------------------------
     # Calculate bar start positions
@@ -1439,8 +1463,8 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
     last = 0
 
     for i in data.index[:-1]:
-        spacing_list.append(data.loc[i, 'quantity'] + last + spacing)
-        last = data.loc[i, 'quantity'] + last + spacing
+        spacing_list.append(data.loc[i, 'plot_quantity'] + last + spacing)
+        last = data.loc[i, 'plot_quantity'] + last + spacing
 
     start_positions_with_spacing = spacing_list
 
@@ -1491,7 +1515,8 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
 
     ax.xaxis.set_ticks_position('bottom')
     ax.tick_params(axis='x', which='both', labelbottom=True)
-    ax.set_xlabel(rf'Potential Quantity [10$^{{{exponent}}}$ TWh]', fontdict={'fontsize': 9}, fontname='Times New Roman')
+    ax.set_xlabel(rf'Potential Quantity at Destination [10$^{{{exponent}}}$ TWh]',
+                  fontdict={'fontsize': 9}, fontname='Times New Roman')
 
     # ------------------------------------------------------------
     # Plot commodity band in separate subplot
@@ -1693,9 +1718,14 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
     # Return or save figure
     # ------------------------------------------------------------
 
-    data = {'cost_routes': cost_routes,
-            'commodity_routes': commodity_routes}
-    data = pd.DataFrame(data, columns=['cost_routes', 'commodity_routes'])
+    export_data = data[[
+        'input_quantity_MWh',
+        'efficiency_percent',
+        'delivered_quantity_TWh',
+        'costs',
+    ]].copy()
+    export_data['cost_routes'] = cost_routes
+    export_data['commodity_routes'] = commodity_routes
 
     if return_fig:
         return fig
@@ -1716,7 +1746,7 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
                 bbox_inches='tight'
             )
 
-        data.to_excel(safe_output_path(path_saving, fig_title + '.xlsx'))
+        export_data.to_excel(safe_output_path(path_saving, fig_title + '.xlsx'), index=False)
 
 
 def get_production_costs_figure(sub_axes, data, norm, cmap_chosen, boundaries, destination_location,
@@ -1797,7 +1827,7 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
     countries.drop([antarctica], inplace=True)
     countries.plot(color="silver", ax=ax)
 
-    data = data[data['costs'] != math.inf]
+    data = data[data['costs'] != math.inf].copy()
     col = data.start_commodity.map(color_dictionary)
     data['color'] = col
 

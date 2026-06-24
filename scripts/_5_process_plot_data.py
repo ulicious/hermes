@@ -240,6 +240,7 @@ for folder in results_to_process:
             routes.append(route)
 
             data[number]['quantity'] = production_costs.loc[number, 'Hydrogen_Gas_Quantity']
+            data[number]['input_quantity_MWh'] = data[number]['quantity']
             data[number]['efficiency'] = float(solution.at['total_efficiency']) * 100
             data[number]['commodities'] = commodities_list
             data[number]['cost_route'] = cost_route
@@ -252,7 +253,8 @@ for folder in results_to_process:
     data = pd.DataFrame.from_dict(data,
                                   columns=['costs', 'start_commodity', 'second_commodity', 'latitude',
                                            'longitude', 'efficiency', 'transportation_costs', 'conversion_costs',
-                                           'production_costs', 'quantity', 'commodities', 'cost_route', 'solving_time'],
+                                           'production_costs', 'quantity', 'input_quantity_MWh',
+                                           'commodities', 'cost_route', 'solving_time'],
                                   orient='index')
 
     data['routes'] = routes

@@ -87,7 +87,7 @@ production_plot_results = config_file_plotting['production_costs_plot']
 conversion_plot_results = config_file_plotting['conversion_costs_plot']
 transport_plot_results = config_file_plotting['transport_costs_plot']
 total_supply_costs_plot_results = config_file_plotting['total_supply_costs_plot']
-profit_plot_results = config_file_plotting['profit_plots']
+profit_plot_results = config_file_plotting['profit_plot']
 all_costs_plot_results = config_file_plotting['all_costs_plot']
 commodity_plot_results = config_file_plotting['commodity_plot']
 efficiency_plot_results = config_file_plotting['efficiency_plot']
@@ -98,10 +98,10 @@ routes_plot_results = config_file_plotting['routes_plot']
 sankey_plot_results = config_file_plotting['sankey_plot']
 weighted_routes_plot_results = config_file_plotting['weighted_routes_plot']
 compare_costs_and_quantities_results = config_file_plotting['compare_costs_and_quantities_plot']
-supply_curve_results = config_file_plotting['supply_curve_plots']['results']
+supply_curve_results = config_file_plotting['supply_curve_plot']['results']
 
 routes_comparison_plot_results = config_file_plotting['routes_comparison_plot']
-matched_supply_routes_plots = config_file_plotting['matched_supply_routes_plots']
+matched_supply_routes_plot = config_file_plotting['matched_supply_routes_plot']
 
 all_results = list(set(production_plot_results + conversion_plot_results + transport_plot_results
                        + total_supply_costs_plot_results + profit_plot_results
@@ -113,7 +113,7 @@ all_results = list(set(production_plot_results + conversion_plot_results + trans
 route_infrastructure_plots_requested = (
     bool(routes_plot_results)
     or bool(routes_comparison_plot_results)
-    or bool(matched_supply_routes_plots)
+    or bool(matched_supply_routes_plot)
 )
 
 if (config_file_plotting['start_locations_infrastructure_destination_plot']
@@ -126,7 +126,7 @@ elif route_infrastructure_plots_requested:
     print('Route infrastructure plots require optional infrastructure data and will be skipped.')
     routes_plot_results = []
     routes_comparison_plot_results = []
-    matched_supply_routes_plots = []
+    matched_supply_routes_plot = []
 
 # Start plotting
 
@@ -235,7 +235,7 @@ for r in all_results:
         get_commodity_transport_mean_histogram(data.copy(), color_dictionary, nice_name_dictionary, path_saving, r)
 
     if r in supply_curve_results:
-        for c in config_file_plotting['supply_curve_plots']['countries']:
+        for c in config_file_plotting['supply_curve_plot']['countries']:
             get_supply_curves(data.copy(), color_dictionary, nice_name_dictionary,
                               add_legend=True, save=True, fig_title=r + '_' + c + '_supply_curve',
                               path_saving=path_saving, country=c, production_costs=production_costs)
@@ -368,7 +368,7 @@ plot_comparison_plot('costs', config_file_plotting['total_supply_costs_compariso
                      nice_name_dictionary=nice_name_dictionary,
                      cost_type='')
 
-plot_comparison_plot('costs', config_file_plotting['profit_comparison_plots'],
+plot_comparison_plot('costs', config_file_plotting['profit_comparison_plot'],
                      path_files, path_saving,
                      config_file_plotting, production_costs, cmap, global_plot_boundaries,
                      nice_name_dictionary=nice_name_dictionary,
@@ -386,8 +386,8 @@ plot_comparison_plot('routes', routes_comparison_plot_results,
                      transport_mean_line_styles=transport_mean_line_styles, line_widths=line_widths,
                      infrastructure_data=infrastructure_data, complete_infrastructure=complete_infrastructure)
 
-for country in config_file_plotting['supply_curve_comparison_plots']['countries']:
-    plot_comparison_plot('supply_curves', config_file_plotting['supply_curve_comparison_plots']['results'],
+for country in config_file_plotting['supply_curve_comparison_plot']['countries']:
+    plot_comparison_plot('supply_curves', config_file_plotting['supply_curve_comparison_plot']['results'],
                          path_files, path_saving,
                          config_file_plotting, production_costs, cmap, global_plot_boundaries,
                          color_dictionary=color_dictionary, nice_name_dictionary=nice_name_dictionary,
@@ -395,7 +395,7 @@ for country in config_file_plotting['supply_curve_comparison_plots']['countries'
                          infrastructure_data=infrastructure_data, complete_infrastructure=complete_infrastructure,
                          country=country, distance_between=1, subplot_height=4)
 
-for n, comparison in enumerate(matched_supply_routes_plots):
+for n, comparison in enumerate(matched_supply_routes_plot):
     results_data = []
     for r in comparison:
         data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
@@ -428,7 +428,6 @@ for r in compare_costs_and_quantities_results:
         )
 
     output_path = safe_output_path(path_saving, r + '_distribution_cost_and_quantities.png')
-    print("Creating 'compare_costs_and_quantities_plot' for " + str(r))
 
     # mpl.use('TkAgg')
 
@@ -598,7 +597,6 @@ for r in compare_costs_and_quantities_results:
     fig.savefig(output_path, bbox_inches='tight', dpi=600)
 
     plt.close(fig)
-    print('Saved cost and quantity comparison plot:\n' + output_path)
 
 for n, comparison in enumerate(config_file_plotting['solving_time_plot']):
     all_data = []

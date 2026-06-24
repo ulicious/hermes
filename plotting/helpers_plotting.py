@@ -273,6 +273,7 @@ def create_weighted_routing_data_script(data, complete_infrastructure, infrastru
 
         reversed_dict = dict((v, k) for k, v in replacement_dict.items())
         result_dfs['geometry'] = result_dfs['geometry'].map(reversed_dict)
+        result_dfs['quantity_MWh'] = result_dfs['quantity']
 
         result_dfs.to_csv(safe_output_path(
             path_processed_results, folder + '_routes_and_quantities.csv'))
@@ -353,6 +354,7 @@ def create_weighted_routing_data_script(data, complete_infrastructure, infrastru
 
         weighted_routes = pd.concat(individual_data_dfs)
         weighted_routes.reset_index(drop=True, inplace=True)
+        weighted_routes['quantity_MWh'] = weighted_routes['quantity']
 
         weighted_routes.to_csv(safe_output_path(
             path_processed_results, folder + '_routes_and_quantities.csv'))
@@ -384,14 +386,20 @@ def get_geometry_segments(args):
         if m == 0:
             # start
             commodity_local = r_segment[0]
-            quantity_local *= r_segment[1]
+            efficiency_factor = float(r_segment[1])
+            if not 0 <= efficiency_factor <= 1:
+                raise ValueError('Route efficiency factors must be between 0 and 1.')
+            quantity_local *= efficiency_factor
 
             continue
 
         elif len(r_segment) == 3:
             # conversion
             commodity_local = r_segment[1]
-            quantity_local *= r_segment[2]
+            efficiency_factor = float(r_segment[2])
+            if not 0 <= efficiency_factor <= 1:
+                raise ValueError('Route efficiency factors must be between 0 and 1.')
+            quantity_local *= efficiency_factor
         else:
             # transportation
             start = r_segment[0]
@@ -402,6 +410,11 @@ def get_geometry_segments(args):
 
             distance = r_segment[2]
             if distance == 0:
+                if len(r_segment) >= 5:
+                    efficiency_factor = float(r_segment[-1])
+                    if not 0 <= efficiency_factor <= 1:
+                        raise ValueError('Route efficiency factors must be between 0 and 1.')
+                    quantity_local *= efficiency_factor
                 continue
 
             destination = r_segment[3]
@@ -499,6 +512,11 @@ def get_geometry_segments(args):
 
                 path = nx.shortest_path(graph_object, start, destination)
                 if len(path) < 2:
+                    if len(r_segment) >= 5:
+                        efficiency_factor = float(r_segment[-1])
+                        if not 0 <= efficiency_factor <= 1:
+                            raise ValueError('Route efficiency factors must be between 0 and 1.')
+                        quantity_local *= efficiency_factor
                     continue
 
                 last_node = None
@@ -525,6 +543,12 @@ def get_geometry_segments(args):
                                 number_used_infrastructure_local[(reverse_line, commodity_local)] += quantity_local
 
                     last_node = node
+
+            if len(r_segment) >= 5:
+                efficiency_factor = float(r_segment[-1])
+                if not 0 <= efficiency_factor <= 1:
+                    raise ValueError('Route efficiency factors must be between 0 and 1.')
+                quantity_local *= efficiency_factor
 
     return number_used_infrastructure_local, type_used_infrastructure_local
 
@@ -730,6 +754,14 @@ def get_ranked_routes(data):
                 "avg_quantity": (
                     mean(group["quantities"]) if group["quantities"] else float("nan")
                 ),
+                "avg_input_quantity_MWh": (
+                    mean(group["quantities"]) if group["quantities"] else float("nan")
+                ),
+                "avg_input_quantity_TWh": (
+                    mean(group["quantities"]) / 1_000_000
+                    if group["quantities"]
+                    else float("nan")
+                ),
                 "route_signature": signature,
                 "example_route": group["example_route"],
                 "sections": sections,
@@ -750,6 +782,8 @@ def get_ranked_routes(data):
 
 def load_result(r, path_files, config_file_plotting, production_costs, with_routes=True):
     data = pd.read_csv(os.path.join(path_files, r + '_processed_results.csv'), index_col=0)
+    if 'input_quantity_MWh' not in data.columns and 'quantity' in data.columns:
+        data['input_quantity_MWh'] = data['quantity']
     strike_prices = _load_strike_prices_from_result_path(path_files)
 
     destination = load_destination(path_files, r)
@@ -842,6 +876,11 @@ def load_result(r, path_files, config_file_plotting, production_costs, with_rout
     if with_routes:
         weighted_routes = pd.read_csv(
             os.path.join(path_files, r + '_routes_and_quantities.csv'), index_col=0)
+        if 'quantity_MWh' in weighted_routes.columns:
+            weighted_routes['quantity'] = weighted_routes['quantity_MWh']
+        else:
+            weighted_routes['quantity_MWh'] = weighted_routes['quantity']
+        weighted_routes['quantity_TWh'] = weighted_routes['quantity_MWh'] / 1_000_000
         weighted_routes = weighted_routes.sort_values(by=['quantity'], ascending=False)
         weighted_routes['geometry'] = weighted_routes['geometry'].apply(shapely.wkt.loads)
     else:
@@ -1053,7 +1092,15 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                     set(country_locations).intersection(data.index.tolist())
                 )
 
-                data_country = data.loc[country_locations, :]
+                data_country = data.loc[country_locations, :].copy()
+                data_country['input_quantity_MWh'] = data_country['quantity']
+                data_country['efficiency_percent'] = data_country['efficiency']
+                data_country['delivered_quantity_TWh'] = (
+                    data_country['input_quantity_MWh']
+                    * data_country['efficiency_percent']
+                    / 100
+                    / 1_000_000
+                )
 
                 for entry in data_country['commodities']:
                     values = ast.literal_eval(entry)
@@ -1068,8 +1115,20 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                 all_data[r + '_commodity_routes'] = data_country[['latitude', 'longitude', 'commodities']]
                 all_data[r + '_commodity_routes'].columns = ['latitude', 'longitude', r + '_commodities']
 
-                all_data[r + '_quantity'] = data_country[['latitude', 'longitude', 'quantity']]
-                all_data[r + '_quantity'].columns = ['latitude', 'longitude', r + '_quantity']
+                all_data[r + '_quantity'] = data_country[[
+                    'latitude',
+                    'longitude',
+                    'input_quantity_MWh',
+                    'efficiency_percent',
+                    'delivered_quantity_TWh',
+                ]]
+                all_data[r + '_quantity'].columns = [
+                    'latitude',
+                    'longitude',
+                    r + '_input_quantity_MWh',
+                    r + '_efficiency_percent',
+                    r + '_delivered_quantity_TWh',
+                ]
 
         if plot_type in ['costs', 'efficiency']:
 
