@@ -1407,15 +1407,18 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
         )
 
     if country is not None:
-        country_locations = production_costs[
-            production_costs['country_start'] == country
-            ].index.tolist()
+        if 'country_start' in data.columns:
+            data = data[data['country_start'] == country].copy()
+        else:
+            country_locations = production_costs[
+                production_costs['country_start'] == country
+                ].index.tolist()
 
-        country_locations = list(
-            set(country_locations).intersection(data.index.tolist())
-        )
+            country_locations = list(
+                set(country_locations).intersection(data.index.tolist())
+            )
 
-        data = data.loc[country_locations, :].copy()
+            data = data.loc[country_locations, :].copy()
     else:
         data = data.copy()
 
@@ -1446,6 +1449,72 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
     data['plot_quantity'] = data['delivered_quantity_TWh'] / divisor
 
     total_quantity = data['plot_quantity'].sum()
+    if not np.isfinite(total_quantity) or total_quantity <= 0:
+        ax.set_xlim([0, 1])
+        ax.set_ylim([0, 1])
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.text(
+            0.5,
+            0.5,
+            'No positive delivered quantity',
+            transform=ax.transAxes,
+            va='center',
+            ha='center',
+            fontsize=9
+        )
+
+        ax_band.set_xlim([0, 1])
+        ax_band.set_ylim([0, 1])
+        ax_band.set_xticks([])
+        ax_band.set_yticks([])
+        for spine in ax_band.spines.values():
+            spine.set_visible(False)
+
+        if add_fig_title:
+            ax.text(
+                0.5,
+                0.08,
+                fig_title,
+                transform=ax.transAxes,
+                va='center',
+                ha='center',
+                color='white',
+                fontsize=9,
+                fontweight='bold',
+                zorder=10
+            )
+
+        export_data = data[[
+            'input_quantity_MWh',
+            'efficiency_percent',
+            'delivered_quantity_TWh',
+            'costs',
+        ]].copy()
+        export_data['cost_routes'] = [[] for _ in export_data.index]
+        export_data['commodity_routes'] = [[] for _ in export_data.index]
+
+        if return_fig:
+            return fig
+
+        if save:
+            if fig is not None:
+                fig.tight_layout()
+                plt.subplots_adjust(bottom=0.28)
+
+                fig.savefig(
+                    safe_output_path(path_saving, fig_title + '.png'),
+                    bbox_inches='tight',
+                    dpi=600
+                )
+
+                fig.savefig(
+                    safe_output_path(path_saving, fig_title + '.svg'),
+                    bbox_inches='tight'
+                )
+
+            export_data.to_excel(safe_output_path(path_saving, fig_title + '.xlsx'), index=False)
+        return None
 
     # ------------------------------------------------------------
     # Define cost columns and bar widths

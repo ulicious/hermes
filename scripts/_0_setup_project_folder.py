@@ -30,6 +30,8 @@ def main():
         print(path_file)
     print('Raw data files were copied to:')
     print(os.path.join(project_folder, 'raw_data'))
+    print('Algorithm configuration batch folder created:')
+    print(os.path.join(project_folder, 'algorithm_configurations'))
 
 
 if __name__ == '__main__':

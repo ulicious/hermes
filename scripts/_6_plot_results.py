@@ -433,6 +433,31 @@ for r in compare_costs_and_quantities_results:
 
     data, weighted_routes, norm_prod, norm_conv, norm_trans, norm_total, norm_adjusted_costs, norm_efficiency, norm_all, ranked_routes, starting_locations, destination_location \
         = load_result(r, path_files, config_file_plotting, production_costs, with_routes=True)
+
+    export_routes = weighted_routes.copy()
+    export_routes['geometry'] = export_routes['geometry'].apply(lambda geometry: geometry.wkt)
+    summary_by_cost_category = (
+        export_routes.groupby('commodity', as_index=False)
+        .agg(
+            quantity_MWh=('quantity_MWh', 'sum'),
+            quantity_TWh=('quantity_TWh', 'sum'),
+            number_of_route_segments=('quantity_MWh', 'size')
+        )
+    )
+    summary_by_transport_mean = (
+        export_routes.groupby(['commodity', 'transport_mean'], as_index=False)
+        .agg(
+            quantity_MWh=('quantity_MWh', 'sum'),
+            quantity_TWh=('quantity_TWh', 'sum'),
+            number_of_route_segments=('quantity_MWh', 'size')
+        )
+    )
+    excel_output_path = safe_output_path(path_saving, r + '_distribution_cost_and_quantities.xlsx')
+    with pd.ExcelWriter(excel_output_path) as writer:
+        export_routes.to_excel(writer, sheet_name='routes', index=False)
+        summary_by_cost_category.to_excel(writer, sheet_name='summary_by_cost', index=False)
+        summary_by_transport_mean.to_excel(writer, sheet_name='summary_by_transport', index=False)
+
     scenario_boundaries = resolve_plot_boundaries(
         config_file_plotting,
         data=data,

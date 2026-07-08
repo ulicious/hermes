@@ -64,6 +64,7 @@ BOOLEAN_CONFIG_KEYS = [
 ]
 
 PROJECT_STRUCTURE = [
+    'algorithm_configurations',
     'raw_data',
     'processed_data',
     os.path.join('processed_data', 'inner_infrastructure_distances'),

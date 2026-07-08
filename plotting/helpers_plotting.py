@@ -32,6 +32,15 @@ def _read_csv_or_empty(path, columns=None, index_col=0, dtype=None):
     return pd.DataFrame(columns=columns or [])
 
 
+def _align_start_location_column(data, production_costs, column):
+    values = production_costs[column].reindex(data.index)
+    if values.isna().all() and len(data.index) > 0:
+        lookup = production_costs[column].copy()
+        lookup.index = lookup.index.map(str)
+        values = pd.Series(data.index.map(str), index=data.index).map(lookup)
+    return values
+
+
 def _load_strike_prices_from_result_path(path_files):
     project_folder_path = os.path.abspath(os.path.join(path_files, os.pardir, os.pardir))
     conversion_config = load_yaml(os.path.join(project_folder_path, CONVERSION_CONFIG))
@@ -789,7 +798,11 @@ def load_result(r, path_files, config_file_plotting, production_costs, with_rout
     destination = load_destination(path_files, r)
 
     # overwrite production costs with h2 production costs
-    data['production_costs'] = production_costs['Hydrogen_Gas']
+    data['production_costs'] = _align_start_location_column(data, production_costs, 'Hydrogen_Gas')
+    if 'country_start' not in data.columns and 'country_start' in production_costs.columns:
+        data['country_start'] = _align_start_location_column(data, production_costs, 'country_start')
+    if 'continent_start' not in data.columns and 'continent_start' in production_costs.columns:
+        data['continent_start'] = _align_start_location_column(data, production_costs, 'continent_start')
     data['final_commodity'] = data.apply(
         lambda row: _get_final_route_commodity(row.get('routes'), row.get('start_commodity')),
         axis=1
@@ -1076,23 +1089,26 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
 
             elif plot_type == 'supply_curves':
 
+                loaded_rows = len(data)
+                rows_with_costs = data['costs'].notna().sum()
                 data = data[data['costs'].notna()]  # eher inf, oder?
+                rows_with_cost_route = data['cost_route'].notna().sum()
                 data = data[data['cost_route'].notna()]
 
-                current_ax = get_supply_curves(data.copy(), color_dictionary, nice_name_dictionary, add_legend=False, add_fig_title=True, return_fig=True,
-                                               fig_title=nice_name_dictionary[r], country=country, ax=current_ax,
-                                               fig=fig, production_costs=production_costs, ylim=max_total_costs,
-                                               current_ax=m)
+                if 'country_start' in data.columns:
+                    rows_with_country = data['country_start'].notna().sum()
+                    data_country = data[data['country_start'] == country].copy()
+                else:
+                    rows_with_country = 0
+                    country_locations = production_costs[
+                        production_costs['country_start'] == country
+                        ].index.tolist()
 
-                country_locations = production_costs[
-                    production_costs['country_start'] == country
-                    ].index.tolist()
+                    country_locations = list(
+                        set(country_locations).intersection(data.index.tolist())
+                    )
 
-                country_locations = list(
-                    set(country_locations).intersection(data.index.tolist())
-                )
-
-                data_country = data.loc[country_locations, :].copy()
+                    data_country = data.loc[country_locations, :].copy()
                 data_country['input_quantity_MWh'] = data_country['quantity']
                 data_country['efficiency_percent'] = data_country['efficiency']
                 data_country['delivered_quantity_TWh'] = (
@@ -1101,6 +1117,25 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                     / 100
                     / 1_000_000
                 )
+                delivered_quantity_twh = data_country['delivered_quantity_TWh'].sum()
+
+                if data_country.empty or not np.isfinite(delivered_quantity_twh) or delivered_quantity_twh <= 0:
+                    print(
+                        "Supply curve comparison has no positive delivered quantity for "
+                        + "result '" + str(r) + "' and country '" + str(country) + "': "
+                        + "loaded_rows=" + str(loaded_rows)
+                        + ", rows_with_costs=" + str(rows_with_costs)
+                        + ", rows_with_cost_route=" + str(rows_with_cost_route)
+                        + ", rows_after_cost_filters=" + str(len(data))
+                        + ", rows_with_country_start=" + str(rows_with_country)
+                        + ", matching_country_rows=" + str(len(data_country))
+                        + ", delivered_quantity_TWh=" + str(delivered_quantity_twh)
+                    )
+
+                current_ax = get_supply_curves(data.copy(), color_dictionary, nice_name_dictionary, add_legend=False, add_fig_title=True, return_fig=True,
+                                               fig_title=nice_name_dictionary[r], country=country, ax=current_ax,
+                                               fig=fig, production_costs=production_costs, ylim=max_total_costs,
+                                               current_ax=m)
 
                 for entry in data_country['commodities']:
                     values = ast.literal_eval(entry)
