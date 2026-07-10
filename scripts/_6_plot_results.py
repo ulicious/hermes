@@ -584,7 +584,8 @@ for r in compare_costs_and_quantities_results:
                                        label=str(int(s / 1000000)), linewidth=sqrt(s * scale)))
 
         fig.legend(handles=sizes, loc='upper center', ncols=3,
-                   bbox_to_anchor=(0.5, relative_legend_height), title='Quantity [TWh]', handlelength=1)
+                   bbox_to_anchor=(0.5, relative_legend_height), title='Quantity [TWh]',
+                   handlelength=1, frameon=False)
     else:
         import matplotlib
         from mpl_toolkits.axes_grid1 import make_axes_locatable

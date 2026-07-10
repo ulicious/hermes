@@ -684,11 +684,13 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
         if add_legend:
             ax.legend(handles=new_transport_means, loc='upper center', ncols=3,
                       bbox_to_anchor=(0.5, 0.2), title='Transport Mean',
-                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1)
+                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
+                      fontsize=9, title_fontsize=9, frameon=False)
 
             ax.legend(handles=new_commodities, loc='upper center', ncol=2,
                       bbox_to_anchor=(0.5, 0.), title='Commodity',
-                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25)
+                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25,
+                      fontsize=9, title_fontsize=9, frameon=False)
 
         if return_handles:
             return ax, existing_commodities, existing_transport_means
@@ -698,7 +700,8 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
     if add_legend:
         fig.legend(handles=new_transport_means, loc='upper center', ncols=3,
                    bbox_to_anchor=(0.5, 0.3), title='Transport Mean',
-                   labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1)
+                   labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
+                   fontsize=9, title_fontsize=9, frameon=False)
 
         if len(commodities) <= 4:
             ncols = len(commodities)
@@ -707,7 +710,8 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
 
         fig.legend(handles=new_commodities, loc='upper center', ncol=ncols,
                    bbox_to_anchor=(0.5, 0.175), title='Commodity',
-                   labelspacing=0.1, handletextpad=0.1, columnspacing=0.25)
+                   labelspacing=0.1, handletextpad=0.1, columnspacing=0.25,
+                   fontsize=9, title_fontsize=9, frameon=False)
 
     if save:
         if fig is not None:
@@ -952,11 +956,13 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
         if add_legend:
             ax.legend(handles=new_transport_means, loc='upper center', ncols=3,
                       bbox_to_anchor=(0.25, 0.2), title='Transport Mean',
-                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1)
+                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
+                      frameon=False)
 
             ax.legend(handles=sizes, loc='upper center', ncols=3,
                       bbox_to_anchor=(0.75, 0.2), title='Quantity [TWh]',
-                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1)
+                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
+                      frameon=False)
 
             if len(commodities) < 3:
                 ncols = len(commodities)
@@ -965,7 +971,8 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
 
             ax.legend(handles=new_commodities, loc='upper center', ncol=ncols,
                       bbox_to_anchor=(0.5, 0.1), title=legend_label,
-                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25)
+                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25,
+                      frameon=False)
 
         if return_handles:
             return ax, existing_commodities, existing_transport_means
@@ -979,12 +986,12 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
             fig.legend(handles=new_transport_means, loc='upper left', ncols=3,
                        bbox_to_anchor=(0.1, 0.395), title='Transport Mean',
                        labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
-                       fontsize=9)
+                       fontsize=9, frameon=False)
 
             fig.legend(handles=sizes, loc='upper right', ncols=3,
                        bbox_to_anchor=(0.9, 0.395), title='Quantity [TWh]',
                        labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
-                       fontsize=9)
+                       fontsize=9, frameon=False)
 
         else:
             shrink = 0.5
@@ -1034,7 +1041,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
             fig.legend(handles=new_commodities, loc='upper center', ncol=ncols,
                        bbox_to_anchor=(0.5, 0.27), title=legend_label,
                        labelspacing=0.1, handletextpad=0.1, columnspacing=0.25,
-                       fontsize=9)
+                       fontsize=9, frameon=False)
 
     if save:
         if fig is not None:
@@ -1299,7 +1306,7 @@ def get_used_locations_figure(data, boundaries, destination_location, quantity, 
         fig.legend(handles=quantity_handles, loc='upper center', ncol=len(quantity_handles),
                    bbox_to_anchor=(0.5, 0.27), title='TWh',
                    labelspacing=0.1, handletextpad=0.1, columnspacing=0.25,
-                   fontsize=9)
+                   fontsize=9, frameon=False)
 
     if return_fig:
         return ax
@@ -1866,7 +1873,8 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
             fontsize=9,
             bbox_to_anchor=(0.5, -0.2),
             ncols=3,
-            loc='upper center'
+            loc='upper center',
+            frameon=False,
         )
 
         # Commodity legend below the commodity band
@@ -1905,7 +1913,8 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
                 handletextpad=0.1,
                 columnspacing=0.25,
                 fontsize=9,
-                title_fontsize=9
+                title_fontsize=9,
+                frameon=False,
             )
 
     # ------------------------------------------------------------
@@ -2103,7 +2112,8 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
 
         # commodity legend
         ax.legend(handles=existing_commodities, loc='upper center', ncols=2, bbox_to_anchor=bbox_to_anchor,
-                  labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5, fontsize=9)
+                  labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5,
+                  fontsize=9, frameon=False)
 
     if return_fig:
         if return_handles:
@@ -2224,7 +2234,8 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
 
         if handles_list_infrastructure:
             ax.legend(handles=handles_list_infrastructure, loc='upper center', ncol=3, bbox_to_anchor=(0.5, 0),
-                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5, fontsize=9)
+                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5,
+                      fontsize=9, frameon=False)
 
     if return_fig:
         return ax
@@ -2319,7 +2330,7 @@ def get_water_availability_figure(boundaries, path_data, ax=None, fig=None, fig_
             mpatches.Patch(color=plot_colors['map_colors']['water_excluded'], label='Excluded')
         ]
         ax.legend(handles=handles, loc='upper center', ncol=2, bbox_to_anchor=(0.5, -0.02),
-                  frameon=True, labelspacing=0.25, handletextpad=0.35, columnspacing=0.8,
+                  frameon=False, labelspacing=0.25, handletextpad=0.35, columnspacing=0.8,
                   handlelength=1.6, fontsize=13)
 
     if return_fig:
@@ -2439,7 +2450,8 @@ def get_start_locations_infrastructure_destination_figure(start_locations, bound
                         mlines.Line2D([], [], color=plot_colors['map_colors']['destination'], linestyle='-', markersize=5,
                                       label='Destination')]
         ax.legend(handles=handles_list, loc='upper center', ncol=2, bbox_to_anchor=(0.5, 0),
-                  labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5, fontsize=9)
+                  labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5,
+                  fontsize=9, frameon=False)
 
     if return_fig:
         return ax

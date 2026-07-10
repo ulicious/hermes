@@ -1217,7 +1217,8 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                 ncols = math.ceil(len(commodities) / 2)
 
             fig.legend(handles=commodities, ncols=ncols, bbox_to_anchor=(0.5, legend_height_relative * 1.25), loc='upper center',
-                       labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5, fontsize=9)
+                       labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5,
+                       fontsize=9, frameon=False)
 
         if plot_type == 'routes':
 
@@ -1229,11 +1230,13 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
 
             fig.legend(handles=transport_means, loc='upper center', ncols=3,
                        bbox_to_anchor=(0.5, legend_height_relative * 1.075), title='Transport Mean',
-                       labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1)
+                       labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
+                       fontsize=9, title_fontsize=9, frameon=False)
 
             fig.legend(handles=commodities, loc='upper center', ncol=ncols,
                        bbox_to_anchor=(0.5, legend_height_relative * 1.075 - 0.19), title='Commodity',
-                       labelspacing=0.1, handletextpad=0.1, columnspacing=0.25)
+                       labelspacing=0.1, handletextpad=0.1, columnspacing=0.25,
+                       fontsize=9, title_fontsize=9, frameon=False)
 
         if plot_type == 'supply_curves':
             # Add labels, legend, and titles
@@ -1271,7 +1274,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                 fig.text(-0.01, 0.725, 'Costs [€ / MWh]', va='center', ha='left', fontdict={'fontsize': 9}, rotation=90)  # 46
 
                 fig.legend(handles=cost_handles, fontsize=9, bbox_to_anchor=(0.475, 0.365), ncols=3,
-                           loc='upper center')
+                           loc='upper center', frameon=False)
 
                 fig.legend(
                     handles=commodity_handles,
@@ -1283,7 +1286,8 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                     handletextpad=0.1,
                     columnspacing=0.25,
                     fontsize=9,
-                    title_fontsize=9
+                    title_fontsize=9,
+                    frameon=False
                 )
             else:
 
@@ -1291,7 +1295,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                 fig.text(-0.01, 0.82, 'Costs [€ / MWh]', va='center', ha='left', fontdict={'fontsize': 9}, rotation=90) # oben 815
 
                 fig.legend(handles=cost_handles, fontsize=9, bbox_to_anchor=(0.475, 0.2), ncols=3,
-                           loc='upper center')
+                           loc='upper center', frameon=False)
 
                 fig.legend(
                     handles=commodity_handles,
@@ -1303,7 +1307,8 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                     handletextpad=0.1,
                     columnspacing=0.25,
                     fontsize=9,
-                    title_fontsize=9
+                    title_fontsize=9,
+                    frameon=False
                 )
 
             # fig.text(0.5, 0.2, 'Potential Quantities [TWh]', va='bottom', ha='center', fontdict={'fontsize': 9})
