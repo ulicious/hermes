@@ -63,9 +63,9 @@ DEFAULT_PLOT_COLORS = {
         'Destination': '#0072B2',
     },
     'supply_curve_colors': {
-        'production': '#4C78A8',
-        'conversion': '#B279A2',
-        'transportation': '#8C6D31',
+        'production': '#CC79A7',
+        'conversion': '#8B3E52',
+        'transportation': '#D55E00',
     },
     'category_colors': {
         'weighted_route_fallback': ['#88CCEE', '#CC79A7', '#4C78A8', '#DDCC77', '#8C6D31', '#44AA99'],
