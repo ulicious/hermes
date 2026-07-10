@@ -117,6 +117,14 @@ category_colors:
       - '#332288'
       - '#4C78A8'
 
+infrastructure_colors:
+   Road: '#8C8C8C'
+   Shipping: '#4C78A8'
+   Pipeline_Gas: '#8C564B'
+   Pipeline_Oil: '#2F2F2F'
+   Port: '#4C78A8'
+   Destination: '#006D77'
+
 nice_name_dictionary:
    Hydrogen_Gas: 'Hydrogen (Gas)'
    Hydrogen_Liquid: 'Hydrogen (Liquid)'
@@ -199,11 +207,3 @@ line_widths:
       Shipping: 1
       Pipeline_Liquid: 1
       New_Pipeline_Liquid: 1
-
-infrastructure_colors:
-   Road: '#8C8C8C'
-   Shipping: '#4C78A8'
-   Pipeline_Gas: '#8C564B'
-   Pipeline_Oil: '#2F2F2F'
-   Port: '#4C78A8'
-   Destination: '#006D77'
