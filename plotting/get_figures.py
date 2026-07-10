@@ -51,7 +51,7 @@ DEFAULT_PLOT_COLORS = {
         'destination': '#006D77',
         'destination_fill': '#FFFFFF',
         'destination_halo': '#FFFFFF',
-        'profit_boundary': '#CC79A7',
+        'profit_boundary': '#FFFFFF',
         'country_boundary': '#9A9A9A',
         'water_available': '#6B8E6B',
         'water_excluded': '#B56B5F',
