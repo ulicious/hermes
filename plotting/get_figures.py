@@ -48,8 +48,9 @@ DEFAULT_PLOT_COLORS = {
     'map_colors': {
         'land': '#D8D8D8',
         'land_light': '#E3E3E3',
-        'destination': '#0072B2',
+        'destination': '#006D77',
         'destination_fill': '#FFFFFF',
+        'destination_halo': '#FFFFFF',
         'profit_boundary': '#CC79A7',
         'country_boundary': '#9A9A9A',
         'water_available': '#6B8E6B',
@@ -106,6 +107,59 @@ def get_configured_colormap(plotting_config):
     cmap = mpl.colormaps[plotting_config.get('colormap', 'viridis_r')].copy()
     cmap.set_over(get_plot_color_config(plotting_config)['colorbar']['over_color'])
     return cmap
+
+
+def _plot_destination_location(ax, destination_location, plot_colors, s=10, linewidth=0.5,
+                               fill_polygon=False):
+    if destination_location is None:
+        return
+
+    destination = gpd.GeoDataFrame(geometry=[destination_location])
+    destination_color = plot_colors['map_colors']['destination']
+    destination_halo = plot_colors['map_colors']['destination_halo']
+    destination_fill = plot_colors['map_colors']['destination_fill']
+
+    if isinstance(destination_location, Point):
+        destination.plot(
+            ax=ax,
+            color=destination_color,
+            edgecolor=destination_halo,
+            linewidth=max(linewidth * 2.5, 0.8),
+            s=s,
+            zorder=20,
+        )
+        return
+
+    if fill_polygon:
+        destination.plot(
+            ax=ax,
+            facecolor=destination_fill,
+            edgecolor=destination_halo,
+            linewidth=linewidth * 2.5,
+            zorder=19,
+        )
+        destination.boundary.plot(
+            ax=ax,
+            color=destination_color,
+            linewidth=linewidth,
+            zorder=20,
+        )
+        return
+
+    destination.plot(
+        ax=ax,
+        fc='none',
+        ec=destination_halo,
+        linewidth=linewidth * 2.5,
+        zorder=19,
+    )
+    destination.plot(
+        ax=ax,
+        fc='none',
+        ec=destination_color,
+        linewidth=linewidth,
+        zorder=20,
+    )
 
 
 # from plotting.helpers_plotting import get_geometry_segments
@@ -607,13 +661,7 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
         boundaries = expand_result_boundaries(boundaries, route_geometries)
 
     # plot destination location / polygon
-    if isinstance(destination_location, Point):
-        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(ax=ax, color=plot_colors['map_colors']['destination'], s=10)
-    else:
-        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(
-            ax=ax, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
+    _plot_destination_location(ax, destination_location, plot_colors, s=10, linewidth=0.5)
 
     ax.grid(visible=True, alpha=0.5)
 
@@ -879,14 +927,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                         # point_gdf.plot(color=color, ax=ax, markersize=quantity_scaled, edgecolor=None, marker='o')
 
     # plot destination location / polygon
-    if destination_location is not None:
-        if isinstance(destination_location, Point):
-            destination_location_gdf = gpd.GeoDataFrame(geometry=[destination_location])
-            destination_location_gdf.plot(ax=ax, color=plot_colors['map_colors']['destination'], s=10)
-        else:
-            destination_location_gdf = gpd.GeoDataFrame(geometry=[destination_location])
-            destination_location_gdf.plot(
-                ax=ax, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
+    _plot_destination_location(ax, destination_location, plot_colors, s=10, linewidth=0.5)
 
     ax.grid(visible=True, alpha=0.5)
     if add_fig_title:
@@ -1086,14 +1127,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
             ax.add_patch(plt.Polygon(points, facecolor=color))
 
     # plot destination location / polygon
-    if destination_location is not None:
-        if isinstance(destination_location, Point):
-            destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-            destination_location.plot(ax=ax, color=plot_colors['map_colors']['destination'], s=s)
-        else:
-            destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-            destination_location.plot(
-                ax=ax, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
+    _plot_destination_location(ax, destination_location, plot_colors, s=s, linewidth=0.5)
 
     ax.grid(visible=True, alpha=0.5)
 
@@ -1236,13 +1270,7 @@ def get_used_locations_figure(data, boundaries, destination_location, quantity, 
                 used_quantity += loc_quantity
 
     # plot destination location / polygon
-    if isinstance(destination_location, Point):
-        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(ax=ax, color=plot_colors['map_colors']['destination'], s=s)
-    else:
-        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(
-            ax=ax, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
+    _plot_destination_location(ax, destination_location, plot_colors, s=s, linewidth=0.5)
 
     ax.grid(visible=True, alpha=0.5)
 
@@ -1403,11 +1431,10 @@ def get_cost_and_quantity_figure(sub_axes, data, norm, cmap_chosen, boundaries, 
     # # plot destination location / polygon
     # if isinstance(destination_location, Point):
     #     destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-    #     destination_location.plot(ax=ax, color=plot_colors['map_colors']['destination'], s=s)
+    #     _plot_destination_location(ax, destination_location, plot_colors, s=s)
     # else:
     #     destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-    #     destination_location.plot(
-    #         ax=ax, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
+    #     _plot_destination_location(ax, destination_location, plot_colors, linewidth=0.5)
 
     # ax.grid(visible=True, alpha=0.5)
     # ax.text(0.6, 0.05, fig_title, transform=ax.transAxes, va='bottom', ha='left')
@@ -1955,13 +1982,7 @@ def get_production_costs_figure(sub_axes, data, norm, cmap_chosen, boundaries, d
             sub_axes.add_patch(plt.Polygon(points, facecolor=color))
 
     # plot destination location / polygon
-    if not use_voronoi:
-        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(ax=sub_axes, color=plot_colors['map_colors']['destination'], s=s)
-    else:
-        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(
-            ax=sub_axes, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
+    _plot_destination_location(sub_axes, destination_location, plot_colors, s=s, linewidth=0.5)
 
     sub_axes.grid(visible=True, alpha=0.5)
     sub_axes.text(0.6, 0.05, fig_title, transform=sub_axes.transAxes, va='bottom', ha='left')
@@ -2043,13 +2064,7 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
             ax.add_patch(plt.Polygon(points, facecolor=color))
 
     # plot destination location / polygon
-    if isinstance(destination_location, Point):
-        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(ax=ax, color=plot_colors['map_colors']['destination'], s=s)
-    else:
-        destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(
-            ax=ax, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
+    _plot_destination_location(ax, destination_location, plot_colors, s=s, linewidth=0.5)
 
     ax.grid(visible=True, alpha=0.5)
 
@@ -2400,20 +2415,14 @@ def get_start_locations_infrastructure_destination_figure(start_locations, bound
     start_locations.plot(ax=ax, color=pastel_colors, edgecolor='white', linewidth=0.25, alpha=0.65,
                          label='Start location Voronoi cell')
 
-    destination = gpd.GeoDataFrame(geometry=[destination_location])
-    if isinstance(destination_location, Point):
-        destination.plot(ax=ax, color=plot_colors['map_colors']['destination'], markersize=25, label='Destination')
-    elif isinstance(destination_location, (Polygon, MultiPolygon)):
-        destination.plot(
-            ax=ax,
-            facecolor=plot_colors['map_colors']['destination_fill'],
-            edgecolor=plot_colors['map_colors']['destination'],
-            linewidth=1.25,
-            label='Destination',
-        )
-    else:
-        destination.boundary.plot(
-            ax=ax, color=plot_colors['map_colors']['destination'], linewidth=1.25, label='Destination')
+    _plot_destination_location(
+        ax,
+        destination_location,
+        plot_colors,
+        s=25,
+        linewidth=1.25,
+        fill_polygon=isinstance(destination_location, (Polygon, MultiPolygon)),
+    )
 
     ax.set_ylim(boundaries['min_latitude'],
                 boundaries['max_latitude'])

@@ -58,7 +58,7 @@ solving_time_plot: []
 matched_supply_routes_plot: []  # compares results and attaches routes to the destination which has cheapest supply costs of route
 
 # colors, widths, nice names etc.
-colormap: 'viridis_r'
+colormap: 'cividis'
 limit_scale: True
 
 colorbar:
@@ -71,8 +71,9 @@ colorbar:
 map_colors:
    land: '#D8D8D8'
    land_light: '#E3E3E3'
-   destination: '#0072B2'
+   destination: '#006D77'
    destination_fill: '#FFFFFF'
+   destination_halo: '#FFFFFF'
    profit_boundary: '#CC79A7'
    country_boundary: '#9A9A9A'
    water_available: '#6B8E6B'
@@ -205,4 +206,4 @@ infrastructure_colors:
    Pipeline_Gas: '#8C564B'
    Pipeline_Oil: '#2F2F2F'
    Port: '#4C78A8'
-   Destination: '#0072B2'
+   Destination: '#006D77'
