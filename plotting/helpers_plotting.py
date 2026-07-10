@@ -21,7 +21,7 @@ from collections import defaultdict
 from statistics import mean
 
 from plotting.get_figures import get_number_figure, get_routes_figure, get_energy_carrier_figure, get_weighted_routes, \
-    get_supply_curves, safe_output_path, resolve_plot_boundaries
+    get_supply_curves, safe_output_path, resolve_plot_boundaries, get_plot_color_config
 from data_processing.configuration import CONVERSION_CONFIG, load_yaml
 
 
@@ -793,15 +793,20 @@ def load_result(r, path_files, config_file_plotting, production_costs, with_rout
     data = pd.read_csv(os.path.join(path_files, r + '_processed_results.csv'), index_col=0)
     if 'input_quantity_MWh' not in data.columns and 'quantity' in data.columns:
         data['input_quantity_MWh'] = data['quantity']
+    if 'geometry' in data.columns:
+        data['geometry'] = data['geometry'].apply(
+            lambda geometry: wkt.loads(geometry) if isinstance(geometry, str) and geometry else geometry
+        )
     strike_prices = _load_strike_prices_from_result_path(path_files)
 
     destination = load_destination(path_files, r)
 
     # overwrite production costs with h2 production costs
-    data['production_costs'] = _align_start_location_column(data, production_costs, 'Hydrogen_Gas')
-    if 'country_start' not in data.columns and 'country_start' in production_costs.columns:
+    if not production_costs.empty and 'Hydrogen_Gas' in production_costs.columns:
+        data['production_costs'] = _align_start_location_column(data, production_costs, 'Hydrogen_Gas')
+    if 'country_start' not in data.columns and not production_costs.empty and 'country_start' in production_costs.columns:
         data['country_start'] = _align_start_location_column(data, production_costs, 'country_start')
-    if 'continent_start' not in data.columns and 'continent_start' in production_costs.columns:
+    if 'continent_start' not in data.columns and not production_costs.empty and 'continent_start' in production_costs.columns:
         data['continent_start'] = _align_start_location_column(data, production_costs, 'continent_start')
     data['final_commodity'] = data.apply(
         lambda row: _get_final_route_commodity(row.get('routes'), row.get('start_commodity')),
@@ -912,6 +917,8 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
 
     mpl.rcParams.update({'font.size': 9,
                          'font.family': 'Times New Roman'})
+    plot_colors = get_plot_color_config(config_file_plotting)
+    supply_curve_colors = plot_colors['supply_curve_colors']
 
     diff_lat = boundaries['max_latitude'] - boundaries['min_latitude']
     ratio_lat_lon = diff_lat / (boundaries['max_longitude'] - boundaries['min_longitude'])
@@ -1048,7 +1055,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                                                production_costs=production_costs,
                                                ax=current_ax, return_fig=True, fig=fig, add_colorbar=False,
                                                fig_title=nice_name_dictionary[r], add_fig_title=True,
-                                               limit_scale=limit_scale)
+                                               limit_scale=limit_scale, plot_colors=plot_colors)
 
                 all_data[r + '_' + cost_type] = data[['latitude', 'longitude', cost_type]]
                 all_data[r + '_' + cost_type].columns = ['latitude', 'longitude', r]
@@ -1060,7 +1067,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                                                production_costs=production_costs,
                                                ax=current_ax, return_fig=True, fig=fig, add_colorbar=False,
                                                fig_title=nice_name_dictionary[r], add_fig_title=True,
-                                               limit_scale=limit_scale)
+                                               limit_scale=limit_scale, plot_colors=plot_colors)
 
                 all_data[r + '_efficiency'] = data[['latitude', 'longitude', 'efficiency']]
                 all_data[r + '_efficiency'].columns = ['latitude', 'longitude', r]
@@ -1072,7 +1079,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                                                 production_costs=production_costs, ax=current_ax, fig=fig,
                                                 fig_title=nice_name_dictionary[r], add_fig_title=True,
                                                 add_legend=False, return_fig=True, return_handles=True,
-                                                existing_commodities=commodities)
+                                                existing_commodities=commodities, plot_colors=plot_colors)
 
                 all_data[r + '_commodity'] = data[['latitude', 'longitude', 'start_commodity']]
                 all_data[r + '_commodity'].columns = ['latitude', 'longitude', r]
@@ -1085,7 +1092,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                                         destination_location, fig_title=nice_name_dictionary[r], ax=current_ax,
                                         return_fig=True,  add_legend=False, return_handles=True,
                                         existing_commodities=commodities, existing_transport_means=transport_means,
-                                        add_fig_title=True)
+                                        add_fig_title=True, plot_colors=plot_colors)
 
             elif plot_type == 'supply_curves':
 
@@ -1135,7 +1142,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                 current_ax = get_supply_curves(data.copy(), color_dictionary, nice_name_dictionary, add_legend=False, add_fig_title=True, return_fig=True,
                                                fig_title=nice_name_dictionary[r], country=country, ax=current_ax,
                                                fig=fig, production_costs=production_costs, ylim=max_total_costs,
-                                               current_ax=m)
+                                               current_ax=m, plot_colors=plot_colors)
 
                 for entry in data_country['commodities']:
                     values = ast.literal_eval(entry)
@@ -1230,13 +1237,13 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
 
         if plot_type == 'supply_curves':
             # Add labels, legend, and titles
-            labels = ['Production Costs', 'Conversion Costs', 'Transport Costs']
-            colors = {'Production Costs': 'cornflowerblue', 'Conversion Costs': 'lightcoral', 'Transport Costs': 'gold'}
-
             cost_handles = [
-                mlines.Line2D([], [], color='cornflowerblue', linewidth=6, label='Production Costs', markersize=5),
-                mlines.Line2D([], [], color='lightcoral', linewidth=6, label='Conversion Costs', markersize=5),
-                mlines.Line2D([], [], color='khaki', linewidth=6, label='Transport Costs', markersize=5)
+                mlines.Line2D([], [], color=supply_curve_colors['production'], linewidth=6,
+                              label='Production Costs', markersize=5),
+                mlines.Line2D([], [], color=supply_curve_colors['conversion'], linewidth=6,
+                              label='Conversion Costs', markersize=5),
+                mlines.Line2D([], [], color=supply_curve_colors['transportation'], linewidth=6,
+                              label='Transport Costs', markersize=5)
             ]
 
             commodity_handles = []

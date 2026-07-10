@@ -61,17 +61,60 @@ matched_supply_routes_plot: []  # compares results and attaches routes to the de
 colormap: 'viridis_r'
 limit_scale: True
 
+colorbar:
+   over_color: '#3B2F5C'
+   quantity_colormap:
+      - '#3B5B92'
+      - '#6F7E8C'
+      - '#8C4F3D'
+
+map_colors:
+   land: '#D8D8D8'
+   land_light: '#E3E3E3'
+   destination: '#0072B2'
+   destination_fill: '#FFFFFF'
+   profit_boundary: '#CC79A7'
+   country_boundary: '#9A9A9A'
+   water_available: '#6B8E6B'
+   water_excluded: '#B56B5F'
+
 commodity_colors:
-   Hydrogen_Gas: 'lawngreen'
-   Hydrogen_Liquid: 'forestgreen'
-   Ammonia: 'violet'
-   Methane_Gas: 'dodgerblue'
-   Methane_Liquid: 'navy'
-   Methanol: 'gold'
-   DBT: 'maroon'
-   MCH: 'darkorchid'
-   FTF: 'orangered'
-   None: 'black'
+   Hydrogen_Gas: '#88CCEE'
+   Hydrogen_Liquid: '#0072B2'
+   Ammonia: '#CC79A7'
+   Methane_Gas: '#6B8E6B'
+   Methane_Liquid: '#332288'
+   Methanol: '#CCBB44'
+   DBT: '#882255'
+   MCH: '#999933'
+   FTF: '#D55E00'
+   None: '#2F2F2F'
+
+supply_curve_colors:
+   production: '#4C78A8'
+   conversion: '#B279A2'
+   transportation: '#8C6D31'
+
+category_colors:
+   weighted_route_fallback:
+      - '#88CCEE'
+      - '#CC79A7'
+      - '#4C78A8'
+      - '#DDCC77'
+      - '#8C6D31'
+      - '#44AA99'
+   used_locations:
+      - '#88CCEE'
+      - '#DDCC77'
+      - '#CC79A7'
+      - '#4C78A8'
+   cost_categories:
+      - '#88CCEE'
+      - '#DDCC77'
+      - '#8C6D31'
+      - '#CC79A7'
+      - '#332288'
+      - '#4C78A8'
 
 nice_name_dictionary:
    Hydrogen_Gas: 'Hydrogen (Gas)'
@@ -157,7 +200,9 @@ line_widths:
       New_Pipeline_Liquid: 1
 
 infrastructure_colors:
-   Road: 'r'
-   Shipping: 'b'
-   Pipeline_Gas: 'g'
-   Pipeline_Oil: 'black'
+   Road: '#8C8C8C'
+   Shipping: '#4C78A8'
+   Pipeline_Gas: '#8C564B'
+   Pipeline_Oil: '#2F2F2F'
+   Port: '#4C78A8'
+   Destination: '#0072B2'

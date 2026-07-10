@@ -40,6 +40,73 @@ DEFAULT_PLOT_BOUNDARIES = {
     'max_longitude': 180.0,
 }
 
+DEFAULT_PLOT_COLORS = {
+    'colorbar': {
+        'over_color': '#3B2F5C',
+        'quantity_colormap': ['#3B5B92', '#6F7E8C', '#8C4F3D'],
+    },
+    'map_colors': {
+        'land': '#D8D8D8',
+        'land_light': '#E3E3E3',
+        'destination': '#0072B2',
+        'destination_fill': '#FFFFFF',
+        'profit_boundary': '#CC79A7',
+        'country_boundary': '#9A9A9A',
+        'water_available': '#6B8E6B',
+        'water_excluded': '#B56B5F',
+    },
+    'infrastructure_colors': {
+        'Port': '#4C78A8',
+        'Pipeline_Gas': '#8C564B',
+        'Pipeline_Oil': '#2F2F2F',
+        'Destination': '#0072B2',
+    },
+    'supply_curve_colors': {
+        'production': '#4C78A8',
+        'conversion': '#B279A2',
+        'transportation': '#8C6D31',
+    },
+    'category_colors': {
+        'weighted_route_fallback': ['#88CCEE', '#CC79A7', '#4C78A8', '#DDCC77', '#8C6D31', '#44AA99'],
+        'used_locations': ['#88CCEE', '#DDCC77', '#CC79A7', '#4C78A8'],
+        'cost_categories': ['#88CCEE', '#DDCC77', '#8C6D31', '#CC79A7', '#332288', '#4C78A8'],
+    },
+}
+
+
+def _merged_color_config(plot_colors=None):
+    colors = {
+        section: values.copy()
+        for section, values in DEFAULT_PLOT_COLORS.items()
+    }
+    if plot_colors:
+        for section, values in plot_colors.items():
+            if isinstance(values, dict) and section in colors:
+                colors[section].update(values)
+            else:
+                colors[section] = values
+    return colors
+
+
+def get_plot_color_config(plotting_config=None):
+    if plotting_config is None:
+        return _merged_color_config()
+
+    configured_colors = {
+        'colorbar': plotting_config.get('colorbar', {}),
+        'map_colors': plotting_config.get('map_colors', {}),
+        'infrastructure_colors': plotting_config.get('infrastructure_colors', {}),
+        'supply_curve_colors': plotting_config.get('supply_curve_colors', {}),
+        'category_colors': plotting_config.get('category_colors', {}),
+    }
+    return _merged_color_config(configured_colors)
+
+
+def get_configured_colormap(plotting_config):
+    cmap = mpl.colormaps[plotting_config.get('colormap', 'viridis_r')].copy()
+    cmap.set_over(get_plot_color_config(plotting_config)['colorbar']['over_color'])
+    return cmap
+
 
 # from plotting.helpers_plotting import get_geometry_segments
 
@@ -273,10 +340,11 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
                       add_legend=True,
                       ax=None, width=15.69, height=9, return_fig=False, save=False, path_saving='',
                       return_handles=False, existing_commodities=None, existing_transport_means=None,
-                      add_fig_title=False, fig=None):
+                      add_fig_title=False, fig=None, plot_colors=None):
 
     plt.rcParams.update({'font.size': 9,
                          'font.family': 'Times New Roman'})
+    plot_colors = _merged_color_config(plot_colors)
     centimeter_to_inch = 1 / 2.54
 
     if existing_commodities is None:
@@ -504,7 +572,7 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
     antarctica = map_plot[map_plot['continent'] == 'Antarctica'].index[0]
     map_plot.drop([antarctica], inplace=True)
     map_plot = gpd.GeoDataFrame(map_plot['geometry'], columns=['geometry'])
-    map_plot.plot(color='silver', ax=ax)
+    map_plot.plot(color=plot_colors['map_colors']['land'], ax=ax)
 
     order_plotting = [('Methane_Liquid', 'Road'), ('DBT', 'Road'), ('MCH', 'Road'), ('FTF', 'Road'), ('Hydrogen_Liquid', 'Road'),
                       ('Methanol', 'Road'), ('Ammonia', 'Road'), ('Hydrogen_Gas', 'Road'),
@@ -541,10 +609,11 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
     # plot destination location / polygon
     if isinstance(destination_location, Point):
         destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(ax=ax, color='red', s=10)
+        destination_location.plot(ax=ax, color=plot_colors['map_colors']['destination'], s=10)
     else:
         destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(ax=ax, fc='none', ec='red', linewidth=0.5)
+        destination_location.plot(
+            ax=ax, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
 
     ax.grid(visible=True, alpha=0.5)
 
@@ -611,12 +680,13 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                         ax=None, width=15.69, height=9, return_fig=False, save=False, path_saving='',
                         return_handles=False, existing_commodities=None, existing_transport_means=None,
                         add_fig_title=False, ignore_commodity=False, country_comparison=False, color=None,
-                        column='commodity', max_quantity=None, min_quantity=None):
+                        column='commodity', max_quantity=None, min_quantity=None, plot_colors=None):
 
     plt.rcParams.update({'font.size': 9,
                          'legend.title_fontsize': 9,
                          'font.family': 'Times New Roman'})
     commodity_data = commodity_data.copy()
+    plot_colors = _merged_color_config(plot_colors)
 
     if ignore_commodity:
         replacement_dict = {}
@@ -635,7 +705,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
 
         commodity_data = commodity_data.sort_values(by=['quantity'], ascending=False)
 
-    colors = ['yellowgreen', 'indianred', 'royalblue', 'gold', 'chocolate', 'hotpink']
+    colors = plot_colors['category_colors']['weighted_route_fallback']
     for n, c in enumerate(commodity_data[column].unique()):
         if c not in [*color_dictionary.keys()]:
             color_dictionary[c] = colors[n]
@@ -726,10 +796,13 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
     map_plot.drop([antarctica], inplace=True)
 
     map_plot = gpd.GeoDataFrame(geometry=map_plot['geometry'])
-    map_plot.plot(color='gainsboro', ax=ax, alpha=0.75)
+    map_plot.plot(color=plot_colors['map_colors']['land_light'], ax=ax, alpha=0.75)
 
     # cmap = mpl.colormaps['coolwarm']
-    cmap = mpl.colors.LinearSegmentedColormap.from_list("", ["royalblue", "violet", "darkred"])
+    cmap = mpl.colors.LinearSegmentedColormap.from_list(
+        "",
+        plot_colors['colorbar']['quantity_colormap'],
+    )
     norm = mpl.colors.Normalize(
         vmin=min_quantity / 1_000_000,
         vmax=max_quantity / 1_000_000,
@@ -809,10 +882,11 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
     if destination_location is not None:
         if isinstance(destination_location, Point):
             destination_location_gdf = gpd.GeoDataFrame(geometry=[destination_location])
-            destination_location_gdf.plot(ax=ax, color='red', s=10)
+            destination_location_gdf.plot(ax=ax, color=plot_colors['map_colors']['destination'], s=10)
         else:
             destination_location_gdf = gpd.GeoDataFrame(geometry=[destination_location])
-            destination_location_gdf.plot(ax=ax, fc='none', ec='red', linewidth=0.5)
+            destination_location_gdf.plot(
+                ax=ax, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
 
     ax.grid(visible=True, alpha=0.5)
     if add_fig_title:
@@ -943,9 +1017,10 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
                       width=15.69, height=9,
                       fig_title='', add_fig_title=False, column='costs', limit_scale=False, add_colorbar=True,
                       plot_era=False, use_voronoi=False, s=0.5, production_costs=None,
-                      return_fig=False, save=False, save_path='', fig=None):
+                      return_fig=False, save=False, save_path='', fig=None, plot_colors=None):
 
     centimeter_to_inch = 1 / 2.54
+    plot_colors = _merged_color_config(plot_colors)
     mlp.rcParams.update({'font.size': 9,
                          'font.family': 'Times New Roman'})
 
@@ -955,7 +1030,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
     countries = _load_plot_world()
     antarctica = countries[countries['continent'] == 'Antarctica'].index[0]
     countries.drop([antarctica], inplace=True)
-    countries.plot(color="silver", ax=ax)
+    countries.plot(color=plot_colors['map_colors']['land'], ax=ax)
 
     data = data[data['costs'] != math.inf].copy()
     col = data[column].map(norm).map(cmap_chosen)
@@ -968,20 +1043,26 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
     data['color'] = col
     col = col.values.tolist()
     if use_voronoi:
-        if production_costs is None or 'geometry' not in production_costs.columns:
-            raise ValueError("Voronoi plots require production_costs with a 'geometry' column.")
+        if 'geometry' in data.columns:
+            data = data[data['geometry'].notna()].copy()
+            voronoi_geometry = data['geometry'].tolist()
+        else:
+            if production_costs is None or production_costs.empty or 'geometry' not in production_costs.columns:
+                raise ValueError("Voronoi plots require a 'geometry' column in either data or production_costs.")
 
-        valid_locations = data.index.intersection(production_costs.index)
-        data = data.loc[valid_locations].copy()
+            valid_locations = data.index.intersection(production_costs.index)
+            data = data.loc[valid_locations].copy()
+            voronoi_geometry = production_costs.loc[data.index, 'geometry'].tolist()
+
         col = data['color'].values.tolist()
 
         voronois = gpd.GeoDataFrame(data[[column]].copy(),
-                                    geometry=production_costs.loc[data.index, 'geometry'].tolist())
+                                    geometry=voronoi_geometry)
         voronois.plot(ax=ax, color=col, ec='black', linewidth=0.01)
         if column == 'adjusted_costs':
             profitable_locations = voronois[voronois[column] <= 0].copy()
             if not profitable_locations.empty:
-                profitable_locations.boundary.plot(ax=ax, color='deeppink',
+                profitable_locations.boundary.plot(ax=ax, color=plot_colors['map_colors']['profit_boundary'],
                                                    linewidth=0.08, zorder=5)
         # for color in data['color'].unique():
         #     affected_locations = data[data['color'] == color].index
@@ -1008,10 +1089,11 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
     if destination_location is not None:
         if isinstance(destination_location, Point):
             destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-            destination_location.plot(ax=ax, color='red', s=s)
+            destination_location.plot(ax=ax, color=plot_colors['map_colors']['destination'], s=s)
         else:
             destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-            destination_location.plot(ax=ax, fc='none', ec='red', linewidth=0.5)
+            destination_location.plot(
+                ax=ax, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
 
     ax.grid(visible=True, alpha=0.5)
 
@@ -1099,9 +1181,10 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
 def get_used_locations_figure(data, boundaries, destination_location, quantity, ax=None,
                               width=15.69, height=8, production_costs=None, add_legend=True,
                               fig_title='', add_fig_title=False, use_voronoi=False, s=0.5,
-                              return_fig=False, save=False, save_path='', fig=None):
+                              return_fig=False, save=False, save_path='', fig=None, plot_colors=None):
 
     centimeter_to_inch = 1 / 2.54
+    plot_colors = _merged_color_config(plot_colors)
     mlp.rcParams.update({'font.size': 9,
                          'font.family': 'Times New Roman'})
 
@@ -1111,11 +1194,11 @@ def get_used_locations_figure(data, boundaries, destination_location, quantity, 
     countries = _load_plot_world()
     antarctica = countries[countries['continent'] == 'Antarctica'].index[0]
     countries.drop([antarctica], inplace=True)
-    countries.plot(color="silver", ax=ax)
+    countries.plot(color=plot_colors['map_colors']['land'], ax=ax)
 
     data.sort_values(by=['costs'], inplace=True)
 
-    colors = ['yellowgreen', 'gold', 'indianred', 'royalblue']
+    colors = plot_colors['category_colors']['used_locations']
 
     processed_locations = []
     for n, q in enumerate(quantity):
@@ -1135,7 +1218,12 @@ def get_used_locations_figure(data, boundaries, destination_location, quantity, 
 
                 col = colors[n]
                 if use_voronoi:
-                    voronois = production_costs.loc[used_locations, 'geometry'].tolist()
+                    if 'geometry' in data.columns:
+                        voronois = data.loc[used_locations, 'geometry'].tolist()
+                    else:
+                        if production_costs is None or production_costs.empty or 'geometry' not in production_costs.columns:
+                            raise ValueError("Voronoi plots require a 'geometry' column in either data or production_costs.")
+                        voronois = production_costs.loc[used_locations, 'geometry'].tolist()
                     voronois = gpd.GeoDataFrame(geometry=voronois)
                     voronois.plot(ax=ax, color=col, ec='black', linewidth=0.05)
 
@@ -1150,10 +1238,11 @@ def get_used_locations_figure(data, boundaries, destination_location, quantity, 
     # plot destination location / polygon
     if isinstance(destination_location, Point):
         destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(ax=ax, color='red', s=s)
+        destination_location.plot(ax=ax, color=plot_colors['map_colors']['destination'], s=s)
     else:
         destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(ax=ax, fc='none', ec='red', linewidth=0.5)
+        destination_location.plot(
+            ax=ax, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
 
     ax.grid(visible=True, alpha=0.5)
 
@@ -1197,8 +1286,9 @@ def get_used_locations_figure(data, boundaries, destination_location, quantity, 
 
 def get_cost_and_quantity_figure(sub_axes, data, norm, cmap_chosen, boundaries, destination_location, production_costs,
                                  fig_title='', cost_type='total_costs', s=0.5, return_fig=False, save=False,
-                                 path_saving=''):
+                                 path_saving='', plot_colors=None):
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    plot_colors = _merged_color_config(plot_colors)
 
     fig = plt.figure(figsize=(8, 6))
     ax = fig.add_subplot(111, projection='3d')
@@ -1220,7 +1310,7 @@ def get_cost_and_quantity_figure(sub_axes, data, norm, cmap_chosen, boundaries, 
 
             # Create the polygon for visualization
             verts = [list(zip(x, y, z))]
-            poly_3d = Poly3DCollection(verts, color='silver')
+            poly_3d = Poly3DCollection(verts, color=plot_colors['map_colors']['land'])
             ax.add_collection3d(poly_3d)
         else:
             for sub_poly in poly.geoms:
@@ -1229,11 +1319,11 @@ def get_cost_and_quantity_figure(sub_axes, data, norm, cmap_chosen, boundaries, 
 
                 # Create the polygon for visualization
                 verts = [list(zip(x, y, z))]
-                poly_3d = Poly3DCollection(verts, color='silver')
+                poly_3d = Poly3DCollection(verts, color=plot_colors['map_colors']['land'])
                 ax.add_collection3d(poly_3d)
 
     # countries = gpd.GeoDataFrame(geometry=adjusted_countries)
-    # countries.plot(ax=ax, color='silver')
+    # countries.plot(ax=ax, color=plot_colors['map_colors']['land'])
 
     data = data[data['costs'] != math.inf].copy()
     if cost_type == 'total_costs':
@@ -1246,7 +1336,12 @@ def get_cost_and_quantity_figure(sub_axes, data, norm, cmap_chosen, boundaries, 
     data['color'] = col
     max_height = 0
     for i in data.index:
-        voronoi = production_costs.loc[i, 'geometry']
+        if 'geometry' in data.columns:
+            voronoi = data.loc[i, 'geometry']
+        else:
+            if production_costs is None or production_costs.empty or 'geometry' not in production_costs.columns:
+                raise ValueError("Voronoi plots require a 'geometry' column in either data or production_costs.")
+            voronoi = production_costs.loc[i, 'geometry']
         color = data.loc[i, 'color']
 
         # todo: adjust --> read from file and add efficiencies
@@ -1308,10 +1403,11 @@ def get_cost_and_quantity_figure(sub_axes, data, norm, cmap_chosen, boundaries, 
     # # plot destination location / polygon
     # if isinstance(destination_location, Point):
     #     destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-    #     destination_location.plot(ax=ax, color='red', s=s)
+    #     destination_location.plot(ax=ax, color=plot_colors['map_colors']['destination'], s=s)
     # else:
     #     destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-    #     destination_location.plot(ax=ax, fc='none', ec='red', linewidth=0.5)
+    #     destination_location.plot(
+    #         ax=ax, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
 
     # ax.grid(visible=True, alpha=0.5)
     # ax.text(0.6, 0.05, fig_title, transform=ax.transAxes, va='bottom', ha='left')
@@ -1350,8 +1446,10 @@ def get_cost_and_quantity_figure(sub_axes, data, norm, cmap_chosen, boundaries, 
 def get_supply_curves(data, color_dictionary, nice_name_dictionary,
                       add_legend=True, return_fig=False, save=False, fig_title='', add_fig_title=False,
                       path_saving='', width=15.69, height=12, country=None, production_costs=None, ax=None, fig=None,
-                      ylim=None, current_ax=None):
+                      ylim=None, current_ax=None, plot_colors=None):
 
+    plot_colors = _merged_color_config(plot_colors)
+    supply_curve_colors = plot_colors['supply_curve_colors']
     mlp.rcParams.update({
         'font.size': 9,
         'font.family': 'Times New Roman'
@@ -1554,13 +1652,13 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
             costs = n[1]
 
             if cost_type == 'production':
-                color = 'cornflowerblue'
+                color = supply_curve_colors['production']
                 label = 'Production Costs'
             elif cost_type == 'conversion':
-                color = 'lightcoral'
+                color = supply_curve_colors['conversion']
                 label = 'Conversion Costs'
             else:
-                color = 'khaki'
+                color = supply_curve_colors['transportation']
                 label = 'Transport Costs'
 
             used_labels = set()
@@ -1731,9 +1829,9 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
         ]
 
         cost_handles = [
-            mlines.Line2D([], [], color='cornflowerblue', linewidth=6, label='Production Costs'),
-            mlines.Line2D([], [], color='lightcoral', linewidth=6, label='Conversion Costs'),
-            mlines.Line2D([], [], color='khaki', linewidth=6, label='Transport Costs')
+            mlines.Line2D([], [], color=supply_curve_colors['production'], linewidth=6, label='Production Costs'),
+            mlines.Line2D([], [], color=supply_curve_colors['conversion'], linewidth=6, label='Conversion Costs'),
+            mlines.Line2D([], [], color=supply_curve_colors['transportation'], linewidth=6, label='Transport Costs')
         ]
 
         ax.legend(
@@ -1819,18 +1917,25 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
 
 
 def get_production_costs_figure(sub_axes, data, norm, cmap_chosen, boundaries, destination_location,
-                                fig_title='', plot_era=False, use_voronoi=False, s=0.5, production_costs=None):
+                                fig_title='', plot_era=False, use_voronoi=False, s=0.5,
+                                production_costs=None, plot_colors=None):
+    plot_colors = _merged_color_config(plot_colors)
     countries = _load_plot_world()
     antarctica = countries[countries['continent'] == 'Antarctica'].index[0]
     countries.drop([antarctica], inplace=True)
-    countries.plot(color="silver", ax=sub_axes)
+    countries.plot(color=plot_colors['map_colors']['land'], ax=sub_axes)
 
     col = data.production_costs.map(norm).map(cmap_chosen)
     data['color'] = col
     if use_voronoi:
         for color in data['color'].unique():
             affected_locations = data[data['color'] == color].index
-            voronois = production_costs.loc[affected_locations, 'geometry'].tolist()
+            if 'geometry' in data.columns:
+                voronois = data.loc[affected_locations, 'geometry'].tolist()
+            else:
+                if production_costs is None or production_costs.empty or 'geometry' not in production_costs.columns:
+                    raise ValueError("Voronoi plots require a 'geometry' column in either data or production_costs.")
+                voronois = production_costs.loc[affected_locations, 'geometry'].tolist()
             voronois = gpd.GeoDataFrame(geometry=voronois)
             voronois.plot(ax=sub_axes, color=color, ec='black', linewidth=0.1)
     elif not plot_era:
@@ -1852,10 +1957,11 @@ def get_production_costs_figure(sub_axes, data, norm, cmap_chosen, boundaries, d
     # plot destination location / polygon
     if not use_voronoi:
         destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(ax=sub_axes, color='red', s=s)
+        destination_location.plot(ax=sub_axes, color=plot_colors['map_colors']['destination'], s=s)
     else:
         destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(ax=sub_axes, fc='none', ec='red', linewidth=0.5)
+        destination_location.plot(
+            ax=sub_axes, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
 
     sub_axes.grid(visible=True, alpha=0.5)
     sub_axes.text(0.6, 0.05, fig_title, transform=sub_axes.transAxes, va='bottom', ha='left')
@@ -1879,10 +1985,11 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
                               fig=None, width=15.69, height=8, add_fig_title=False, add_legend=True,
                               fig_title='', plot_era=False, use_voronoi=False, s=0.5, production_costs=None,
                               return_fig=False, save=False, path_saving='', return_handles=True,
-                              existing_commodities=None):
+                              existing_commodities=None, plot_colors=None):
 
     if existing_commodities is None:
         existing_commodities = []
+    plot_colors = _merged_color_config(plot_colors)
 
     plt.rcParams.update({'font.size': 11,
                          'font.family': 'Times New Roman'})
@@ -1894,14 +2001,24 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
     countries = _load_plot_world()
     antarctica = countries[countries['continent'] == 'Antarctica'].index[0]
     countries.drop([antarctica], inplace=True)
-    countries.plot(color="silver", ax=ax)
+    countries.plot(color=plot_colors['map_colors']['land'], ax=ax)
 
     data = data[data['costs'] != math.inf].copy()
     col = data.start_commodity.map(color_dictionary)
     data['color'] = col
 
     if use_voronoi:
-        voronois = production_costs.loc[data.index, 'geometry'].tolist()
+        if 'geometry' in data.columns:
+            data = data[data['geometry'].notna()].copy()
+            col = data.start_commodity.map(color_dictionary)
+            voronois = data['geometry'].tolist()
+        else:
+            if production_costs is None or production_costs.empty or 'geometry' not in production_costs.columns:
+                raise ValueError("Voronoi plots require a 'geometry' column in either data or production_costs.")
+            valid_locations = data.index.intersection(production_costs.index)
+            data = data.loc[valid_locations].copy()
+            col = data.start_commodity.map(color_dictionary)
+            voronois = production_costs.loc[data.index, 'geometry'].tolist()
         voronois = gpd.GeoDataFrame(geometry=voronois)
         voronois.plot(ax=ax, color=col.values.tolist(), ec='black', linewidth=0.01)
         # for color in data['color'].unique():
@@ -1928,10 +2045,11 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
     # plot destination location / polygon
     if isinstance(destination_location, Point):
         destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(ax=ax, color='red', s=s)
+        destination_location.plot(ax=ax, color=plot_colors['map_colors']['destination'], s=s)
     else:
         destination_location = gpd.GeoDataFrame(geometry=[destination_location])
-        destination_location.plot(ax=ax, fc='none', ec='red', linewidth=0.5)
+        destination_location.plot(
+            ax=ax, fc='none', ec=plot_colors['map_colors']['destination'], linewidth=0.5)
 
     ax.grid(visible=True, alpha=0.5)
 
@@ -1990,7 +2108,10 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
 
 def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_title='', width=15.69, height=9,
                                return_fig=False, save=False, plot_legend=True, path_saving='',
-                               country_edgecolor=None, country_linewidth=0.2, high_resolution_map=False):
+                               country_edgecolor=None, country_linewidth=0.2, high_resolution_map=False,
+                               plot_colors=None):
+    plot_colors = _merged_color_config(plot_colors)
+    infrastructure_colors = plot_colors['infrastructure_colors']
     plt.rcParams.update({'font.size': 11,
                          'font.family': 'Times New Roman'})
     centimeter_to_inch = 1 / 2.54
@@ -2039,14 +2160,21 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
     countries = _filter_world_to_boundaries(countries, boundaries)
     antarctica = countries[countries['continent'] == 'Antarctica'].index
     countries.drop(antarctica, inplace=True)
-    countries.plot(color="lightgrey", edgecolor=country_edgecolor, linewidth=country_linewidth, ax=ax)
+    if country_edgecolor is None:
+        country_edgecolor = plot_colors['map_colors']['country_boundary']
+    countries.plot(
+        color=plot_colors['map_colors']['land_light'],
+        edgecolor=country_edgecolor,
+        linewidth=country_linewidth,
+        ax=ax,
+    )
 
     if not data_ports.empty:
-        data_ports.plot(color="blue", ax=ax, markersize=1, label='Port')
+        data_ports.plot(color=infrastructure_colors['Port'], ax=ax, markersize=1, label='Port')
     if not data_pipeline_gas.empty:
-        data_pipeline_gas.plot(color="red", ax=ax, linewidth=0.5, label='Gas Pipeline')
+        data_pipeline_gas.plot(color=infrastructure_colors['Pipeline_Gas'], ax=ax, linewidth=0.5, label='Gas Pipeline')
     if not data_pipeline_oil.empty:
-        data_pipeline_oil.plot(color="black", ax=ax, linewidth=0.5, label='Oil Pipeline')
+        data_pipeline_oil.plot(color=infrastructure_colors['Pipeline_Oil'], ax=ax, linewidth=0.5, label='Oil Pipeline')
 
     ax.grid(visible=True, alpha=0.5)
     ax.text(0.6, 0.05, fig_title, transform=ax.transAxes, va='bottom', ha='left')
@@ -2067,15 +2195,15 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
         # infrastructure legend
         handles_list_infrastructure = []
         if not data_ports.empty:
-            handles_list_infrastructure.append(mlines.Line2D([], [], color='blue', marker='.',
+            handles_list_infrastructure.append(mlines.Line2D([], [], color=infrastructure_colors['Port'], marker='.',
                                                              linestyle='None', markersize=5,
                                                              label='Port'))
         if not data_pipeline_gas.empty:
-            handles_list_infrastructure.append(mlines.Line2D([], [], color='red',
+            handles_list_infrastructure.append(mlines.Line2D([], [], color=infrastructure_colors['Pipeline_Gas'],
                                                              linestyle='-', markersize=5,
                                                              label='Gas Pipeline'))
         if not data_pipeline_oil.empty:
-            handles_list_infrastructure.append(mlines.Line2D([], [], color='black',
+            handles_list_infrastructure.append(mlines.Line2D([], [], color=infrastructure_colors['Pipeline_Oil'],
                                                              linestyle='-', markersize=5,
                                                              label='Oil Pipeline'))
 
@@ -2100,7 +2228,8 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
 
 def get_water_availability_figure(boundaries, path_data, ax=None, fig=None, fig_title='water_availability',
                                   width=15.69, height=9, return_fig=False, save=False, path_saving='',
-                                  plot_legend=True, high_resolution_map=True):
+                                  plot_legend=True, high_resolution_map=True, plot_colors=None):
+    plot_colors = _merged_color_config(plot_colors)
     plt.rcParams.update({'font.size': 13,
                          'legend.fontsize': 13,
                          'font.family': 'Times New Roman'})
@@ -2124,7 +2253,13 @@ def get_water_availability_figure(boundaries, path_data, ax=None, fig=None, fig_
     countries = _filter_world_to_boundaries(countries, boundaries)
     antarctica = countries[countries['continent'] == 'Antarctica'].index
     countries.drop(antarctica, inplace=True)
-    countries.plot(color='red', edgecolor='none', linewidth=0, ax=ax, zorder=1)
+    countries.plot(
+        color=plot_colors['map_colors']['water_excluded'],
+        edgecolor='none',
+        linewidth=0,
+        ax=ax,
+        zorder=1,
+    )
 
     water_availability = gpd.read_file(water_availability_file, layer='ptx_water_available')
     if water_availability.crs is None:
@@ -2140,9 +2275,16 @@ def get_water_availability_figure(boundaries, path_data, ax=None, fig=None, fig_
         land_geometry = unary_union(countries.geometry)
         available_geometry = unary_union(water_availability.geometry).intersection(land_geometry)
         available_area = gpd.GeoDataFrame(geometry=[available_geometry], crs='EPSG:4326')
-        available_area.plot(color='green', edgecolor='none', linewidth=0, ax=ax, zorder=2)
+        available_area.plot(
+            color=plot_colors['map_colors']['water_available'],
+            edgecolor='none',
+            linewidth=0,
+            ax=ax,
+            zorder=2,
+        )
 
-    countries.boundary.plot(color='darkgrey', linewidth=0.2, ax=ax, zorder=3)
+    countries.boundary.plot(
+        color=plot_colors['map_colors']['country_boundary'], linewidth=0.2, ax=ax, zorder=3)
 
     ax.set_ylabel('')
     ax.set_xlabel('')
@@ -2158,8 +2300,8 @@ def get_water_availability_figure(boundaries, path_data, ax=None, fig=None, fig_
 
     if plot_legend:
         handles = [
-            mpatches.Patch(color='green', label='Available'),
-            mpatches.Patch(color='red', label='Excluded')
+            mpatches.Patch(color=plot_colors['map_colors']['water_available'], label='Available'),
+            mpatches.Patch(color=plot_colors['map_colors']['water_excluded'], label='Excluded')
         ]
         ax.legend(handles=handles, loc='upper center', ncol=2, bbox_to_anchor=(0.5, -0.02),
                   frameon=True, labelspacing=0.25, handletextpad=0.35, columnspacing=0.8,
@@ -2221,8 +2363,10 @@ def get_tight_boundaries_for_start_locations_infrastructure_destination(start_lo
 def get_start_locations_infrastructure_destination_figure(start_locations, boundaries, path_data, destination_location,
                                                           ax=None, fig=None, fig_title='start_locations_infrastructure_destination',
                                                           width=15.69, height=9, return_fig=False, save=False,
-                                                          path_saving='', plot_legend=True):
+                                                          path_saving='', plot_legend=True, plot_colors=None):
     """Plot Voronoi start cells, infrastructure and destination without requiring optimization results."""
+    plot_colors = _merged_color_config(plot_colors)
+    infrastructure_colors = plot_colors['infrastructure_colors']
     plt.rcParams.update({'font.size': 11,
                          'font.family': 'Times New Roman'})
     centimeter_to_inch = 1 / 2.54
@@ -2231,8 +2375,10 @@ def get_start_locations_infrastructure_destination_figure(start_locations, bound
         fig, ax = plt.subplots(figsize=(width * centimeter_to_inch, height * centimeter_to_inch))
 
     get_infrastructure_figure(boundaries, path_data, ax=ax, fig=fig, fig_title='', return_fig=True,
-                              plot_legend=False, country_edgecolor='darkgrey', country_linewidth=0.25,
-                              high_resolution_map=True)
+                              plot_legend=False,
+                              country_edgecolor=plot_colors['map_colors']['country_boundary'],
+                              country_linewidth=0.25,
+                              high_resolution_map=True, plot_colors=plot_colors)
 
     if 'geometry' not in start_locations.columns:
         raise ValueError("Missing column 'geometry' in start locations. Voronoi cells are required for this plot.")
@@ -2256,11 +2402,18 @@ def get_start_locations_infrastructure_destination_figure(start_locations, bound
 
     destination = gpd.GeoDataFrame(geometry=[destination_location])
     if isinstance(destination_location, Point):
-        destination.plot(ax=ax, color='forestgreen', markersize=25, label='Destination')
+        destination.plot(ax=ax, color=plot_colors['map_colors']['destination'], markersize=25, label='Destination')
     elif isinstance(destination_location, (Polygon, MultiPolygon)):
-        destination.plot(ax=ax, facecolor='white', edgecolor='forestgreen', linewidth=1.25, label='Destination')
+        destination.plot(
+            ax=ax,
+            facecolor=plot_colors['map_colors']['destination_fill'],
+            edgecolor=plot_colors['map_colors']['destination'],
+            linewidth=1.25,
+            label='Destination',
+        )
     else:
-        destination.boundary.plot(ax=ax, color='forestgreen', linewidth=1.25, label='Destination')
+        destination.boundary.plot(
+            ax=ax, color=plot_colors['map_colors']['destination'], linewidth=1.25, label='Destination')
 
     ax.set_ylim(boundaries['min_latitude'],
                 boundaries['max_latitude'])
@@ -2268,13 +2421,13 @@ def get_start_locations_infrastructure_destination_figure(start_locations, bound
                 boundaries['max_longitude'])
 
     if plot_legend:
-        handles_list = [mlines.Line2D([], [], color='blue', marker='.', linestyle='None', markersize=5,
+        handles_list = [mlines.Line2D([], [], color=infrastructure_colors['Port'], marker='.', linestyle='None', markersize=5,
                                       label='Port'),
-                        mlines.Line2D([], [], color='red', linestyle='-', markersize=5,
+                        mlines.Line2D([], [], color=infrastructure_colors['Pipeline_Gas'], linestyle='-', markersize=5,
                                       label='Gas Pipeline'),
-                        mlines.Line2D([], [], color='black', linestyle='-', markersize=5,
+                        mlines.Line2D([], [], color=infrastructure_colors['Pipeline_Oil'], linestyle='-', markersize=5,
                                       label='Oil Pipeline'),
-                        mlines.Line2D([], [], color='forestgreen', linestyle='-', markersize=5,
+                        mlines.Line2D([], [], color=plot_colors['map_colors']['destination'], linestyle='-', markersize=5,
                                       label='Destination')]
         ax.legend(handles=handles_list, loc='upper center', ncol=2, bbox_to_anchor=(0.5, 0),
                   labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5, fontsize=9)

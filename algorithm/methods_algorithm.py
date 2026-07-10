@@ -35,6 +35,22 @@ def _as_state_list(value):
     return [value]
 
 
+def attach_start_metadata_to_solution(solution, location_data):
+    """Store a snapshot of start-location data in a final solution series."""
+    if solution is None or location_data is None or location_data.empty:
+        return solution
+
+    result = solution.copy()
+    start_row = location_data.iloc[0]
+
+    for column, value in start_row.items():
+        if hasattr(value, 'wkt'):
+            value = value.wkt
+        result.at['start_' + str(column)] = value
+
+    return result
+
+
 def _road_new_allowed_next(current_transport_mean):
     if _is_missing_state_value(current_transport_mean):
         return True
@@ -317,6 +333,7 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
 
         chosen_branch.at['status'] = 'complete'
         chosen_branch.at['solving_time'] = 0
+        chosen_branch = attach_start_metadata_to_solution(chosen_branch, data.get('start_location_data'))
         chosen_branch.to_csv(configuration['path_results'] + 'location_results/' + str(location_integer) + '_final_solution.csv')
         print(str(location_integer) + ' is already in tolerance to destination')
         continue_processing = False

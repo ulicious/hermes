@@ -12,7 +12,8 @@ from algorithm.methods_routing import process_out_tolerance_branches, process_in
     process_in_tolerance_branches_low_memory, get_complete_infrastructure, create_branches_from_in_tolerance_locations
 from algorithm.methods_algorithm import postprocessing_branches, create_branches_based_on_commodities_at_start,\
     check_for_inaccessibility_and_at_destination, prepare_commodities, assess_for_benchmark, compare_to_local_benchmark,\
-    drop_branch_comparison_columns, remove_duplicate_branches, update_branch_comparison_index
+    drop_branch_comparison_columns, remove_duplicate_branches, update_branch_comparison_index, \
+    attach_start_metadata_to_solution
 from algorithm.script_benchmark import calculate_benchmark
 from algorithm.methods_geographic import update_branch_continents
 from algorithm.methods_conversion import apply_conversion
@@ -288,6 +289,7 @@ def run_algorithm(args):
 
     data = data.copy()
     data['location_index'] = location_index
+    data['start_location_data'] = location_data.copy()
     data['tracker'] = tracker
 
     print_information = configuration['print_runtime_information']
@@ -1027,6 +1029,7 @@ def run_algorithm(args):
             final_solution.loc['destination'] = data['destination']['location']
             final_solution.loc['solving_time'] = time.time() - start_time
             final_solution.loc['status'] = 'complete'
+            final_solution = attach_start_metadata_to_solution(final_solution, location_data)
             final_solution.to_csv(configuration['path_results'] + 'location_results/' + str(location_index) + '_final_solution.csv')
         else:
             benchmark = 'Not existing'  # todo adjust

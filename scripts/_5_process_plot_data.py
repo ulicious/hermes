@@ -28,10 +28,31 @@ config_file_plotting = load_plotting_configuration(config_file)
 validate_plotting_result_cases(config_file, config_file_plotting)
 
 path_production_costs = config_file['project_folder_path'] + 'start_destination_combinations.csv'
-production_costs = pd.read_csv(path_production_costs, index_col=0)
+if os.path.exists(path_production_costs):
+    production_costs = pd.read_csv(path_production_costs, index_col=0)
+else:
+    production_costs = pd.DataFrame()
+
+
+def _get_start_solution_value(solution, location_number, column, default=np.nan):
+    solution_key = 'start_' + column
+    if solution_key in solution.index and pd.notna(solution.at[solution_key]):
+        return solution.at[solution_key]
+
+    if not production_costs.empty and column in production_costs.columns:
+        if location_number in production_costs.index:
+            return production_costs.at[location_number, column]
+
+        location_number_text = str(location_number)
+        production_costs_text_index = production_costs.copy()
+        production_costs_text_index.index = production_costs_text_index.index.map(str)
+        if location_number_text in production_costs_text_index.index:
+            return production_costs_text_index.at[location_number_text, column]
+
+    return default
 
 # # convert polygon strings to shapely objects
-if config_file['use_voronoi_cells']:
+if config_file['use_voronoi_cells'] and not production_costs.empty and 'geometry' in production_costs.columns:
     production_costs['geometry'] \
         = production_costs['geometry'].apply(shapely.wkt.loads)
 
@@ -113,7 +134,13 @@ for folder in results_to_process:
                                 'sec_distance_mean_combination': None,
                                 'transportation_costs': math.inf,
                                 'conversion_costs': math.inf,
-                                'efficiency': 0}
+                                'efficiency': 0,
+                                'quantity': _get_start_solution_value(solution, number, 'Hydrogen_Gas_Quantity'),
+                                'input_quantity_MWh': _get_start_solution_value(solution, number, 'Hydrogen_Gas_Quantity'),
+                                'production_costs': _get_start_solution_value(solution, number, 'Hydrogen_Gas'),
+                                'country_start': _get_start_solution_value(solution, number, 'country_start'),
+                                'continent_start': _get_start_solution_value(solution, number, 'continent_start'),
+                                'geometry': _get_start_solution_value(solution, number, 'geometry')}
 
                 routes.append([])
 
@@ -128,7 +155,13 @@ for folder in results_to_process:
                             'sec_distance_mean_combination': None,
                             'transportation_costs': math.inf,
                             'conversion_costs': math.inf,
-                            'efficiency': 0}
+                            'efficiency': 0,
+                            'quantity': _get_start_solution_value(solution, number, 'Hydrogen_Gas_Quantity'),
+                            'input_quantity_MWh': _get_start_solution_value(solution, number, 'Hydrogen_Gas_Quantity'),
+                            'production_costs': _get_start_solution_value(solution, number, 'Hydrogen_Gas'),
+                            'country_start': _get_start_solution_value(solution, number, 'country_start'),
+                            'continent_start': _get_start_solution_value(solution, number, 'continent_start'),
+                            'geometry': _get_start_solution_value(solution, number, 'geometry')}
 
             routes.append([])
         else:
@@ -185,7 +218,7 @@ for folder in results_to_process:
             # commodities_list = solution.at['all_previous_commodities']
             transportation_means_list = solution.at['all_previous_transport_means']
 
-            production_costs_f = production_costs.at[int(number), 'Hydrogen_Gas']
+            production_costs_f = _get_start_solution_value(solution, number, 'Hydrogen_Gas')
 
             if (float(production_costs_f) + float(conversion_costs_f) + float(transportation_costs_f)) != float(solution.at['current_total_costs']):
                 # conversion costs at start are not considered
@@ -239,11 +272,14 @@ for folder in results_to_process:
 
             routes.append(route)
 
-            data[number]['quantity'] = production_costs.loc[number, 'Hydrogen_Gas_Quantity']
+            data[number]['quantity'] = _get_start_solution_value(solution, number, 'Hydrogen_Gas_Quantity')
             data[number]['input_quantity_MWh'] = data[number]['quantity']
             data[number]['efficiency'] = float(solution.at['total_efficiency']) * 100
             data[number]['commodities'] = commodities_list
             data[number]['cost_route'] = cost_route
+            data[number]['country_start'] = _get_start_solution_value(solution, number, 'country_start')
+            data[number]['continent_start'] = _get_start_solution_value(solution, number, 'continent_start')
+            data[number]['geometry'] = _get_start_solution_value(solution, number, 'geometry')
 
             try:
                 data[number]['solving_time'] = solution.at['solving_time']  # todo: remove except since not necessary anymore in new results
@@ -254,7 +290,8 @@ for folder in results_to_process:
                                   columns=['costs', 'start_commodity', 'second_commodity', 'latitude',
                                            'longitude', 'efficiency', 'transportation_costs', 'conversion_costs',
                                            'production_costs', 'quantity', 'input_quantity_MWh',
-                                           'commodities', 'cost_route', 'solving_time'],
+                                           'commodities', 'cost_route', 'solving_time',
+                                           'country_start', 'continent_start', 'geometry'],
                                   orient='index')
 
     data['routes'] = routes
