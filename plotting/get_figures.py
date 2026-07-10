@@ -42,7 +42,7 @@ DEFAULT_PLOT_BOUNDARIES = {
 
 DEFAULT_PLOT_COLORS = {
     'colorbar': {
-        'over_color': '#3B2F5C',
+        'over_color': '#8F3A5B',
         'quantity_colormap': ['#3B5B92', '#6F7E8C', '#8C4F3D'],
     },
     'map_colors': {
