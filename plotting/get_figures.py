@@ -740,14 +740,39 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
             line_data = []
             for line_index, geometry in enumerate(line_networks[k]):
                 coordinates = list(geometry.coords)
+                current_coordinates = []
+                current_linestyle = None
+                current_width = None
+
                 for segment_index in range(len(coordinates) - 1):
+                    segment_width = plot_colors['shipping_line_width_base']
+                    segment_linestyle = shipping_segment_styles.get(
+                        (k, line_index, segment_index),
+                        line_styles[transport_mean],
+                    )
+
+                    if current_coordinates and (
+                        segment_width != current_width
+                        or segment_linestyle != current_linestyle
+                    ):
+                        line_data.append({
+                            'geometry': LineString(current_coordinates),
+                            'width': current_width,
+                            'linestyle': current_linestyle,
+                        })
+                        current_coordinates = []
+
+                    if not current_coordinates:
+                        current_coordinates = [coordinates[segment_index]]
+                    current_coordinates.append(coordinates[segment_index + 1])
+                    current_width = segment_width
+                    current_linestyle = segment_linestyle
+
+                if len(current_coordinates) > 1:
                     line_data.append({
-                        'geometry': LineString([coordinates[segment_index], coordinates[segment_index + 1]]),
-                        'width': plot_colors['shipping_line_width_base'],
-                        'linestyle': shipping_segment_styles.get(
-                            (k, line_index, segment_index),
-                            line_styles[transport_mean],
-                        ),
+                        'geometry': LineString(current_coordinates),
+                        'width': current_width,
+                        'linestyle': current_linestyle,
                     })
             line_gdf = gpd.GeoDataFrame(line_data, columns=['geometry', 'width', 'linestyle'])
         else:
