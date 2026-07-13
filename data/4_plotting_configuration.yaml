@@ -81,14 +81,14 @@ map_colors:
 
 commodity_colors:
    Hydrogen_Gas: '#56B4E9'
-   Hydrogen_Liquid: '#B13637'
-   Ammonia: '#2F5EB5'
-   Methane_Gas: '#383226'
+   Hydrogen_Liquid: '#77792C'
+   Ammonia: '#CC79A7'
+   Methane_Gas: '#2F5EB5'
    Methane_Liquid: '#3A5F73'
-   Methanol: '#77792C'
+   Methanol: '#B13637'
    DBT: '#D55E00'
    MCH: '#7F4A30'
-   FTF: '#956CA6'
+   FTF: '#383226'
    None: '#8A8A8A'
 
 supply_curve_colors:
