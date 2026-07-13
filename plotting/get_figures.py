@@ -100,7 +100,7 @@ DEFAULT_PLOT_COLORS = {
 
 def _merged_color_config(plot_colors=None):
     colors = {
-        section: values.copy()
+        section: values.copy() if hasattr(values, 'copy') else values
         for section, values in DEFAULT_PLOT_COLORS.items()
     }
     if plot_colors:
