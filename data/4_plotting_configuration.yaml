@@ -181,6 +181,7 @@ plot_order_shipping: [Methane_Liquid, DBT, MCH, FTF, Hydrogen_Liquid, Ammonia, M
 plot_order_pipeline: [FTF, Methane_Gas, Hydrogen_Gas]
 shipping_line_width_base: 0.5
 shipping_line_width_addition: 0.5
+shipping_overlap_dash_pattern: [1, 3]
 
 line_widths:
    Hydrogen_Gas:

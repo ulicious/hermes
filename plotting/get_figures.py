@@ -95,6 +95,7 @@ DEFAULT_PLOT_COLORS = {
     'plot_order_pipeline': ['FTF', 'Methane_Gas', 'Hydrogen_Gas'],
     'shipping_line_width_base': 0.5,
     'shipping_line_width_addition': 0.5,
+    'shipping_overlap_dash_pattern': [1, 3],
 }
 
 
@@ -128,6 +129,7 @@ def get_plot_color_config(plotting_config=None):
         'plot_order_pipeline': plotting_config.get('plot_order_pipeline', []),
         'shipping_line_width_base': plotting_config.get('shipping_line_width_base', 0.5),
         'shipping_line_width_addition': plotting_config.get('shipping_line_width_addition', 0.5),
+        'shipping_overlap_dash_pattern': plotting_config.get('shipping_overlap_dash_pattern', [1, 3]),
     }
     return _merged_color_config(configured_colors)
 
@@ -706,7 +708,9 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
                     (k, line_index, segment_index)
                 )
 
-    shipping_line_widths = {}
+    shipping_segment_styles = {}
+    shipping_dash_pattern = tuple(plot_colors['shipping_overlap_dash_pattern'])
+    shipping_dash_period = sum(shipping_dash_pattern)
     for segment_commodities in shipping_segments.values():
         ordered_commodities = [
             k[0] for k in order_plotting
@@ -714,12 +718,12 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
         ]
         num_commodities = len(ordered_commodities)
         for n, commodity in enumerate(ordered_commodities):
-            linewidth = (
-                plot_colors['shipping_line_width_base']
-                + plot_colors['shipping_line_width_addition'] * (num_commodities - n - 1)
-            )
+            if num_commodities > 1:
+                linestyle = (n * shipping_dash_period / num_commodities, shipping_dash_pattern)
+            else:
+                linestyle = line_styles['Shipping']
             for segment_reference in segment_commodities[commodity]:
-                shipping_line_widths[segment_reference] = linewidth
+                shipping_segment_styles[segment_reference] = linestyle
 
     all_networks = []
     for k in order_plotting:
@@ -739,23 +743,25 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
                 for segment_index in range(len(coordinates) - 1):
                     line_data.append({
                         'geometry': LineString([coordinates[segment_index], coordinates[segment_index + 1]]),
-                        'width': shipping_line_widths.get(
+                        'width': plot_colors['shipping_line_width_base'],
+                        'linestyle': shipping_segment_styles.get(
                             (k, line_index, segment_index),
-                            plot_colors['shipping_line_width_base'],
+                            line_styles[transport_mean],
                         ),
                     })
-            line_gdf = gpd.GeoDataFrame(line_data, columns=['geometry', 'width'])
+            line_gdf = gpd.GeoDataFrame(line_data, columns=['geometry', 'width', 'linestyle'])
         else:
             line_gdf = gpd.GeoDataFrame(line_networks[k], columns=['geometry'])
             line_gdf['width'] = line_widths[k]
+            line_gdf['linestyle'] = line_styles[transport_mean]
 
-        for linewidth, width_data in line_gdf.groupby('width', sort=False):
-            width_data.plot(color=commodity_colors[commodity], linestyle=line_styles[transport_mean],
+        for (linewidth, linestyle), width_data in line_gdf.groupby(['width', 'linestyle'], sort=False):
+            width_data.plot(color=commodity_colors[commodity], linestyle=linestyle,
                             linewidth=linewidth, ax=ax, alpha=alpha,
                             path_effects=[pe.Stroke(linewidth=linewidth * 1.05, foreground=stroke_color),
                                           pe.Normal()])
         line_gdf['color'] = commodity_colors[commodity]
-        line_gdf['style'] = line_styles[transport_mean]
+        line_gdf['style'] = line_gdf['linestyle']
 
         all_networks.append(line_gdf)
 
