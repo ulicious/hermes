@@ -622,8 +622,8 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
 
     for c in commodities:
 
-        new_commodities.append(mlines.Line2D([], [], color=commodity_colors[c], marker='.',
-                                             linestyle='None', markersize=5, label=nice_name_dictionary[c]))
+        new_commodities.append(mlines.Line2D([], [], color=commodity_colors[c], marker='s',
+                                             linestyle='None', markersize=7, label=nice_name_dictionary[c]))
 
         exists = False
         for i in existing_commodities:
@@ -631,8 +631,8 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
                 exists = True
 
         if not exists:
-            existing_commodities.append(mlines.Line2D([], [], color=commodity_colors[c], marker='.',
-                                                      linestyle='None', markersize=5,
+            existing_commodities.append(mlines.Line2D([], [], color=commodity_colors[c], marker='s',
+                                                      linestyle='None', markersize=7,
                                                       label=nice_name_dictionary[c]))
 
     map_plot = _load_plot_world()
