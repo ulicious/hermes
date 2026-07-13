@@ -687,36 +687,39 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
         key=route_plot_sort_key,
     )
 
-    def route_geometry_key(geometry):
-        coordinates = tuple(
-            (round(x, 6), round(y, 6))
-            for x, y in geometry.coords
-        )
-        reversed_coordinates = tuple(reversed(coordinates))
-        return min(coordinates, reversed_coordinates)
+    def route_segment_key(start_coordinate, end_coordinate):
+        start_coordinate = (round(start_coordinate[0], 6), round(start_coordinate[1], 6))
+        end_coordinate = (round(end_coordinate[0], 6), round(end_coordinate[1], 6))
+        return min((start_coordinate, end_coordinate), (end_coordinate, start_coordinate))
 
-    shipping_route_groups = {}
+    shipping_segments = {}
     for k in order_plotting:
         if k not in keys or k[1] != 'Shipping':
             continue
 
-        for n, geometry in enumerate(line_networks[k]):
-            shipping_route_groups.setdefault(route_geometry_key(geometry), {}).setdefault(k, []).append(n)
+        commodity = k[0]
+        for line_index, geometry in enumerate(line_networks[k]):
+            coordinates = list(geometry.coords)
+            for segment_index in range(len(coordinates) - 1):
+                segment_key = route_segment_key(coordinates[segment_index], coordinates[segment_index + 1])
+                shipping_segments.setdefault(segment_key, {}).setdefault(commodity, []).append(
+                    (k, line_index, segment_index)
+                )
 
     shipping_line_widths = {}
-    for route_group in shipping_route_groups.values():
-        route_group_keys = [
-            k for k in order_plotting
-            if k in route_group
+    for segment_commodities in shipping_segments.values():
+        ordered_commodities = [
+            k[0] for k in order_plotting
+            if k[1] == 'Shipping' and k[0] in segment_commodities
         ]
-        num_routes = len(route_group_keys)
-        for n, k in enumerate(route_group_keys):
+        num_commodities = len(ordered_commodities)
+        for n, commodity in enumerate(ordered_commodities):
             linewidth = (
                 plot_colors['shipping_line_width_base']
-                + plot_colors['shipping_line_width_addition'] * (num_routes - n - 1)
+                + plot_colors['shipping_line_width_addition'] * (num_commodities - n - 1)
             )
-            for geometry_index in route_group[k]:
-                shipping_line_widths[(k, geometry_index)] = linewidth
+            for segment_reference in segment_commodities[commodity]:
+                shipping_line_widths[segment_reference] = linewidth
 
     all_networks = []
     for k in order_plotting:
@@ -728,14 +731,22 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
 
         alpha = 1
 
-        line_gdf = gpd.GeoDataFrame(line_networks[k], columns=['geometry'])
         stroke_color = 'white' if transport_mean == 'Shipping' else 'black'
         if transport_mean == 'Shipping':
-            line_gdf['width'] = [
-                shipping_line_widths.get((k, n), line_widths[k])
-                for n in range(len(line_gdf))
-            ]
+            line_data = []
+            for line_index, geometry in enumerate(line_networks[k]):
+                coordinates = list(geometry.coords)
+                for segment_index in range(len(coordinates) - 1):
+                    line_data.append({
+                        'geometry': LineString([coordinates[segment_index], coordinates[segment_index + 1]]),
+                        'width': shipping_line_widths.get(
+                            (k, line_index, segment_index),
+                            plot_colors['shipping_line_width_base'],
+                        ),
+                    })
+            line_gdf = gpd.GeoDataFrame(line_data, columns=['geometry', 'width'])
         else:
+            line_gdf = gpd.GeoDataFrame(line_networks[k], columns=['geometry'])
             line_gdf['width'] = line_widths[k]
 
         for linewidth, width_data in line_gdf.groupby('width', sort=False):
