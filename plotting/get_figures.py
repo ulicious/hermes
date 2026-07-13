@@ -93,6 +93,8 @@ DEFAULT_PLOT_COLORS = {
         'Ammonia', 'Methanol',
     ],
     'plot_order_pipeline': ['FTF', 'Methane_Gas', 'Hydrogen_Gas'],
+    'shipping_line_width_base': 0.5,
+    'shipping_line_width_addition': 0.5,
 }
 
 
@@ -124,6 +126,8 @@ def get_plot_color_config(plotting_config=None):
         'plot_order_road': plotting_config.get('plot_order_road', []),
         'plot_order_shipping': plotting_config.get('plot_order_shipping', []),
         'plot_order_pipeline': plotting_config.get('plot_order_pipeline', []),
+        'shipping_line_width_base': plotting_config.get('shipping_line_width_base', 0.5),
+        'shipping_line_width_addition': plotting_config.get('shipping_line_width_addition', 0.5),
     }
     return _merged_color_config(configured_colors)
 
@@ -683,6 +687,31 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
         key=route_plot_sort_key,
     )
 
+    def route_geometry_key(geometry):
+        coordinates = tuple(
+            (round(x, 6), round(y, 6))
+            for x, y in geometry.coords
+        )
+        reversed_coordinates = tuple(reversed(coordinates))
+        return min(coordinates, reversed_coordinates)
+
+    shipping_route_groups = {}
+    for k in order_plotting:
+        if k not in keys or k[1] != 'Shipping':
+            continue
+
+        for n, geometry in enumerate(line_networks[k]):
+            shipping_route_groups.setdefault(route_geometry_key(geometry), []).append((k, n))
+
+    shipping_line_widths = {}
+    for route_group in shipping_route_groups.values():
+        num_routes = len(route_group)
+        for n, (k, geometry_index) in enumerate(route_group):
+            shipping_line_widths[(k, geometry_index)] = (
+                plot_colors['shipping_line_width_base']
+                + plot_colors['shipping_line_width_addition'] * (num_routes - n - 1)
+            )
+
     all_networks = []
     for k in order_plotting:
         if k not in keys:
@@ -695,12 +724,21 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
 
         line_gdf = gpd.GeoDataFrame(line_networks[k], columns=['geometry'])
         stroke_color = 'white' if transport_mean == 'Shipping' else 'black'
-        line_gdf.plot(color=commodity_colors[commodity], linestyle=line_styles[transport_mean],
-                      linewidth=line_widths[k], ax=ax, alpha=alpha,
-                      path_effects=[pe.Stroke(linewidth=line_widths[k]*1.05, foreground=stroke_color), pe.Normal()])
+        if transport_mean == 'Shipping':
+            line_gdf['width'] = [
+                shipping_line_widths.get((k, n), line_widths[k])
+                for n in range(len(line_gdf))
+            ]
+        else:
+            line_gdf['width'] = line_widths[k]
+
+        for linewidth, width_data in line_gdf.groupby('width', sort=False):
+            width_data.plot(color=commodity_colors[commodity], linestyle=line_styles[transport_mean],
+                            linewidth=linewidth, ax=ax, alpha=alpha,
+                            path_effects=[pe.Stroke(linewidth=linewidth * 1.05, foreground=stroke_color),
+                                          pe.Normal()])
         line_gdf['color'] = commodity_colors[commodity]
         line_gdf['style'] = line_styles[transport_mean]
-        line_gdf['width'] = line_widths[k]
 
         all_networks.append(line_gdf)
 

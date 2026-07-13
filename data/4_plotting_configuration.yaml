@@ -179,6 +179,8 @@ transport_mean_line_styles:
 plot_order_road: [Methane_Liquid, DBT, MCH, FTF, Hydrogen_Liquid, Methanol, Ammonia, Hydrogen_Gas]
 plot_order_shipping: [Methane_Liquid, DBT, MCH, FTF, Hydrogen_Liquid, Ammonia, Methanol]
 plot_order_pipeline: [FTF, Methane_Gas, Hydrogen_Gas]
+shipping_line_width_base: 0.5
+shipping_line_width_addition: 0.5
 
 line_widths:
    Hydrogen_Gas:
