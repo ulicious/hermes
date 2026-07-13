@@ -701,16 +701,22 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
             continue
 
         for n, geometry in enumerate(line_networks[k]):
-            shipping_route_groups.setdefault(route_geometry_key(geometry), []).append((k, n))
+            shipping_route_groups.setdefault(route_geometry_key(geometry), {}).setdefault(k, []).append(n)
 
     shipping_line_widths = {}
     for route_group in shipping_route_groups.values():
-        num_routes = len(route_group)
-        for n, (k, geometry_index) in enumerate(route_group):
-            shipping_line_widths[(k, geometry_index)] = (
+        route_group_keys = [
+            k for k in order_plotting
+            if k in route_group
+        ]
+        num_routes = len(route_group_keys)
+        for n, k in enumerate(route_group_keys):
+            linewidth = (
                 plot_colors['shipping_line_width_base']
                 + plot_colors['shipping_line_width_addition'] * (num_routes - n - 1)
             )
+            for geometry_index in route_group[k]:
+                shipping_line_widths[(k, geometry_index)] = linewidth
 
     all_networks = []
     for k in order_plotting:
