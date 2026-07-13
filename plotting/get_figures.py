@@ -84,6 +84,15 @@ DEFAULT_PLOT_COLORS = {
         'used_locations': ['#88CCEE', '#DDCC77', '#CC79A7', '#4C78A8'],
         'cost_categories': ['#88CCEE', '#DDCC77', '#8C6D31', '#CC79A7', '#332288', '#4C78A8'],
     },
+    'plot_order_road': [
+        'Methane_Liquid', 'DBT', 'MCH', 'FTF', 'Hydrogen_Liquid',
+        'Methanol', 'Ammonia', 'Hydrogen_Gas',
+    ],
+    'plot_order_shipping': [
+        'Methane_Liquid', 'DBT', 'MCH', 'FTF', 'Hydrogen_Liquid',
+        'Ammonia', 'Methanol',
+    ],
+    'plot_order_pipeline': ['FTF', 'Methane_Gas', 'Hydrogen_Gas'],
 }
 
 
@@ -112,6 +121,9 @@ def get_plot_color_config(plotting_config=None):
         'commodity_colors': plotting_config.get('commodity_colors', {}),
         'supply_curve_colors': plotting_config.get('supply_curve_colors', {}),
         'category_colors': plotting_config.get('category_colors', {}),
+        'plot_order_road': plotting_config.get('plot_order_road', []),
+        'plot_order_shipping': plotting_config.get('plot_order_shipping', []),
+        'plot_order_pipeline': plotting_config.get('plot_order_pipeline', []),
     }
     return _merged_color_config(configured_colors)
 
@@ -648,9 +660,27 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
                       ('FTF', 'Pipeline_Liquid'), ('FTF', 'New_Pipeline_Liquid'), ('Methane_Gas', 'Pipeline_Gas'),
                       ('Methane_Gas', 'New_Pipeline_Gas'), ('Hydrogen_Gas', 'Pipeline_Gas'),
                       ('Hydrogen_Gas', 'New_Pipeline_Gas')]
+
+    plot_orders = {
+        'Road': plot_colors['plot_order_road'],
+        'Shipping': plot_colors['plot_order_shipping'],
+        'Pipeline': plot_colors['plot_order_pipeline'],
+    }
+    transport_order = {'Road': 0, 'Shipping': 1, 'Pipeline': 2}
+
+    def route_plot_sort_key(route_key):
+        commodity, transport_mean = route_key
+        transport_group = 'Pipeline' if 'Pipeline' in transport_mean else transport_mean
+        commodity_order = plot_orders.get(transport_group, [])
+        if commodity in commodity_order:
+            commodity_position = commodity_order.index(commodity)
+        else:
+            commodity_position = len(commodity_order)
+        return transport_order.get(transport_group, len(transport_order)), commodity_position
+
     order_plotting = sorted(
         order_plotting,
-        key=lambda k: 0 if k[1] == 'Road' else 2 if 'Pipeline' in k[1] else 1,
+        key=route_plot_sort_key,
     )
 
     all_networks = []

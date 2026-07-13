@@ -176,6 +176,10 @@ transport_mean_line_styles:
    New_Pipeline_Liquid: '-'
    None: '/'
 
+plot_order_road: [Methane_Liquid, DBT, MCH, FTF, Hydrogen_Liquid, Methanol, Ammonia, Hydrogen_Gas]
+plot_order_shipping: [Methane_Liquid, DBT, MCH, FTF, Hydrogen_Liquid, Ammonia, Methanol]
+plot_order_pipeline: [FTF, Methane_Gas, Hydrogen_Gas]
+
 line_widths:
    Hydrogen_Gas:
       Road: 0.5
@@ -195,7 +199,7 @@ line_widths:
       Shipping: 0.5
    Methanol:
       Road: 0.5
-      Shipping: 0.5
+      Shipping: 0.75
    DBT:
       Road: 0.5
       Shipping: 1.5
