@@ -648,6 +648,10 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
                       ('FTF', 'Pipeline_Liquid'), ('FTF', 'New_Pipeline_Liquid'), ('Methane_Gas', 'Pipeline_Gas'),
                       ('Methane_Gas', 'New_Pipeline_Gas'), ('Hydrogen_Gas', 'Pipeline_Gas'),
                       ('Hydrogen_Gas', 'New_Pipeline_Gas')]
+    order_plotting = sorted(
+        order_plotting,
+        key=lambda k: 0 if k[1] == 'Road' else 2 if 'Pipeline' in k[1] else 1,
+    )
 
     all_networks = []
     for k in order_plotting:
