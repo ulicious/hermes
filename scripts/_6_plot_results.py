@@ -70,7 +70,7 @@ global_plot_boundaries = resolve_plot_boundaries(
     allow_results=False,
 )
 
-color_dictionary = config_file_plotting['commodity_colors']
+color_dictionary = plot_colors['commodity_colors']
 nice_name_dictionary = config_file_plotting['nice_name_dictionary']
 transport_mean_line_styles = config_file_plotting['transport_mean_line_styles']
 

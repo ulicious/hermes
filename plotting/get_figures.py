@@ -62,10 +62,22 @@ DEFAULT_PLOT_COLORS = {
         'Pipeline_Oil': '#2F2F2F',
         'Destination': '#0072B2',
     },
+    'commodity_colors': {
+        'Hydrogen_Gas': '#56B4E9',
+        'Hydrogen_Liquid': '#B13637',
+        'Ammonia': '#2F5EB5',
+        'Methane_Gas': '#383226',
+        'Methane_Liquid': '#3A5F73',
+        'Methanol': '#77792C',
+        'DBT': '#D55E00',
+        'MCH': '#7F4A30',
+        'FTF': '#956CA6',
+        'None': '#8A8A8A',
+    },
     'supply_curve_colors': {
-        'production': '#CC79A7',
-        'conversion': '#8B3E52',
-        'transportation': '#D55E00',
+        'production': '#B8860B',
+        'conversion': '#44AA99',
+        'transportation': '#332288',
     },
     'category_colors': {
         'weighted_route_fallback': ['#88CCEE', '#CC79A7', '#4C78A8', '#DDCC77', '#8C6D31', '#44AA99'],
@@ -97,6 +109,7 @@ def get_plot_color_config(plotting_config=None):
         'colorbar': plotting_config.get('colorbar', {}),
         'map_colors': plotting_config.get('map_colors', {}),
         'infrastructure_colors': plotting_config.get('infrastructure_colors', {}),
+        'commodity_colors': plotting_config.get('commodity_colors', {}),
         'supply_curve_colors': plotting_config.get('supply_curve_colors', {}),
         'category_colors': plotting_config.get('category_colors', {}),
     }

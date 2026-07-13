@@ -85,16 +85,16 @@ commodity_colors:
    Ammonia: '#2F5EB5'
    Methane_Gas: '#383226'
    Methane_Liquid: '#3A5F73'
-   Methanol: '#F95D6A'
-   DBT: '#133247'
-   MCH: '#562B16'
+   Methanol: '#77792C'
+   DBT: '#D55E00'
+   MCH: '#7F4A30'
    FTF: '#956CA6'
-   None: '#2F2F2F'
+   None: '#8A8A8A'
 
 supply_curve_colors:
-   production: '#CC79A7'
-   conversion: '#8B3E52'
-   transportation: '#D55E00'
+   production: '#B8860B'
+   conversion: '#44AA99'
+   transportation: '#332288'
 
 category_colors:
    weighted_route_fallback:
