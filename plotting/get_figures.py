@@ -694,9 +694,10 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
         alpha = 1
 
         line_gdf = gpd.GeoDataFrame(line_networks[k], columns=['geometry'])
+        stroke_color = 'white' if transport_mean == 'Shipping' else 'black'
         line_gdf.plot(color=commodity_colors[commodity], linestyle=line_styles[transport_mean],
                       linewidth=line_widths[k], ax=ax, alpha=alpha,
-                      path_effects=[pe.Stroke(linewidth=line_widths[k]*1.05, foreground='black'), pe.Normal()])
+                      path_effects=[pe.Stroke(linewidth=line_widths[k]*1.05, foreground=stroke_color), pe.Normal()])
         line_gdf['color'] = commodity_colors[commodity]
         line_gdf['style'] = line_styles[transport_mean]
         line_gdf['width'] = line_widths[k]
