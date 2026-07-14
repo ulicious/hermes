@@ -95,8 +95,8 @@ DEFAULT_PLOT_COLORS = {
     'plot_order_pipeline': ['FTF', 'Methane_Gas', 'Hydrogen_Gas'],
     'shipping_line_width_base': 0.5,
     'shipping_line_width_addition': 0.5,
-    'shipping_overlap_dash_pattern': [1, 3],
-    'shipping_overlap_dash_offsets': [0, 1, 2, 3, 4],
+    'shipping_overlap_dash_visible': 1,
+    'shipping_overlap_dash_offsets': [0, 2, 4, 6, 8],
 }
 
 
@@ -130,8 +130,8 @@ def get_plot_color_config(plotting_config=None):
         'plot_order_pipeline': plotting_config.get('plot_order_pipeline', []),
         'shipping_line_width_base': plotting_config.get('shipping_line_width_base', 0.5),
         'shipping_line_width_addition': plotting_config.get('shipping_line_width_addition', 0.5),
-        'shipping_overlap_dash_pattern': plotting_config.get('shipping_overlap_dash_pattern', [1, 3]),
-        'shipping_overlap_dash_offsets': plotting_config.get('shipping_overlap_dash_offsets', [0, 1, 2, 3, 4]),
+        'shipping_overlap_dash_visible': plotting_config.get('shipping_overlap_dash_visible', 1),
+        'shipping_overlap_dash_offsets': plotting_config.get('shipping_overlap_dash_offsets', [0, 2, 4, 6, 8]),
     }
     return _merged_color_config(configured_colors)
 
@@ -711,8 +711,7 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
                 )
 
     shipping_segment_styles = {}
-    shipping_dash_pattern = tuple(plot_colors['shipping_overlap_dash_pattern'])
-    shipping_dash_period = sum(shipping_dash_pattern)
+    shipping_dash_visible = plot_colors['shipping_overlap_dash_visible']
     shipping_dash_offsets = plot_colors['shipping_overlap_dash_offsets']
     for segment_commodities in shipping_segments.values():
         ordered_commodities = [
@@ -720,13 +719,14 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
             if k[1] == 'Shipping' and k[0] in segment_commodities
         ]
         num_commodities = len(ordered_commodities)
+        segment_offsets = [
+            shipping_dash_offsets[n] if n < len(shipping_dash_offsets) else n * 2
+            for n in range(num_commodities)
+        ]
+        shipping_dash_gap = max(segment_offsets) + 2 - shipping_dash_visible
+        shipping_dash_pattern = (shipping_dash_visible, shipping_dash_gap)
         for n, commodity in enumerate(ordered_commodities):
-            if n < len(shipping_dash_offsets):
-                linestyle = (shipping_dash_offsets[n], shipping_dash_pattern)
-            elif num_commodities > 1:
-                linestyle = (n * shipping_dash_period / num_commodities, shipping_dash_pattern)
-            else:
-                linestyle = line_styles['Shipping']
+            linestyle = (segment_offsets[n], shipping_dash_pattern)
             for segment_reference in segment_commodities[commodity]:
                 shipping_segment_styles[segment_reference] = linestyle
 
