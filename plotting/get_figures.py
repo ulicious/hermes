@@ -17,7 +17,7 @@ import matplotlib as mpl
 from math import sqrt
 from tqdm import tqdm
 from shapely.geometry import LineString, Point, Polygon, MultiLineString, MultiPolygon, box
-from shapely.ops import linemerge, unary_union
+from shapely.ops import linemerge, snap, unary_union
 from joblib import Parallel, delayed
 import plotly.graph_objects as go
 from matplotlib.ticker import FixedLocator
@@ -97,6 +97,7 @@ DEFAULT_PLOT_COLORS = {
     'shipping_line_width_addition': 0.5,
     'shipping_overlap_dash_visible': 1,
     'shipping_overlap_dash_offsets': [0, 2, 4, 6, 8],
+    'shipping_unary_union_snap_tolerance': 0.0,
     'debug_shipping_unary_union_plot': False,
 }
 
@@ -133,6 +134,7 @@ def get_plot_color_config(plotting_config=None):
         'shipping_line_width_addition': plotting_config.get('shipping_line_width_addition', 0.5),
         'shipping_overlap_dash_visible': plotting_config.get('shipping_overlap_dash_visible', 1),
         'shipping_overlap_dash_offsets': plotting_config.get('shipping_overlap_dash_offsets', [0, 2, 4, 6, 8]),
+        'shipping_unary_union_snap_tolerance': plotting_config.get('shipping_unary_union_snap_tolerance', 0.0),
         'debug_shipping_unary_union_plot': plotting_config.get('debug_shipping_unary_union_plot', False),
     }
     return _merged_color_config(configured_colors)
@@ -344,12 +346,28 @@ def _shipping_segment_is_on_route(segment, route, tolerance=1e-8):
     )
 
 
-def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, plot_colors):
+def _collect_shipping_routes(line_networks, shipping_keys, plot_colors):
     shipping_routes = []
     for key in shipping_keys:
         for geometry in line_networks[key]:
             shipping_routes.append((key, geometry))
 
+    snap_tolerance = plot_colors.get('shipping_unary_union_snap_tolerance', 0.0)
+    if not shipping_routes or snap_tolerance <= 0:
+        return shipping_routes
+
+    reference_network = unary_union([geometry for _, geometry in shipping_routes])
+    snapped_shipping_routes = []
+    for key, geometry in shipping_routes:
+        snapped_geometry = snap(geometry, reference_network, snap_tolerance)
+        for line_geometry in _flatten_line_geometries(snapped_geometry):
+            snapped_shipping_routes.append((key, line_geometry))
+
+    return snapped_shipping_routes
+
+
+def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, plot_colors):
+    shipping_routes = _collect_shipping_routes(line_networks, shipping_keys, plot_colors)
     if not shipping_routes:
         return {}
 
@@ -411,15 +429,11 @@ def _save_shipping_unary_union_debug_plot(line_networks, shipping_keys, boundari
     if not plot_colors.get('debug_shipping_unary_union_plot') or not path_saving:
         return
 
-    shipping_routes = []
-    for key in shipping_keys:
-        for geometry in line_networks[key]:
-            shipping_routes.append(geometry)
-
+    shipping_routes = _collect_shipping_routes(line_networks, shipping_keys, plot_colors)
     if not shipping_routes:
         return
 
-    split_network = unary_union(shipping_routes)
+    split_network = unary_union([geometry for _, geometry in shipping_routes])
     network_segments = _flatten_line_geometries(split_network)
     if not network_segments:
         return
