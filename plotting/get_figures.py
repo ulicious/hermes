@@ -391,7 +391,8 @@ def _get_shipping_unary_union_segments(shipping_routes, plot_colors):
         _extend_line_endpoints(geometry, extension_length)
         for _, geometry in shipping_routes
     ]
-    split_network = unary_union(union_geometries)
+    line_network = MultiLineString(union_geometries)
+    split_network = shapely.node(line_network)
     return _flatten_line_geometries(split_network)
 
 
@@ -474,11 +475,21 @@ def _save_shipping_unary_union_debug_plot(line_networks, shipping_keys, boundari
     map_plot = gpd.GeoDataFrame(map_plot['geometry'], columns=['geometry'])
     map_plot.plot(color=plot_colors['map_colors']['land'], ax=ax)
 
-    cmap = mpl.colormaps['hsv']
-    denominator = max(len(network_segments), 1)
+    debug_colors = []
+    for colormap_name in ['tab20', 'tab20b', 'tab20c']:
+        colormap = mpl.colormaps[colormap_name]
+        debug_colors.extend(colormap(n) for n in range(colormap.N))
+
+    node_points = []
     for n, segment in enumerate(network_segments):
-        color = cmap(n / denominator)
+        color = debug_colors[(n * 7) % len(debug_colors)]
         gpd.GeoSeries([segment]).plot(color=color, linewidth=1.2, ax=ax)
+        coordinates = list(segment.coords)
+        node_points.append(Point(coordinates[0]))
+        node_points.append(Point(coordinates[-1]))
+
+    if node_points:
+        gpd.GeoSeries(node_points).plot(color='black', markersize=2, ax=ax, alpha=0.8)
 
     ax.set_ylabel('')
     ax.set_xlabel('')
