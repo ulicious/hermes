@@ -17,7 +17,7 @@ import matplotlib as mpl
 from math import sqrt
 from tqdm import tqdm
 from shapely.geometry import LineString, Point, Polygon, MultiLineString, MultiPolygon, box
-from shapely.ops import linemerge, snap, unary_union
+from shapely.ops import linemerge, nearest_points, substring, unary_union
 from joblib import Parallel, delayed
 import plotly.graph_objects as go
 from matplotlib.ticker import FixedLocator
@@ -97,7 +97,7 @@ DEFAULT_PLOT_COLORS = {
     'shipping_line_width_addition': 0.5,
     'shipping_overlap_dash_visible': 1,
     'shipping_overlap_dash_offsets': [0, 2, 4, 6, 8],
-    'shipping_unary_union_snap_tolerance': 0.0,
+    'shipping_near_intersection_tolerance': 0.0,
     'debug_shipping_unary_union_plot': False,
 }
 
@@ -134,7 +134,10 @@ def get_plot_color_config(plotting_config=None):
         'shipping_line_width_addition': plotting_config.get('shipping_line_width_addition', 0.5),
         'shipping_overlap_dash_visible': plotting_config.get('shipping_overlap_dash_visible', 1),
         'shipping_overlap_dash_offsets': plotting_config.get('shipping_overlap_dash_offsets', [0, 2, 4, 6, 8]),
-        'shipping_unary_union_snap_tolerance': plotting_config.get('shipping_unary_union_snap_tolerance', 0.0),
+        'shipping_near_intersection_tolerance': plotting_config.get(
+            'shipping_near_intersection_tolerance',
+            plotting_config.get('shipping_unary_union_snap_tolerance', 0.0),
+        ),
         'debug_shipping_unary_union_plot': plotting_config.get('debug_shipping_unary_union_plot', False),
     }
     return _merged_color_config(configured_colors)
@@ -346,24 +349,116 @@ def _shipping_segment_is_on_route(segment, route, tolerance=1e-8):
     )
 
 
+def _line_segments(line):
+    coordinates = list(line.coords)
+    segments = []
+    for n in range(len(coordinates) - 1):
+        segment = LineString([coordinates[n], coordinates[n + 1]])
+        if segment.length > 0:
+            segments.append(segment)
+    return segments
+
+
+def _extract_split_points(geometry):
+    if geometry is None or geometry.is_empty:
+        return []
+    if isinstance(geometry, Point):
+        return [geometry]
+    if isinstance(geometry, LineString):
+        coordinates = list(geometry.coords)
+        if not coordinates:
+            return []
+        return [Point(coordinates[0]), Point(coordinates[-1])]
+    if hasattr(geometry, 'geoms'):
+        points = []
+        for sub_geometry in geometry.geoms:
+            points.extend(_extract_split_points(sub_geometry))
+        return points
+    return []
+
+
+def _add_line_split_distance(split_distances, line_index, line, point, tolerance):
+    if line.distance(point) > max(tolerance, 1e-9):
+        return
+
+    distance = line.project(point)
+    if 1e-9 < distance < line.length - 1e-9:
+        split_distances[line_index].append(distance)
+
+
+def _split_line_at_distances(line, distances):
+    split_distances = [0.0, line.length]
+    for distance in sorted(distances):
+        if 1e-9 < distance < line.length - 1e-9:
+            split_distances.append(distance)
+
+    merged_distances = []
+    for distance in sorted(split_distances):
+        if merged_distances and abs(distance - merged_distances[-1]) <= 1e-9:
+            continue
+        merged_distances.append(distance)
+
+    split_lines = []
+    for start, end in zip(merged_distances[:-1], merged_distances[1:]):
+        if end - start <= 1e-9:
+            continue
+        split_line = substring(line, start, end)
+        for line_geometry in _flatten_line_geometries(split_line):
+            if line_geometry.length > 0:
+                split_lines.append(line_geometry)
+
+    return split_lines
+
+
 def _collect_shipping_routes(line_networks, shipping_keys, plot_colors):
     shipping_routes = []
     for key in shipping_keys:
         for geometry in line_networks[key]:
             shipping_routes.append((key, geometry))
 
-    snap_tolerance = plot_colors.get('shipping_unary_union_snap_tolerance', 0.0)
-    if not shipping_routes or snap_tolerance <= 0:
+    near_tolerance = plot_colors.get('shipping_near_intersection_tolerance', 0.0)
+    if not shipping_routes or near_tolerance <= 0:
         return shipping_routes
 
-    reference_network = unary_union([geometry for _, geometry in shipping_routes])
-    snapped_shipping_routes = []
-    for key, geometry in shipping_routes:
-        snapped_geometry = snap(geometry, reference_network, snap_tolerance)
-        for line_geometry in _flatten_line_geometries(snapped_geometry):
-            snapped_shipping_routes.append((key, line_geometry))
+    split_distances = {
+        n: []
+        for n in range(len(shipping_routes))
+    }
+    route_segments = [
+        _line_segments(geometry)
+        for _, geometry in shipping_routes
+    ]
 
-    return snapped_shipping_routes
+    for first_index, (first_key, first_line) in enumerate(shipping_routes):
+        for second_index in range(first_index + 1, len(shipping_routes)):
+            second_key, second_line = shipping_routes[second_index]
+            if first_key == second_key:
+                continue
+
+            intersection = first_line.intersection(second_line)
+            for point in _extract_split_points(intersection):
+                _add_line_split_distance(split_distances, first_index, first_line, point, near_tolerance)
+                _add_line_split_distance(split_distances, second_index, second_line, point, near_tolerance)
+
+            if first_line.distance(second_line) > near_tolerance:
+                continue
+
+            for first_segment in route_segments[first_index]:
+                for second_segment in route_segments[second_index]:
+                    if first_segment.distance(second_segment) > near_tolerance:
+                        continue
+                    first_point, second_point = nearest_points(first_segment, second_segment)
+                    _add_line_split_distance(
+                        split_distances, first_index, first_line, first_point, near_tolerance)
+                    _add_line_split_distance(
+                        split_distances, second_index, second_line, second_point, near_tolerance)
+
+    split_shipping_routes = []
+    for n, (key, geometry) in enumerate(shipping_routes):
+        for line_geometry in _split_line_at_distances(geometry, split_distances[n]):
+            split_shipping_routes.append((key, line_geometry))
+
+    return split_shipping_routes
 
 
 def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, plot_colors):
