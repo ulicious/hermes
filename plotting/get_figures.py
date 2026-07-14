@@ -298,6 +298,111 @@ def _geometry_bounds(geometry):
     return None
 
 
+def _flatten_line_geometries(geometry):
+    if geometry is None or geometry.is_empty:
+        return []
+    if isinstance(geometry, LineString):
+        return [geometry]
+    if isinstance(geometry, MultiLineString):
+        return list(geometry.geoms)
+    if hasattr(geometry, 'geoms'):
+        lines = []
+        for sub_geometry in geometry.geoms:
+            lines.extend(_flatten_line_geometries(sub_geometry))
+        return lines
+    return []
+
+
+def _shipping_dash_style(position, num_commodities, plot_colors):
+    dash_visible = plot_colors['shipping_overlap_dash_visible']
+    dash_offsets = plot_colors['shipping_overlap_dash_offsets']
+    segment_offsets = [
+        dash_offsets[n] if n < len(dash_offsets) else n * 2
+        for n in range(num_commodities)
+    ]
+    dash_gap = max(segment_offsets) + 2 - dash_visible
+    return segment_offsets[position], (dash_visible, dash_gap)
+
+
+def _shipping_segment_is_on_route(segment, route, tolerance=1e-8):
+    if route.distance(segment) > tolerance:
+        return False
+
+    start = Point(segment.coords[0])
+    end = Point(segment.coords[-1])
+    if route.distance(start) > tolerance or route.distance(end) > tolerance:
+        return False
+
+    start_position = route.project(start)
+    end_position = route.project(end)
+    route_length = route.length
+    return (
+        -tolerance <= start_position <= route_length + tolerance
+        and -tolerance <= end_position <= route_length + tolerance
+    )
+
+
+def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, plot_colors):
+    shipping_routes = []
+    for key in shipping_keys:
+        for geometry in line_networks[key]:
+            shipping_routes.append((key, geometry))
+
+    if not shipping_routes:
+        return {}
+
+    split_network = unary_union([geometry for _, geometry in shipping_routes])
+    network_segments = _flatten_line_geometries(split_network)
+
+    plot_order = plot_colors['plot_order_shipping']
+    plot_order_index = {
+        commodity: n
+        for n, commodity in enumerate(plot_order)
+    }
+
+    shipping_plot_segments = {
+        key: []
+        for key in shipping_keys
+    }
+
+    for segment in network_segments:
+        route_keys = []
+        commodities = []
+        for key, route in shipping_routes:
+            if not _shipping_segment_is_on_route(segment, route):
+                continue
+
+            route_keys.append(key)
+            commodity = key[0]
+            if commodity not in commodities:
+                commodities.append(commodity)
+
+        if not route_keys:
+            continue
+
+        commodities = sorted(
+            commodities,
+            key=lambda commodity: plot_order_index.get(commodity, len(plot_order_index)),
+        )
+        num_commodities = len(commodities)
+        commodity_styles = {
+            commodity: _shipping_dash_style(n, num_commodities, plot_colors)
+            for n, commodity in enumerate(commodities)
+        }
+
+        for key in order_plotting:
+            if key not in route_keys:
+                continue
+
+            shipping_plot_segments[key].append({
+                'geometry': segment,
+                'width': plot_colors['shipping_line_width_base'],
+                'linestyle': commodity_styles[key[0]],
+            })
+
+    return shipping_plot_segments
+
+
 def get_result_plot_boundaries(data=None, destination_location=None, route_geometries=None,
                                padding_fraction=0.03, minimum_padding=1.0):
     bounds = []
@@ -691,44 +796,16 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
         key=route_plot_sort_key,
     )
 
-    def route_segment_key(start_coordinate, end_coordinate):
-        start_coordinate = (round(start_coordinate[0], 6), round(start_coordinate[1], 6))
-        end_coordinate = (round(end_coordinate[0], 6), round(end_coordinate[1], 6))
-        return min((start_coordinate, end_coordinate), (end_coordinate, start_coordinate))
-
-    shipping_segments = {}
-    for k in order_plotting:
-        if k not in keys or k[1] != 'Shipping':
-            continue
-
-        commodity = k[0]
-        for line_index, geometry in enumerate(line_networks[k]):
-            coordinates = list(geometry.coords)
-            for segment_index in range(len(coordinates) - 1):
-                segment_key = route_segment_key(coordinates[segment_index], coordinates[segment_index + 1])
-                shipping_segments.setdefault(segment_key, {}).setdefault(commodity, []).append(
-                    (k, line_index, segment_index)
-                )
-
-    shipping_segment_styles = {}
-    shipping_dash_visible = plot_colors['shipping_overlap_dash_visible']
-    shipping_dash_offsets = plot_colors['shipping_overlap_dash_offsets']
-    for segment_commodities in shipping_segments.values():
-        ordered_commodities = [
-            k[0] for k in order_plotting
-            if k[1] == 'Shipping' and k[0] in segment_commodities
-        ]
-        num_commodities = len(ordered_commodities)
-        segment_offsets = [
-            shipping_dash_offsets[n] if n < len(shipping_dash_offsets) else n * 2
-            for n in range(num_commodities)
-        ]
-        shipping_dash_gap = max(segment_offsets) + 2 - shipping_dash_visible
-        shipping_dash_pattern = (shipping_dash_visible, shipping_dash_gap)
-        for n, commodity in enumerate(ordered_commodities):
-            linestyle = (segment_offsets[n], shipping_dash_pattern)
-            for segment_reference in segment_commodities[commodity]:
-                shipping_segment_styles[segment_reference] = linestyle
+    shipping_keys = [
+        k for k in order_plotting
+        if k in keys and k[1] == 'Shipping'
+    ]
+    shipping_plot_segments = _build_shipping_plot_segments(
+        line_networks,
+        shipping_keys,
+        order_plotting,
+        plot_colors,
+    )
 
     all_networks = []
     for k in order_plotting:
@@ -742,23 +819,17 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
 
         stroke_color = 'white' if transport_mean == 'Shipping' else 'black'
         if transport_mean == 'Shipping':
-            line_data = []
-            for line_index, geometry in enumerate(line_networks[k]):
-                coordinates = list(geometry.coords)
-                for segment_index in range(len(coordinates) - 1):
-                    line_data.append({
-                        'geometry': LineString([coordinates[segment_index], coordinates[segment_index + 1]]),
-                        'width': plot_colors['shipping_line_width_base'],
-                        'linestyle': shipping_segment_styles.get(
-                            (k, line_index, segment_index),
-                            line_styles[transport_mean],
-                        ),
-                    })
-            line_gdf = gpd.GeoDataFrame(line_data, columns=['geometry', 'width', 'linestyle'])
+            line_gdf = gpd.GeoDataFrame(
+                shipping_plot_segments.get(k, []),
+                columns=['geometry', 'width', 'linestyle'],
+            )
         else:
             line_gdf = gpd.GeoDataFrame(line_networks[k], columns=['geometry'])
             line_gdf['width'] = line_widths[k]
             line_gdf['linestyle'] = line_styles[transport_mean]
+
+        if line_gdf.empty:
+            continue
 
         for (linewidth, linestyle), width_data in line_gdf.groupby(['width', 'linestyle'], sort=False):
             width_data.plot(color=commodity_colors[commodity], linestyle=linestyle,
