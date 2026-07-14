@@ -16,6 +16,7 @@ import matplotlib as mpl
 
 from math import sqrt
 from tqdm import tqdm
+from shapely.errors import GEOSException
 from shapely.geometry import LineString, Point, Polygon, MultiLineString, MultiPolygon, box
 from shapely.ops import linemerge, unary_union
 from joblib import Parallel, delayed
@@ -392,7 +393,10 @@ def _get_shipping_unary_union_segments(shipping_routes, plot_colors):
         for _, geometry in shipping_routes
     ]
     line_network = MultiLineString(union_geometries)
-    split_network = shapely.node(line_network)
+    try:
+        split_network = shapely.node(line_network)
+    except GEOSException:
+        split_network = unary_union(line_network)
     return _flatten_line_geometries(split_network)
 
 
