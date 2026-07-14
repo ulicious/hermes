@@ -397,7 +397,12 @@ def _get_shipping_unary_union_segments(shipping_routes, plot_colors):
         split_network = shapely.node(line_network)
     except GEOSException:
         split_network = unary_union(line_network)
-    return _flatten_line_geometries(split_network)
+    split_segments = _flatten_line_geometries(split_network)
+    if len(split_segments) <= 1:
+        return split_segments
+
+    merged_network = linemerge(MultiLineString(split_segments))
+    return _flatten_line_geometries(merged_network)
 
 
 def _merge_shipping_plot_segments(shipping_plot_segments):
@@ -440,18 +445,23 @@ def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, 
     }
 
     for segment in network_segments:
-        route_keys = []
+        route_geometries = []
         commodities = []
         for key, route in shipping_routes:
-            if not _shipping_segment_is_on_route(segment, route):
+            route_segment = route.intersection(segment)
+            route_lines = [
+                line_geometry for line_geometry in _flatten_line_geometries(route_segment)
+                if line_geometry.length > 1e-9
+            ]
+            if not route_lines:
                 continue
 
-            route_keys.append(key)
+            route_geometries.append((key, route_lines))
             commodity = key[0]
             if commodity not in commodities:
                 commodities.append(commodity)
 
-        if not route_keys:
+        if not route_geometries:
             continue
 
         commodities = sorted(
@@ -465,14 +475,21 @@ def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, 
         }
 
         for key in order_plotting:
-            if key not in route_keys:
+            key_geometries = [
+                line_geometry
+                for route_key, route_lines in route_geometries
+                if route_key == key
+                for line_geometry in route_lines
+            ]
+            if not key_geometries:
                 continue
 
-            shipping_plot_segments[key].append({
-                'geometry': segment,
-                'width': plot_colors['shipping_line_width_base'],
-                'linestyle': commodity_styles[key[0]],
-            })
+            for line_geometry in key_geometries:
+                shipping_plot_segments[key].append({
+                    'geometry': line_geometry,
+                    'width': plot_colors['shipping_line_width_base'],
+                    'linestyle': commodity_styles[key[0]],
+                })
 
     return _merge_shipping_plot_segments(shipping_plot_segments)
 
