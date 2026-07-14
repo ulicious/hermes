@@ -42,6 +42,8 @@ DEFAULT_PLOT_BOUNDARIES = {
 }
 
 SHIPPING_UNARY_UNION_EXTENSION_LENGTH = 0.05
+SHIPPING_ROUTE_MATCH_TOLERANCE = 1e-5
+MIN_ROUTE_SEGMENT_LENGTH = 1e-9
 
 DEFAULT_PLOT_COLORS = {
     'colorbar': {
@@ -343,6 +345,17 @@ def _shipping_segment_is_on_route(segment, route, tolerance=1e-8):
     )
 
 
+def _line_coordinate_segments(line):
+    segments = []
+    for line_geometry in _flatten_line_geometries(line):
+        coordinates = list(line_geometry.coords)
+        for start, end in zip(coordinates[:-1], coordinates[1:]):
+            segment = LineString([start, end])
+            if segment.length > MIN_ROUTE_SEGMENT_LENGTH:
+                segments.append(segment)
+    return segments
+
+
 def _collect_shipping_routes(line_networks, shipping_keys):
     shipping_routes = []
     for key in shipping_keys:
@@ -418,23 +431,82 @@ def _merge_shipping_plot_segments(shipping_plot_segments):
     return merged_plot_segments
 
 
-def _route_intervals_on_segment(route, segment):
+def _add_interval(intervals, segment, line_geometry):
+    coordinates = list(line_geometry.coords)
+    start = segment.project(Point(coordinates[0]))
+    end = segment.project(Point(coordinates[-1]))
+    start, end = sorted([start, end])
+    if end - start > MIN_ROUTE_SEGMENT_LENGTH:
+        intervals.append((start, end))
+
+
+def _merge_route_intervals(intervals):
+    merged_intervals = []
+    for start, end in sorted(intervals):
+        if not merged_intervals or start > merged_intervals[-1][1] + MIN_ROUTE_SEGMENT_LENGTH:
+            merged_intervals.append([start, end])
+            continue
+
+        merged_intervals[-1][1] = max(merged_intervals[-1][1], end)
+
+    return [
+        (start, end)
+        for start, end in merged_intervals
+        if end - start > MIN_ROUTE_SEGMENT_LENGTH
+    ]
+
+
+def _route_piece_matches_segment(route_piece, segment, tolerance):
+    if route_piece.distance(segment) > tolerance:
+        return False
+
+    start = segment.project(Point(route_piece.coords[0]))
+    end = segment.project(Point(route_piece.coords[-1]))
+    start, end = sorted([start, end])
+    if end - start <= MIN_ROUTE_SEGMENT_LENGTH:
+        return False
+
+    candidate = substring(segment, start, end)
+    return any(
+        _line_is_close_to_route_piece(candidate_line, route_piece, tolerance)
+        for candidate_line in _flatten_line_geometries(candidate)
+    )
+
+
+def _line_is_close_to_route_piece(line_geometry, route_piece, tolerance):
+    if line_geometry.length <= MIN_ROUTE_SEGMENT_LENGTH:
+        return False
+
+    sample_distances = [
+        0.0,
+        line_geometry.length * 0.25,
+        line_geometry.length * 0.5,
+        line_geometry.length * 0.75,
+        line_geometry.length,
+    ]
+    return all(
+        route_piece.distance(line_geometry.interpolate(distance)) <= tolerance
+        for distance in sample_distances
+    )
+
+
+def _route_intervals_on_segment(route, segment, tolerance=SHIPPING_ROUTE_MATCH_TOLERANCE):
     route_segment = route.intersection(segment)
     route_lines = [
         line_geometry for line_geometry in _flatten_line_geometries(route_segment)
-        if line_geometry.length > 1e-9
+        if line_geometry.length > MIN_ROUTE_SEGMENT_LENGTH
     ]
 
     intervals = []
     for line_geometry in route_lines:
-        coordinates = list(line_geometry.coords)
-        start = segment.project(Point(coordinates[0]))
-        end = segment.project(Point(coordinates[-1]))
-        start, end = sorted([start, end])
-        if end - start > 1e-9:
-            intervals.append((start, end))
+        _add_interval(intervals, segment, line_geometry)
 
-    return intervals
+    for route_piece in _line_coordinate_segments(route):
+        if not _route_piece_matches_segment(route_piece, segment, tolerance):
+            continue
+        _add_interval(intervals, segment, route_piece)
+
+    return _merge_route_intervals(intervals)
 
 
 def _split_segment_by_route_intervals(segment, route_intervals):
@@ -469,7 +541,7 @@ def _split_segment_by_route_intervals(segment, route_intervals):
 
         split_line = substring(segment, start, end)
         for line_geometry in _flatten_line_geometries(split_line):
-            if line_geometry.length > 1e-9:
+            if line_geometry.length > MIN_ROUTE_SEGMENT_LENGTH:
                 split_segments.append((line_geometry, route_keys))
 
     return split_segments
