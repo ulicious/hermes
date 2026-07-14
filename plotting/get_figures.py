@@ -19,6 +19,7 @@ from tqdm import tqdm
 from shapely.errors import GEOSException
 from shapely.geometry import LineString, Point, Polygon, MultiLineString, MultiPolygon, box
 from shapely.ops import linemerge, substring, unary_union
+from shapely.strtree import STRtree
 from joblib import Parallel, delayed
 import plotly.graph_objects as go
 from matplotlib.ticker import FixedLocator
@@ -364,6 +365,20 @@ def _collect_shipping_routes(line_networks, shipping_keys):
     return shipping_routes
 
 
+def _build_shipping_route_piece_index(shipping_routes):
+    route_pieces = []
+    route_piece_geometries = []
+    for key, route in shipping_routes:
+        for route_piece in _line_coordinate_segments(route):
+            route_pieces.append((key, route_piece))
+            route_piece_geometries.append(route_piece)
+
+    if not route_piece_geometries:
+        return [], None
+
+    return route_pieces, STRtree(route_piece_geometries)
+
+
 def _extend_line_endpoints(line, extension_length):
     if extension_length <= 0 or line.length <= 0:
         return line
@@ -490,23 +505,33 @@ def _line_is_close_to_route_piece(line_geometry, route_piece, tolerance):
     )
 
 
-def _route_intervals_on_segment(route, segment, tolerance=SHIPPING_ROUTE_MATCH_TOLERANCE):
-    route_segment = route.intersection(segment)
-    route_lines = [
-        line_geometry for line_geometry in _flatten_line_geometries(route_segment)
-        if line_geometry.length > MIN_ROUTE_SEGMENT_LENGTH
-    ]
-
-    intervals = []
-    for line_geometry in route_lines:
-        _add_interval(intervals, segment, line_geometry)
-
-    for route_piece in _line_coordinate_segments(route):
+def _route_intervals_on_segment(route_pieces, segment, tolerance=SHIPPING_ROUTE_MATCH_TOLERANCE):
+    intervals = {}
+    for key, route_piece in route_pieces:
         if not _route_piece_matches_segment(route_piece, segment, tolerance):
             continue
-        _add_interval(intervals, segment, route_piece)
+        intervals.setdefault(key, [])
+        _add_interval(intervals[key], segment, route_piece)
 
-    return _merge_route_intervals(intervals)
+    return {
+        key: _merge_route_intervals(key_intervals)
+        for key, key_intervals in intervals.items()
+    }
+
+
+def _candidate_route_pieces_for_segment(segment, route_pieces, route_piece_tree,
+                                        tolerance=SHIPPING_ROUTE_MATCH_TOLERANCE):
+    if route_piece_tree is None:
+        return []
+
+    return [
+        route_pieces[int(index)]
+        for index in route_piece_tree.query(
+            segment,
+            predicate='dwithin',
+            distance=tolerance,
+        )
+    ]
 
 
 def _split_segment_by_route_intervals(segment, route_intervals):
@@ -553,6 +578,7 @@ def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, 
         return {}
 
     network_segments = _get_shipping_unary_union_segments(shipping_routes, plot_colors)
+    route_pieces, route_piece_tree = _build_shipping_route_piece_index(shipping_routes)
 
     plot_order = plot_colors['plot_order_shipping']
     plot_order_index = {
@@ -566,11 +592,10 @@ def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, 
     }
 
     for segment in network_segments:
-        route_intervals = {}
-        for key, route in shipping_routes:
-            intervals = _route_intervals_on_segment(route, segment)
-            if intervals:
-                route_intervals.setdefault(key, []).extend(intervals)
+        candidate_route_pieces = _candidate_route_pieces_for_segment(
+            segment, route_pieces, route_piece_tree,
+        )
+        route_intervals = _route_intervals_on_segment(candidate_route_pieces, segment)
 
         if not route_intervals:
             continue
