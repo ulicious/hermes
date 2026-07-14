@@ -96,6 +96,7 @@ DEFAULT_PLOT_COLORS = {
     'shipping_line_width_base': 0.5,
     'shipping_line_width_addition': 0.5,
     'shipping_overlap_dash_pattern': [1, 3],
+    'shipping_overlap_dash_offsets': [0, 1, 2, 3, 4],
 }
 
 
@@ -130,6 +131,7 @@ def get_plot_color_config(plotting_config=None):
         'shipping_line_width_base': plotting_config.get('shipping_line_width_base', 0.5),
         'shipping_line_width_addition': plotting_config.get('shipping_line_width_addition', 0.5),
         'shipping_overlap_dash_pattern': plotting_config.get('shipping_overlap_dash_pattern', [1, 3]),
+        'shipping_overlap_dash_offsets': plotting_config.get('shipping_overlap_dash_offsets', [0, 1, 2, 3, 4]),
     }
     return _merged_color_config(configured_colors)
 
@@ -711,6 +713,7 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
     shipping_segment_styles = {}
     shipping_dash_pattern = tuple(plot_colors['shipping_overlap_dash_pattern'])
     shipping_dash_period = sum(shipping_dash_pattern)
+    shipping_dash_offsets = plot_colors['shipping_overlap_dash_offsets']
     for segment_commodities in shipping_segments.values():
         ordered_commodities = [
             k[0] for k in order_plotting
@@ -718,7 +721,9 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
         ]
         num_commodities = len(ordered_commodities)
         for n, commodity in enumerate(ordered_commodities):
-            if num_commodities > 1:
+            if n < len(shipping_dash_offsets):
+                linestyle = (shipping_dash_offsets[n], shipping_dash_pattern)
+            elif num_commodities > 1:
                 linestyle = (n * shipping_dash_period / num_commodities, shipping_dash_pattern)
             else:
                 linestyle = line_styles['Shipping']
