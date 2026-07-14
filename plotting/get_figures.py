@@ -1095,7 +1095,7 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
         if add_legend:
             ax.legend(handles=new_transport_means, loc='upper center', ncols=3,
                       bbox_to_anchor=(0.5, 0.2), title='Transport Mean',
-                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
+                      labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=2.5,
                       fontsize=9, title_fontsize=9, frameon=False)
 
             ax.legend(handles=new_commodities, loc='upper center', ncol=2,
@@ -1111,7 +1111,7 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
     if add_legend:
         fig.legend(handles=new_transport_means, loc='upper center', ncols=3,
                    bbox_to_anchor=(0.5, 0.3), title='Transport Mean',
-                   labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
+                   labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=2.5,
                    fontsize=9, title_fontsize=9, frameon=False)
 
         if len(commodities) <= 4:
