@@ -400,6 +400,27 @@ def _get_shipping_unary_union_segments(shipping_routes, plot_colors):
     return _flatten_line_geometries(split_network)
 
 
+def _merge_shipping_plot_segments(shipping_plot_segments):
+    merged_plot_segments = {}
+    for key, segment_data in shipping_plot_segments.items():
+        grouped_segments = {}
+        for data in segment_data:
+            style_key = (data['width'], data['linestyle'])
+            grouped_segments.setdefault(style_key, []).append(data['geometry'])
+
+        merged_plot_segments[key] = []
+        for (width, linestyle), geometries in grouped_segments.items():
+            merged_geometry = linemerge(MultiLineString(geometries))
+            for geometry in _flatten_line_geometries(merged_geometry):
+                merged_plot_segments[key].append({
+                    'geometry': geometry,
+                    'width': width,
+                    'linestyle': linestyle,
+                })
+
+    return merged_plot_segments
+
+
 def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, plot_colors):
     shipping_routes = _collect_shipping_routes(line_networks, shipping_keys)
     if not shipping_routes:
@@ -453,7 +474,7 @@ def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, 
                 'linestyle': commodity_styles[key[0]],
             })
 
-    return shipping_plot_segments
+    return _merge_shipping_plot_segments(shipping_plot_segments)
 
 
 def _save_shipping_unary_union_debug_plot(line_networks, shipping_keys, boundaries,
