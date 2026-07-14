@@ -470,6 +470,24 @@ def _save_shipping_unary_union_debug_plot(line_networks, shipping_keys, boundari
     if not network_segments:
         return
 
+    export_data = gpd.GeoDataFrame(
+        {
+            'segment_id': list(range(len(network_segments))),
+            'length': [segment.length for segment in network_segments],
+            'wkt': [segment.wkt for segment in network_segments],
+        },
+        geometry=network_segments,
+        crs='EPSG:4326',
+    )
+    export_data.to_file(
+        safe_output_path(path_saving, fig_title + '_shipping_unary_union_segments.geojson'),
+        driver='GeoJSON',
+    )
+    export_data.drop(columns='geometry').to_csv(
+        safe_output_path(path_saving, fig_title + '_shipping_unary_union_segments.csv'),
+        index=False,
+    )
+
     centimeter_to_inch = 1 / 2.54
     fig, ax = plt.subplots(figsize=(width * centimeter_to_inch, height * centimeter_to_inch))
 
