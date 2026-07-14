@@ -18,7 +18,7 @@ from math import sqrt
 from tqdm import tqdm
 from shapely.errors import GEOSException
 from shapely.geometry import LineString, Point, Polygon, MultiLineString, MultiPolygon, box
-from shapely.ops import linemerge, unary_union
+from shapely.ops import linemerge, substring, unary_union
 from joblib import Parallel, delayed
 import plotly.graph_objects as go
 from matplotlib.ticker import FixedLocator
@@ -426,6 +426,63 @@ def _merge_shipping_plot_segments(shipping_plot_segments):
     return merged_plot_segments
 
 
+def _route_intervals_on_segment(route, segment):
+    route_segment = route.intersection(segment)
+    route_lines = [
+        line_geometry for line_geometry in _flatten_line_geometries(route_segment)
+        if line_geometry.length > 1e-9
+    ]
+
+    intervals = []
+    for line_geometry in route_lines:
+        coordinates = list(line_geometry.coords)
+        start = segment.project(Point(coordinates[0]))
+        end = segment.project(Point(coordinates[-1]))
+        start, end = sorted([start, end])
+        if end - start > 1e-9:
+            intervals.append((start, end))
+
+    return intervals
+
+
+def _split_segment_by_route_intervals(segment, route_intervals):
+    segment_length = segment.length
+    cut_distances = [0.0, segment_length]
+    for intervals in route_intervals.values():
+        for start, end in intervals:
+            if 1e-9 < start < segment_length - 1e-9:
+                cut_distances.append(start)
+            if 1e-9 < end < segment_length - 1e-9:
+                cut_distances.append(end)
+
+    merged_distances = []
+    for distance in sorted(cut_distances):
+        if merged_distances and abs(distance - merged_distances[-1]) <= 1e-9:
+            continue
+        merged_distances.append(distance)
+
+    split_segments = []
+    for start, end in zip(merged_distances[:-1], merged_distances[1:]):
+        if end - start <= 1e-9:
+            continue
+
+        midpoint = (start + end) / 2
+        route_keys = [
+            key for key, intervals in route_intervals.items()
+            if any(interval_start - 1e-9 <= midpoint <= interval_end + 1e-9
+                   for interval_start, interval_end in intervals)
+        ]
+        if not route_keys:
+            continue
+
+        split_line = substring(segment, start, end)
+        for line_geometry in _flatten_line_geometries(split_line):
+            if line_geometry.length > 1e-9:
+                split_segments.append((line_geometry, route_keys))
+
+    return split_segments
+
+
 def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, plot_colors):
     shipping_routes = _collect_shipping_routes(line_networks, shipping_keys)
     if not shipping_routes:
@@ -445,48 +502,37 @@ def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, 
     }
 
     for segment in network_segments:
-        route_geometries = []
-        commodities = []
+        route_intervals = {}
         for key, route in shipping_routes:
-            route_segment = route.intersection(segment)
-            route_lines = [
-                line_geometry for line_geometry in _flatten_line_geometries(route_segment)
-                if line_geometry.length > 1e-9
-            ]
-            if not route_lines:
-                continue
+            intervals = _route_intervals_on_segment(route, segment)
+            if intervals:
+                route_intervals.setdefault(key, []).extend(intervals)
 
-            route_geometries.append((key, route_lines))
-            commodity = key[0]
-            if commodity not in commodities:
-                commodities.append(commodity)
-
-        if not route_geometries:
+        if not route_intervals:
             continue
 
-        commodities = sorted(
-            commodities,
-            key=lambda commodity: plot_order_index.get(commodity, len(plot_order_index)),
-        )
-        num_commodities = len(commodities)
-        commodity_styles = {
-            commodity: _shipping_dash_style(n, num_commodities, plot_colors)
-            for n, commodity in enumerate(commodities)
-        }
+        for split_segment, route_keys in _split_segment_by_route_intervals(segment, route_intervals):
+            commodities = []
+            for key in route_keys:
+                commodity = key[0]
+                if commodity not in commodities:
+                    commodities.append(commodity)
 
-        for key in order_plotting:
-            key_geometries = [
-                line_geometry
-                for route_key, route_lines in route_geometries
-                if route_key == key
-                for line_geometry in route_lines
-            ]
-            if not key_geometries:
-                continue
+            commodities = sorted(
+                commodities,
+                key=lambda commodity: plot_order_index.get(commodity, len(plot_order_index)),
+            )
+            num_commodities = len(commodities)
+            commodity_styles = {
+                commodity: _shipping_dash_style(n, num_commodities, plot_colors)
+                for n, commodity in enumerate(commodities)
+            }
 
-            for line_geometry in key_geometries:
+            for key in order_plotting:
+                if key not in route_keys:
+                    continue
                 shipping_plot_segments[key].append({
-                    'geometry': line_geometry,
+                    'geometry': split_segment,
                     'width': plot_colors['shipping_line_width_base'],
                     'linestyle': commodity_styles[key[0]],
                 })
