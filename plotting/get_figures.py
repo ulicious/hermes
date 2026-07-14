@@ -99,7 +99,6 @@ DEFAULT_PLOT_COLORS = {
     'shipping_overlap_dash_visible': 1,
     'shipping_overlap_dash_offsets': [0, 2, 4, 6, 8],
     'shipping_unary_union_extension_length': 0.0,
-    'debug_shipping_unary_union_plot': False,
 }
 
 
@@ -139,7 +138,6 @@ def get_plot_color_config(plotting_config=None):
             'shipping_unary_union_extension_length',
             plotting_config.get('shipping_near_intersection_tolerance', 0.0),
         ),
-        'debug_shipping_unary_union_plot': plotting_config.get('debug_shipping_unary_union_plot', False),
     }
     return _merged_color_config(configured_colors)
 
@@ -538,85 +536,6 @@ def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, 
                 })
 
     return _merge_shipping_plot_segments(shipping_plot_segments)
-
-
-def _save_shipping_unary_union_debug_plot(line_networks, shipping_keys, boundaries,
-                                          path_saving, fig_title, plot_colors,
-                                          width=15.69, height=9):
-    if not plot_colors.get('debug_shipping_unary_union_plot') or not path_saving:
-        return
-
-    shipping_routes = _collect_shipping_routes(line_networks, shipping_keys)
-    if not shipping_routes:
-        return
-
-    network_segments = _get_shipping_unary_union_segments(shipping_routes, plot_colors)
-    if not network_segments:
-        return
-
-    export_data = gpd.GeoDataFrame(
-        {
-            'segment_id': list(range(len(network_segments))),
-            'length': [segment.length for segment in network_segments],
-            'wkt': [segment.wkt for segment in network_segments],
-        },
-        geometry=network_segments,
-        crs='EPSG:4326',
-    )
-    export_data.to_file(
-        safe_output_path(path_saving, fig_title + '_shipping_unary_union_segments.geojson'),
-        driver='GeoJSON',
-    )
-    export_data.drop(columns='geometry').to_csv(
-        safe_output_path(path_saving, fig_title + '_shipping_unary_union_segments.csv'),
-        index=False,
-    )
-
-    centimeter_to_inch = 1 / 2.54
-    fig, ax = plt.subplots(figsize=(width * centimeter_to_inch, height * centimeter_to_inch))
-
-    map_plot = _load_plot_world()
-    antarctica = map_plot[map_plot['continent'] == 'Antarctica'].index[0]
-    map_plot.drop([antarctica], inplace=True)
-    map_plot = gpd.GeoDataFrame(map_plot['geometry'], columns=['geometry'])
-    map_plot.plot(color=plot_colors['map_colors']['land'], ax=ax)
-
-    debug_colors = []
-    for colormap_name in ['tab20', 'tab20b', 'tab20c']:
-        colormap = mpl.colormaps[colormap_name]
-        debug_colors.extend(colormap(n) for n in range(colormap.N))
-
-    node_points = []
-    for n, segment in enumerate(network_segments):
-        color = debug_colors[(n * 7) % len(debug_colors)]
-        gpd.GeoSeries([segment]).plot(color=color, linewidth=1.2, ax=ax)
-        coordinates = list(segment.coords)
-        node_points.append(Point(coordinates[0]))
-        node_points.append(Point(coordinates[-1]))
-
-    if node_points:
-        gpd.GeoSeries(node_points).plot(color='black', markersize=2, ax=ax, alpha=0.8)
-
-    ax.set_ylabel('')
-    ax.set_xlabel('')
-    ax.set_yticklabels([])
-    ax.set_xticklabels([])
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_ylim(boundaries['min_latitude'], boundaries['max_latitude'])
-    ax.set_xlim(boundaries['min_longitude'], boundaries['max_longitude'])
-
-    fig.tight_layout()
-    fig.savefig(
-        safe_output_path(path_saving, fig_title + '_shipping_unary_union_debug.png'),
-        bbox_inches='tight',
-        dpi=600,
-    )
-    fig.savefig(
-        safe_output_path(path_saving, fig_title + '_shipping_unary_union_debug.svg'),
-        bbox_inches='tight',
-    )
-    plt.close(fig)
 
 
 def get_result_plot_boundaries(data=None, destination_location=None, route_geometries=None,
@@ -1021,16 +940,6 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
         shipping_keys,
         order_plotting,
         plot_colors,
-    )
-    _save_shipping_unary_union_debug_plot(
-        line_networks,
-        shipping_keys,
-        boundaries,
-        path_saving,
-        fig_title,
-        plot_colors,
-        width=width,
-        height=height,
     )
 
     all_networks = []
