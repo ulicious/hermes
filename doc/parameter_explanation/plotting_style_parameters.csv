@@ -1,7 +1,20 @@
 Assumption / Setting;Values;Explanation
-commodity_colors;dictionary;Maps commodities and None to matplotlib color names used in commodity and route plots
-nice_name_dictionary;dictionary;Maps commodities, transport means, result names, and None to display labels
-transport_mean_styles;dictionary;Maps transport means to hatch or marker styles used in plots
+plot_extent;'default', 'results' or 'custom';Sets the map extent mode for plots
+custom_plot_extent;dictionary with min/max latitude/longitude;Defines plot bounds when plot_extent is custom
+colormap;matplotlib colormap name;Sets the colormap for cost/efficiency map plots
+limit_scale;True / False;If True, cost scales are limited to the useful configured range
+colorbar;dictionary;Configures colorbar over-color and quantity colormap colors
+map_colors;dictionary;Maps map elements such as land, destination, country boundary and water availability to colors
+commodity_colors;dictionary;Maps commodities and None to colors used in commodity and route plots
+supply_curve_colors;dictionary;Maps supply-curve cost categories to colors
+category_colors;dictionary;Maps categorical plots such as weighted routes, used locations and cost categories to colors
+nice_name_dictionary;dictionary;Maps commodities, transport means, result names and None to display labels
 transport_mean_line_styles;dictionary;Maps transport means to line styles used for route plots
-line_widths;nested dictionary;Sets route line widths by commodity and transport mean
+plot_order_road;list of commodities;Defines commodity plotting order for road route sections; commodities not listed are plotted last
+plot_order_shipping;list of commodities;Defines commodity plotting order and dash offset order for shipping route sections
+plot_order_pipeline;list of commodities;Defines commodity plotting order for pipeline route sections
+shipping_line_width_base;float;Line width for plotted shipping route sections
+shipping_overlap_dash_visible;float;Length of the visible part of each shipping dash when commodities overlap
+shipping_overlap_dash_offsets;list of floats;Dash offsets for the first, second, third, etc. overlapping shipping commodity
+line_widths;nested dictionary;Sets route line widths by commodity and transport mean for non-shipping routes and legacy route widths
 infrastructure_colors;dictionary;Maps infrastructure types to colors used in infrastructure plots

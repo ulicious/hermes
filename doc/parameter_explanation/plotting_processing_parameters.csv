@@ -1,2 +1,5 @@
 Assumption / Setting;Values;Explanation;Comment
 process_results;list with result-set names;Defines which result folders should be processed for downstream plotting or comparisons;Names are interpreted relative to the results directory
+scenarios_with_water_availability_consideration;list with result-set names;Marks processed scenarios where water availability is considered;Used when processing plot data
+categorical_routes;list with result-set names;Exports categorized route information for selected scenarios;Used by process plot data
+commodity_routes;list with result-set names;Exports commodity route information for selected scenarios;Used by process plot data

@@ -1,20 +1,22 @@
 Assumption / Setting;Values;Explanation;Comment
-destination_type; 'location' or 'country'; defines destination type (single point location or country);
-destination_location;[longitude, latitude];Coordinates of destination;
-destination_countries; {country_name: [state_name_1, state_name_2, ...]}; dictionary with country names as keys and list with country states as values; keep state name list empty if complete country
-use_biggest_landmass;True / False;If True and the destination countries contain one country with multiple landmasses, only the largest polygon is used;
-origin_continents;list;If not empty, random locations will only be created on indicated continents. Empty if all continents;
-low_temp_heat_available_at_start;True / False;Indicates if low-temperature heat is available at start;"Affects conversion costs; value defined in cost_type"
-mid_temp_heat_available_at_start;True / False;Indicates if medium-temperature heat is available at start;"Affects conversion costs; value defined in cost_type"
-high_temp_heat_available_at_start;True / False;Indicates if high-temperature heat is available at start;"Affects conversion costs; value defined in cost_type"
-number_locations;integer;Number of random locations to create;
-minimal_latitude;latitude;Sets minimal latitude of random locations;will be overwritten if minimal_example is applied
-maximal_latitude;latitude;Sets maximal latitude of random locations;will be overwritten if minimal_example is applied
-minimal_longitude;longitude;Sets minimal longitude of random locations;will be overwritten if minimal_example is applied
-maximal_longitude;longitude;Sets maximal longitude of random locations;will be overwritten if minimal_example is applied
-location_creation_type; 'uniform' or 'random';Chooses between random sampling and a quasi-uniform point distribution;
-use_voronoi_cells; True / False;If True, onshore areas are assigned to generated locations via Voronoi cells;
-weight_hydrogen_costs_by_quantity; True / False;If True, Voronoi-cell hydrogen costs are weighted by the available quantity in the underlying cells;
-each_country_at_least_one_location; True / False;If True, an additional representative start location is created for countries that would otherwise be missing;
+destination_type;'location' or 'country';Defines destination type (single point location or country polygon);
+destination_location;[longitude, latitude];Coordinates of destination;Used if destination_type is location
+destination_countries;{country_name: [state_name_1, state_name_2, ...]};Dictionary with country names as keys and state lists as values;Keep state list empty for complete country
+use_biggest_landmass;True / False;If True and a destination country has multiple landmasses, only the largest polygon is used;
+origin_continents;list;If not empty, random locations will only be created on indicated continents;Empty list allows all continents
+start_location_area_type;'rectangle' or 'countries';Defines whether start locations are created in a bounding box or selected countries;
+start_location_countries;{country_name: [state_name_1, state_name_2, ...]};Dictionary of countries/states used if start_location_area_type is countries;
+low_temp_heat_available_at_start;True / False;Indicates if low-temperature heat is available at start;Affects conversion costs when selected by cost_type
+mid_temp_heat_available_at_start;True / False;Indicates if medium-temperature heat is available at start;Affects conversion costs when selected by cost_type
+high_temp_heat_available_at_start;True / False;Indicates if high-temperature heat is available at start;Affects conversion costs when selected by cost_type
+number_locations;integer;Number of random/start locations to create;
+start_location_minimal_latitude;latitude;Sets minimal latitude of start locations;May be overwritten by the minimal example
+start_location_maximal_latitude;latitude;Sets maximal latitude of start locations;May be overwritten by the minimal example
+start_location_minimal_longitude;longitude;Sets minimal longitude of start locations;May be overwritten by the minimal example
+start_location_maximal_longitude;longitude;Sets maximal longitude of start locations;May be overwritten by the minimal example
+location_creation_type;'uniform' or 'random';Chooses between random sampling and a quasi-uniform point distribution;
+use_voronoi_cells;True / False;If True, onshore areas are assigned to generated locations via Voronoi cells;
+weight_hydrogen_costs_by_quantity;True / False;If True, Voronoi-cell hydrogen costs are weighted by available quantity in underlying cells;
+each_country_at_least_one_location;True / False;If True, an additional representative start location is created for countries that would otherwise be missing;
 create_locations_for_islands;True / False;If True, island geometries are considered explicitly during Voronoi creation and location assignment;
 island_area_threshold;float;Minimum island area in km^2 for separate treatment during island handling;Used only if island creation is enabled

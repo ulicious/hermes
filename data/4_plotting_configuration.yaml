@@ -48,7 +48,6 @@ total_supply_costs_comparison_plot: [] # creates total supply costs plot for res
 profit_comparison_plot: [] # creates adjusted costs comparison plot (costs minus commodity price) for results in csv
 commodity_comparison_plot: []  # creates starting commodity plot for results in csv
 routes_comparison_plot: []  # creates routes plot for results in csv
-weighted_routes_comparison_plot: []  # creates routes plot for results in csv  # todo: not implemented
 supply_curve_comparison_plot:
   results: [] # name of results in results/; creates most used routes plot for results in csv
   countries: [] # list of countries which are used to derive supply costs to the destination in the results
@@ -157,15 +156,6 @@ nice_name_dictionary:
    JPN_all_ready: 'JPN-All-Retrofit'
    DE_all_ready_no_water: 'GER-All-Retrofit Water'
 
-transport_mean_styles:
-   Road: ''
-   Shipping: '.'
-   Pipeline_Gas: '/'
-   New_Pipeline_Gas: '//'
-   Pipeline_Liquid: '+'
-   New_Pipeline_Liquid: '.'
-   None: '/'
-
 transport_mean_line_styles:
    Road: 'dashed'
    Shipping: 'dotted'
@@ -176,14 +166,15 @@ transport_mean_line_styles:
    New_Pipeline_Liquid: '-'
    None: '/'
 
+# Plot order for route layers. Commodities listed first are plotted first; commodities not listed fall back to the end.
 plot_order_road: [Methane_Liquid, DBT, MCH, FTF, Hydrogen_Liquid, Methanol, Ammonia, Hydrogen_Gas]
 plot_order_shipping: [Methane_Liquid, DBT, MCH, FTF, Hydrogen_Liquid, Ammonia, Methanol]
 plot_order_pipeline: [FTF, Methane_Gas, Hydrogen_Gas]
-shipping_line_width_base: 0.5
-shipping_line_width_addition: 0.5
-shipping_overlap_dash_visible: 1
-shipping_overlap_dash_offsets: [0, 2, 4, 6, 8]
-shipping_unary_union_extension_length: 0.05
+
+# Shipping route style. When several commodities share the same route section, dotted dashes are offset by commodity order.
+shipping_line_width_base: 0.5  # Line width for all plotted shipping route sections.
+shipping_overlap_dash_visible: 1  # Length of the visible part of each shipping dash.
+shipping_overlap_dash_offsets: [0, 2, 4, 6, 8]  # Dash offsets for the 1st, 2nd, 3rd, ... overlapping shipping commodity.
 
 line_widths:
    Hydrogen_Gas:

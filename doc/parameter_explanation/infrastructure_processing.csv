@@ -1,9 +1,15 @@
 Assumption / Setting;Values;Explanation;Comment
-low_temp_heat_available_at_ports;True / False;Indicates if low-temperature heat is available at ports;"Affects conversion costs; value defined in cost_type"
-mid_temp_heat_available_at_ports;True / False;Indicates if medium-temperature heat is available at ports;"Affects conversion costs; value defined in cost_type"
-high_temp_heat_available_at_ports;True / False;Indicates if high-temperature heat is available at ports;"Affects conversion costs; value defined in cost_type"
-low_temp_heat_available_at_pipelines;True / False;Indicates if low-temperature heat is available at pipelines;"Affects conversion costs; value defined in cost_type"
-mid_temp_heat_available_at_pipelines;True / False;Indicates if medium-temperature heat is available at pipelines;"Affects conversion costs; value defined in cost_type"
-high_temp_heat_available_at_pipelines;True / False;Indicates if high-temperature heat is available at pipelines;"Affects conversion costs; value defined in cost_type"
+infrastructure_enforce_update_of_data;True / False;If True, infrastructure data is recalculated even if cached results exist;
+infrastructure_update_only_conversion_costs_and_efficiency;True / False;If True, existing infrastructure is reused and only conversion costs/efficiencies are updated;
+infrastructure_minimal_latitude;latitude;Sets minimal latitude for infrastructure processing;May be overwritten by the minimal example
+infrastructure_maximal_latitude;latitude;Sets maximal latitude for infrastructure processing;May be overwritten by the minimal example
+infrastructure_minimal_longitude;longitude;Sets minimal longitude for infrastructure processing;May be overwritten by the minimal example
+infrastructure_maximal_longitude;longitude;Sets maximal longitude for infrastructure processing;May be overwritten by the minimal example
+low_temp_heat_available_at_ports;True / False;Indicates if low-temperature heat is available at ports;Affects conversion costs when selected by cost_type
+mid_temp_heat_available_at_ports;True / False;Indicates if medium-temperature heat is available at ports;Affects conversion costs when selected by cost_type
+high_temp_heat_available_at_ports;True / False;Indicates if high-temperature heat is available at ports;Affects conversion costs when selected by cost_type
+low_temp_heat_available_at_pipelines;True / False;Indicates if low-temperature heat is available at pipelines;Affects conversion costs when selected by cost_type
+mid_temp_heat_available_at_pipelines;True / False;Indicates if medium-temperature heat is available at pipelines;Affects conversion costs when selected by cost_type
+high_temp_heat_available_at_pipelines;True / False;Indicates if high-temperature heat is available at pipelines;Affects conversion costs when selected by cost_type
 minimal_distance_between_pipeline_connection_points;integer;In meters. Maximum spacing between generated pipeline access points;May be overwritten by the minimal example
 gap_distance;integer;In meters. If two pipeline networks are closer than this threshold, they are connected during preprocessing;Used to bridge small topology gaps in the raw data

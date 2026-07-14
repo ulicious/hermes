@@ -41,6 +41,8 @@ DEFAULT_PLOT_BOUNDARIES = {
     'max_longitude': 180.0,
 }
 
+SHIPPING_UNARY_UNION_EXTENSION_LENGTH = 0.05
+
 DEFAULT_PLOT_COLORS = {
     'colorbar': {
         'over_color': '#8F3A5B',
@@ -95,10 +97,8 @@ DEFAULT_PLOT_COLORS = {
     ],
     'plot_order_pipeline': ['FTF', 'Methane_Gas', 'Hydrogen_Gas'],
     'shipping_line_width_base': 0.5,
-    'shipping_line_width_addition': 0.5,
     'shipping_overlap_dash_visible': 1,
     'shipping_overlap_dash_offsets': [0, 2, 4, 6, 8],
-    'shipping_unary_union_extension_length': 0.0,
 }
 
 
@@ -131,13 +131,8 @@ def get_plot_color_config(plotting_config=None):
         'plot_order_shipping': plotting_config.get('plot_order_shipping', []),
         'plot_order_pipeline': plotting_config.get('plot_order_pipeline', []),
         'shipping_line_width_base': plotting_config.get('shipping_line_width_base', 0.5),
-        'shipping_line_width_addition': plotting_config.get('shipping_line_width_addition', 0.5),
         'shipping_overlap_dash_visible': plotting_config.get('shipping_overlap_dash_visible', 1),
         'shipping_overlap_dash_offsets': plotting_config.get('shipping_overlap_dash_offsets', [0, 2, 4, 6, 8]),
-        'shipping_unary_union_extension_length': plotting_config.get(
-            'shipping_unary_union_extension_length',
-            plotting_config.get('shipping_near_intersection_tolerance', 0.0),
-        ),
     }
     return _merged_color_config(configured_colors)
 
@@ -385,9 +380,8 @@ def _get_shipping_unary_union_segments(shipping_routes, plot_colors):
     if not shipping_routes:
         return []
 
-    extension_length = plot_colors.get('shipping_unary_union_extension_length', 0.0)
     union_geometries = [
-        _extend_line_endpoints(geometry, extension_length)
+        _extend_line_endpoints(geometry, SHIPPING_UNARY_UNION_EXTENSION_LENGTH)
         for _, geometry in shipping_routes
     ]
     line_network = MultiLineString(union_geometries)

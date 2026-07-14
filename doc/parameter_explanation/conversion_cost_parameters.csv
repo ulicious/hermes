@@ -1,4 +1,5 @@
 Assumption / Setting;type;Unit;Explanation
+uniform_costs;dictionary;-;Fallback prices and economic assumptions used when cost_type selects uniform costs
 Hydrogen_Gas;float;EUR/MWh_H2;Hydrogen cost
 Electricity;float;EUR/MWh_el;Electricity cost
 CO2;float;EUR/t_CO2;CO2 cost

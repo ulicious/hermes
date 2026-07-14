@@ -1,10 +1,20 @@
 Assumption / Setting;Values;Explanation
 infrastructure_plot;True / False;plots infrastructure in a single plot
+start_locations_infrastructure_destination_plot;True / False;plots start locations, infrastructure and destination without optimization results
+water_availability_plot;True / False;plots water availability in a single plot
 production_costs_plot;list with result names;creates h2 production costs plot for results in csv
 conversion_costs_plot;list with result names;creates conversion costs plot for results in csv
 transport_costs_plot;list with result names;creates transport costs plot for results in csv
-total_supply_costs_plot;list with result names;creates total_supply costs plot for results in csv
-all_costs_plot;list with result names;creates plot for results in csv containing h2 production, conversion, transport and total supply costs
+total_supply_costs_plot;list with result names;creates total supply costs plot for results in csv
+profit_plot;list with result names;creates profit/adjusted-cost plot for results in csv
+all_costs_plot;list with result names;creates plot with production, conversion, transport and total supply costs
 commodity_plot;list with result names;creates starting commodity plot for results in csv
-full_plot;list with result names;creates 2x2 plot for results in csv (h2 production costs, total supply costs, commodity, and infrastructure plot)
+efficiency_plot;list with result names;creates efficiency plot for results in csv
+full_plot;list with result names;creates 2x2 plot for production costs, total supply costs, commodity and infrastructure
+commodity_transport_mean_plot;list with result names;creates commodity transport-mean histogram plot
 routes_plot;list with result names;creates routes plot for results in csv
+sankey_plot;list with result names;creates sankey diagram for ranked routes
+weighted_routes_plot;list with result names;creates most-used/weighted routes plot for results in csv
+compare_costs_and_quantities_plot;list with result names;clusters total supply costs in cost categories and shows routes and quantities
+supply_curve_plot;dictionary with results and countries;creates supply curve plots for selected result/country combinations
+solving_time_plot;nested lists of results;creates solving-time comparison plots

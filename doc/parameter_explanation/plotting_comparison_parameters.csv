@@ -1,7 +1,9 @@
 Assumption / Setting;Values;Explanation;Comment
-production_costs_comparison_plot; nested lists of results; create hydrogen production costs plot for results in csv; only two or four results are supported per list in nested list
-conversion_costs_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
-transport_costs_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
-total_supply_costs_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
-commodity_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
-routes_comparison_plot; nested lists of results; create plot for each list in nested list and fills it with result in list; only two or four results are supported per list in nested list
+conversion_costs_comparison_plot;nested lists of results;creates conversion cost comparison plots;Only two or four results are supported per nested list
+transport_costs_comparison_plot;nested lists of results;creates transport cost comparison plots;Only two or four results are supported per nested list
+total_supply_costs_comparison_plot;nested lists of results;creates total supply cost comparison plots;Only two or four results are supported per nested list
+profit_comparison_plot;nested lists of results;creates profit/adjusted-cost comparison plots;Only two or four results are supported per nested list
+commodity_comparison_plot;nested lists of results;creates commodity comparison plots;Only two or four results are supported per nested list
+routes_comparison_plot;nested lists of results;creates route comparison plots;Only two or four results are supported per nested list
+supply_curve_comparison_plot;dictionary with results and countries;creates supply curve comparison plots;Uses nested result lists and selected countries
+matched_supply_routes_plot;nested lists of results;matches supply routes across results and plots the cheapest attached routes;Used for direct route matching comparisons
