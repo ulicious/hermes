@@ -183,6 +183,7 @@ shipping_line_width_base: 0.5
 shipping_line_width_addition: 0.5
 shipping_overlap_dash_visible: 1
 shipping_overlap_dash_offsets: [0, 2, 4, 6, 8]
+debug_shipping_unary_union_plot: true
 
 line_widths:
    Hydrogen_Gas:

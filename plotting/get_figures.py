@@ -97,6 +97,7 @@ DEFAULT_PLOT_COLORS = {
     'shipping_line_width_addition': 0.5,
     'shipping_overlap_dash_visible': 1,
     'shipping_overlap_dash_offsets': [0, 2, 4, 6, 8],
+    'debug_shipping_unary_union_plot': False,
 }
 
 
@@ -132,6 +133,7 @@ def get_plot_color_config(plotting_config=None):
         'shipping_line_width_addition': plotting_config.get('shipping_line_width_addition', 0.5),
         'shipping_overlap_dash_visible': plotting_config.get('shipping_overlap_dash_visible', 1),
         'shipping_overlap_dash_offsets': plotting_config.get('shipping_overlap_dash_offsets', [0, 2, 4, 6, 8]),
+        'debug_shipping_unary_union_plot': plotting_config.get('debug_shipping_unary_union_plot', False),
     }
     return _merged_color_config(configured_colors)
 
@@ -401,6 +403,62 @@ def _build_shipping_plot_segments(line_networks, shipping_keys, order_plotting, 
             })
 
     return shipping_plot_segments
+
+
+def _save_shipping_unary_union_debug_plot(line_networks, shipping_keys, boundaries,
+                                          path_saving, fig_title, plot_colors,
+                                          width=15.69, height=9):
+    if not plot_colors.get('debug_shipping_unary_union_plot') or not path_saving:
+        return
+
+    shipping_routes = []
+    for key in shipping_keys:
+        for geometry in line_networks[key]:
+            shipping_routes.append(geometry)
+
+    if not shipping_routes:
+        return
+
+    split_network = unary_union(shipping_routes)
+    network_segments = _flatten_line_geometries(split_network)
+    if not network_segments:
+        return
+
+    centimeter_to_inch = 1 / 2.54
+    fig, ax = plt.subplots(figsize=(width * centimeter_to_inch, height * centimeter_to_inch))
+
+    map_plot = _load_plot_world()
+    antarctica = map_plot[map_plot['continent'] == 'Antarctica'].index[0]
+    map_plot.drop([antarctica], inplace=True)
+    map_plot = gpd.GeoDataFrame(map_plot['geometry'], columns=['geometry'])
+    map_plot.plot(color=plot_colors['map_colors']['land'], ax=ax)
+
+    cmap = mpl.colormaps['hsv']
+    denominator = max(len(network_segments), 1)
+    for n, segment in enumerate(network_segments):
+        color = cmap(n / denominator)
+        gpd.GeoSeries([segment]).plot(color=color, linewidth=1.2, ax=ax)
+
+    ax.set_ylabel('')
+    ax.set_xlabel('')
+    ax.set_yticklabels([])
+    ax.set_xticklabels([])
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_ylim(boundaries['min_latitude'], boundaries['max_latitude'])
+    ax.set_xlim(boundaries['min_longitude'], boundaries['max_longitude'])
+
+    fig.tight_layout()
+    fig.savefig(
+        safe_output_path(path_saving, fig_title + '_shipping_unary_union_debug.png'),
+        bbox_inches='tight',
+        dpi=600,
+    )
+    fig.savefig(
+        safe_output_path(path_saving, fig_title + '_shipping_unary_union_debug.svg'),
+        bbox_inches='tight',
+    )
+    plt.close(fig)
 
 
 def get_result_plot_boundaries(data=None, destination_location=None, route_geometries=None,
@@ -805,6 +863,16 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
         shipping_keys,
         order_plotting,
         plot_colors,
+    )
+    _save_shipping_unary_union_debug_plot(
+        line_networks,
+        shipping_keys,
+        boundaries,
+        path_saving,
+        fig_title,
+        plot_colors,
+        width=width,
+        height=height,
     )
 
     all_networks = []
