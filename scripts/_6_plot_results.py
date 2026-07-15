@@ -537,11 +537,16 @@ for r in compare_costs_and_quantities_results:
     axes = [ax1, ax2, ax3, ax4, ax5, ax6]
     # weighted_routes = weighted_routes.iloc[0:1000]
     colors = plot_colors['category_colors']['cost_categories']
+    weighted_routes['commodity'] = (
+        weighted_routes['commodity'].astype(str)
+        .str.replace('€/MWh', '€ MWh⁻¹', regex=False)
+        .str.replace('€ / MWh', '€ MWh⁻¹', regex=False)
+    )
     max_quantity = weighted_routes['quantity'].max()
     min_quantity = weighted_routes['quantity'].min()
 
-    range_order = ['50 to 100 €/MWh', '100 to 150 €/MWh', '150 to 200 €/MWh', '200 to 250 €/MWh', '250 to 300 €/MWh',
-                   '> 300 €/MWh']
+    range_order = ['50 to 100 € MWh⁻¹', '100 to 150 € MWh⁻¹', '150 to 200 € MWh⁻¹',
+                   '200 to 250 € MWh⁻¹', '250 to 300 € MWh⁻¹', '> 300 € MWh⁻¹']
     for n, commodity in enumerate(range_order):
 
         ax = axes[n]

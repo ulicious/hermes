@@ -1495,7 +1495,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
     col = data[column].map(norm).map(cmap_chosen)
 
     if 'costs' in column:
-        unit = '€ / MWh'
+        unit = '€ MWh⁻¹'
     else:
         unit = '%'
 
@@ -2211,7 +2211,7 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
         ax.set_ylim([0, bottom.max()])
 
     if current_ax is None:
-        ax.set_ylabel('Costs [€ / MWh]', fontdict={'fontsize': 9})
+        ax.set_ylabel('Costs [€ MWh⁻¹]', fontdict={'fontsize': 9})
     else:
         if current_ax in [1, 3]:
             ax.set_yticklabels([])

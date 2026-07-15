@@ -1180,7 +1180,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
 
             cbar_ax = fig.add_axes((0.05, legend_height_relative - height, 0.9, height))  # [left, bottom, width, height]
             cbar = fig.colorbar(sm, cax=cbar_ax, orientation='horizontal', extend='max')
-            cbar.set_label('€ / MWh', rotation=0, labelpad=5)
+            cbar.set_label('€ MWh⁻¹', rotation=0, labelpad=5)
 
             ticks = np.asarray(cbar.get_ticks(), dtype=float)
             vmin, vmax = norm.vmin, norm.vmax
@@ -1271,7 +1271,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                 ncols = 3
 
             if len_comp == 2:
-                fig.text(-0.01, 0.725, 'Costs [€ / MWh]', va='center', ha='left', fontdict={'fontsize': 9}, rotation=90)  # 46
+                fig.text(-0.01, 0.725, 'Costs [€ MWh⁻¹]', va='center', ha='left', fontdict={'fontsize': 9}, rotation=90)  # 46
 
                 fig.legend(handles=cost_handles, fontsize=9, bbox_to_anchor=(0.475, 0.365), ncols=3,
                            loc='upper center', frameon=False)
@@ -1291,8 +1291,8 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                 )
             else:
 
-                fig.text(-0.01, 0.455, 'Costs [€ / MWh]', va='center', ha='left', fontdict={'fontsize': 9}, rotation=90) # 46
-                fig.text(-0.01, 0.82, 'Costs [€ / MWh]', va='center', ha='left', fontdict={'fontsize': 9}, rotation=90) # oben 815
+                fig.text(-0.01, 0.455, 'Costs [€ MWh⁻¹]', va='center', ha='left', fontdict={'fontsize': 9}, rotation=90) # 46
+                fig.text(-0.01, 0.82, 'Costs [€ MWh⁻¹]', va='center', ha='left', fontdict={'fontsize': 9}, rotation=90) # oben 815
 
                 fig.legend(handles=cost_handles, fontsize=9, bbox_to_anchor=(0.475, 0.2), ncols=3,
                            loc='upper center', frameon=False)
@@ -1315,7 +1315,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
 
             plt.subplots_adjust(left=0.2)
 
-            # fig.set_ylabel('€ / MWh', fontdict={'fontsize': 9})
+            # fig.set_ylabel('€ MWh⁻¹', fontdict={'fontsize': 9})
             # fig.set_xlabel('TWh', fontdict={'fontsize': 9})
 
         comparison_filename = str(n) + '_' + saving_name + '_comparison'
