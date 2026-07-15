@@ -307,12 +307,12 @@ for folder in results_to_process:
     if folder in config_file_plotting['categorical_routes']:
         i = 0
         for i in range(50, 251, 50):
-            category = str(i) + ' to ' + str(i + 50) + ' € MWh⁻¹'
+            category = str(i) + ' to ' + str(i + 50) + ' € MWh$^{-1}$'
             affected_index = data[(data['costs'] > i) & (data['costs'] <= i + 50)].index
             data.loc[affected_index, 'commodity'] = category
 
         affected_index = data[data['costs'] > i + 50].index
-        data.loc[affected_index, 'commodity'] = '> ' + str(i + 50) + ' € MWh⁻¹'
+        data.loc[affected_index, 'commodity'] = '> ' + str(i + 50) + ' € MWh$^{-1}$'
 
         create_weighted_routing_data_script(data, complete_infrastructure, infrastructure_data, path_processed_results,
                                             folder, column_to_sort='commodity')
