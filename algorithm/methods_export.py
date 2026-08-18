@@ -273,7 +273,7 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches,
                                           configuration, local_benchmarks):
     """Create road/new-pipeline branches with a complete-local-benchmark lower bound."""
     if domestic_infrastructure.empty or branches.empty:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), 0
 
     distances = calc_distance_list_to_list(
         domestic_infrastructure['latitude'], domestic_infrastructure['longitude'],
