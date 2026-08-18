@@ -7,6 +7,7 @@ import pandas as pd
 
 from algorithm.methods_algorithm import (drop_branch_comparison_columns,
                                           postprocessing_branches,
+                                          remove_duplicate_branches,
                                           update_branch_comparison_index)
 from algorithm.methods_geographic import calc_distance_list_to_list
 from algorithm.object_commodity import create_commodity_objects
@@ -395,19 +396,43 @@ def process_export_infrastructure_branches(data, branches, complete_infrastructu
     return pd.DataFrame(results)
 
 
-def split_export_branches(branches, complete_infrastructure, start_country):
-    """Separate branches that first reached infrastructure in another country."""
+def preselect_export_infrastructure_branches(data, branches, complete_infrastructure,
+                                             configuration, number_probe_branches=5):
+    """Remove pipeline entries dominated by cheaper entry plus inner-network transport."""
     if branches.empty:
         return branches.copy(), branches.copy()
-    countries = complete_infrastructure['country'].map(normalize_country)
-    branch_countries = branches['current_node'].map(countries)
-    exported = branch_countries.notna() & (branch_countries != normalize_country(start_country))
-    active = branches.loc[~exported].copy()
-    completed = branches.loc[exported].copy()
-    if not completed.empty:
-        completed['export_country'] = branch_countries.loc[completed.index]
-        completed['status'] = 'export_infrastructure_reached'
-    return active, completed
+
+    pipeline_branches = branches[
+        branches['current_transport_mean'].isin(['Pipeline_Gas', 'Pipeline_Liquid'])
+        & branches['graph'].notna()
+    ]
+    probe_indices = []
+    for _, group in pipeline_branches.groupby(['graph', 'current_commodity'], sort=False):
+        probe_indices.extend(
+            group['current_total_costs'].nsmallest(number_probe_branches).index.tolist())
+    if not probe_indices:
+        return branches.copy(), pd.DataFrame()
+
+    probes = process_export_infrastructure_branches(
+        data, branches.loc[probe_indices].copy(), complete_infrastructure, configuration)
+    if probes.empty:
+        return branches.copy(), pd.DataFrame()
+
+    # Probe branches are comparison aids only. A tiny surcharge makes a direct
+    # entry win when both alternatives are numerically equal.
+    probes = probes.copy()
+    probes['current_total_costs'] = probes['current_total_costs'] * 1.00001
+    probes.index = ['Z' + str(i) for i in range(len(probes))]
+    combined = pd.concat([branches, probes], ignore_index=False)
+    combined.sort_values('current_total_costs', inplace=True, kind='stable')
+    combined = remove_duplicate_branches(combined)
+
+    surviving_direct_indices = branches.index.intersection(combined.index)
+    surviving = branches.loc[surviving_direct_indices].copy()
+    dominated = branches.drop(index=surviving_direct_indices).copy()
+    if not dominated.empty:
+        dominated['status'] = 'pipeline_entry_dominated'
+    return surviving, dominated
 
 
 def export_branch_snapshot(branches, path_results, location_index, iteration, stage):

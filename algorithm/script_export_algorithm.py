@@ -19,10 +19,10 @@ from algorithm.methods_export import (apply_export_conversion,
                                       get_start_country,
                                       prepare_export_commodities,
                                       prepare_export_infrastructure_branches,
+                                      preselect_export_infrastructure_branches,
                                       process_export_infrastructure_branches,
                                       process_export_out_tolerance_branches,
-                                      process_export_zero_distance_branches,
-                                      split_export_branches)
+                                      process_export_zero_distance_branches)
 from algorithm.methods_geographic import update_branch_continents
 from algorithm.tracking import AlgorithmTracker, branch_count
 from data_processing.configuration import load_technology_data
@@ -43,7 +43,7 @@ def _attach_transport_properties(branches, available_transport_means):
 def _complete_generated_branches(branches, previous_branches, branch_number,
                                  data, complete_infrastructure):
     if branches.empty:
-        return branches, pd.DataFrame(), branch_number
+        return branches, branch_number
     branches = branches.copy()
     branches['branch_index'] = ['S' + str(branch_number + i) for i in range(len(branches))]
     branches.index = branches['branch_index']
@@ -52,9 +52,7 @@ def _complete_generated_branches(branches, previous_branches, branch_number,
     branches['current_conversion_costs'] = 0
     branches = update_branch_continents(branches, complete_infrastructure, world=data['world'])
     branches = postprocessing_branches(branches, previous_branches)
-    active, completed = split_export_branches(
-        branches, complete_infrastructure, data['export_start_country'])
-    return active, completed, branch_number
+    return branches, branch_number
 
 
 def _prepare_location(location_index, location_data, data, config_file, configuration):
@@ -121,8 +119,7 @@ def run_export_algorithm(args):
         export_branch_snapshot(branches, configuration['path_results'], location_index, 0, 'no_potential')
         return None
 
-    completed_batches = []
-    benchmark_pruned_batches = []
+    pruned_batches = []
     local_benchmarks = {}
     export_branch_snapshot(branches, configuration['path_results'], location_index, 0, 'initial')
     iteration = 0
@@ -139,7 +136,7 @@ def run_export_algorithm(args):
             branches, pruned, local_benchmarks = apply_export_local_benchmark(
                 branches, local_benchmarks)
             if not pruned.empty:
-                benchmark_pruned_batches.append(pruned)
+                pruned_batches.append(pruned)
         if branches.empty:
             break
 
@@ -148,64 +145,55 @@ def run_export_algorithm(args):
             ['Road', 'New_Pipeline_Gas', 'New_Pipeline_Liquid'])
         infrastructure_inputs = prepare_export_infrastructure_branches(
             branches[arrived_by_approach], complete_infrastructure)
+        infrastructure_inputs, dominated_entries = preselect_export_infrastructure_branches(
+            data, infrastructure_inputs, complete_infrastructure, configuration)
+        if not dominated_entries.empty:
+            pruned_batches.append(dominated_entries)
         approach_inputs = branches[~arrived_by_approach]
 
         infrastructure_options = process_export_infrastructure_branches(
             data, infrastructure_inputs, complete_infrastructure, configuration)
-        infrastructure_options, completed_infrastructure, branch_number = _complete_generated_branches(
+        infrastructure_options, branch_number = _complete_generated_branches(
             infrastructure_options, infrastructure_inputs, branch_number, data, complete_infrastructure)
         approach_options = process_export_out_tolerance_branches(
             complete_infrastructure, approach_inputs, configuration)
-        approach_options, completed_approaches, branch_number = _complete_generated_branches(
+        approach_options, branch_number = _complete_generated_branches(
             approach_options, approach_inputs, branch_number, data, complete_infrastructure)
         zero_options = process_export_zero_distance_branches(
             data, branches, complete_infrastructure)
-        zero_options, completed_zero, branch_number = _complete_generated_branches(
+        zero_options, branch_number = _complete_generated_branches(
             zero_options, branches, branch_number, data, complete_infrastructure)
 
-        completed_batches.extend([
-            frame for frame in (completed_infrastructure, completed_approaches, completed_zero)
-            if not frame.empty])
         active_frames = [frame for frame in (infrastructure_options, approach_options, zero_options)
                          if not frame.empty]
         branches = pd.concat(active_frames, ignore_index=False) if active_frames else pd.DataFrame()
         branches, pruned, local_benchmarks = apply_export_local_benchmark(
             branches, local_benchmarks)
         if not pruned.empty:
-            benchmark_pruned_batches.append(pruned)
+            pruned_batches.append(pruned)
         export_branch_snapshot(branches, configuration['path_results'], location_index,
                                iteration, 'active')
-        completed = (pd.concat(completed_batches, ignore_index=False)
-                     if completed_batches else pd.DataFrame())
-        export_branch_snapshot(completed, configuration['path_results'], location_index,
-                               iteration, 'completed')
-        pruned_branches = (pd.concat(benchmark_pruned_batches, ignore_index=False)
-                           if benchmark_pruned_batches else pd.DataFrame())
+        pruned_branches = (pd.concat(pruned_batches, ignore_index=False)
+                           if pruned_batches else pd.DataFrame())
         export_branch_snapshot(pruned_branches, configuration['path_results'], location_index,
-                               iteration, 'local_benchmark_pruned')
+                               iteration, 'pruned')
         print(str(location_index) + '-' + str(iteration)
               + ': Active branches: ' + str(branch_count(branches))
-              + ' | Export branches: ' + str(branch_count(completed))
               + ' | Created: ' + str(branch_number)
               + ' | Iteration [s]: ' + str(round(time.time() - iteration_started, 2)))
         iteration += 1
 
-    completed = (pd.concat(completed_batches, ignore_index=False)
-                 if completed_batches else pd.DataFrame())
-    export_branch_snapshot(completed, configuration['path_results'], location_index,
-                           iteration, 'all_completed')
-    all_pruned = (pd.concat(benchmark_pruned_batches, ignore_index=False)
-                  if benchmark_pruned_batches else pd.DataFrame())
+    all_pruned = (pd.concat(pruned_batches, ignore_index=False)
+                  if pruned_batches else pd.DataFrame())
     export_branch_snapshot(all_pruned, configuration['path_results'], location_index,
-                           iteration, 'all_local_benchmark_pruned')
+                           iteration, 'all_pruned')
     marker = os.path.join(configuration['path_results'], 'export_infrastructure_branches',
                           str(location_index), '_complete')
     with open(marker, 'w', encoding='utf-8') as handle:
-        handle.write(str(len(completed)))
+        handle.write('complete')
     tracker.event(phase='location', method='run_export_algorithm', event='end',
                   runtime_s=time.time() - started,
-                  details={'total_branches_created': branch_number,
-                           'export_branches': len(completed)})
+                  details={'total_branches_created': branch_number})
     print(str(location_index) + ': finished export enumeration in '
           + str(math.ceil((time.time() - started) / 60)) + ' minutes.')
     gc.collect()
