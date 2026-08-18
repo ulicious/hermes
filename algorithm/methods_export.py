@@ -198,6 +198,8 @@ def apply_export_local_benchmark(branches, local_benchmarks):
                 'current_total_costs': costs,
                 'branch_index': branch['branch_index'],
                 'all_previous_branches': list(branch['all_previous_branches']),
+                'branch_data': branch.drop(
+                    labels=['comparison_index', '_road_new_allowed_next'], errors='ignore').copy(),
             }
         else:
             remove.append(branch_index)
@@ -535,6 +537,19 @@ def export_local_benchmark_snapshot(local_benchmarks, path_results, location_ind
             ['current_node', 'current_commodity', 'road_new_allowed_next'], inplace=True)
     return export_branch_snapshot(
         snapshot, path_results, location_index, iteration, 'local_benchmarks')
+
+
+def export_final_local_benchmark_branches(local_benchmarks, path_results, location_index, iteration):
+    """Write only the complete branches currently setting local benchmarks."""
+    rows = [benchmark['branch_data'] for benchmark in local_benchmarks.values()
+            if 'branch_data' in benchmark]
+    branches = pd.DataFrame(rows)
+    if not branches.empty and 'branch_index' in branches.columns:
+        branches.index = branches['branch_index'].tolist()
+        branches.index.name = None
+    return export_branch_snapshot(
+        branches, path_results, location_index, iteration,
+        'final_local_benchmark_branches')
 
 
 def apply_export_conversion(branches, data, branch_number):

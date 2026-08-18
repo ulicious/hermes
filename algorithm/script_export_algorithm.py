@@ -14,6 +14,7 @@ from algorithm.methods_export import (apply_export_conversion,
                                       attach_infrastructure_countries,
                                       create_export_branches_at_start,
                                       export_branch_snapshot,
+                                      export_final_local_benchmark_branches,
                                       export_local_benchmark_snapshot,
                                       get_complete_export_infrastructure,
                                       get_export_infrastructure_scope,
@@ -121,7 +122,6 @@ def run_export_algorithm(args):
         export_branch_snapshot(branches, configuration['path_results'], location_index, 0, 'no_potential')
         return None
 
-    pruned_batches = []
     local_benchmarks = {}
     superseded_branches = set()
     export_branch_snapshot(branches, configuration['path_results'], location_index, 0, 'initial')
@@ -138,14 +138,10 @@ def run_export_algorithm(args):
             branches = pd.concat([converted, unchanged], ignore_index=False)
             branches, pruned, local_benchmarks, newly_superseded = apply_export_local_benchmark(
                 branches, local_benchmarks)
-            if not pruned.empty:
-                pruned_batches.append(pruned)
             superseded_branches.update(newly_superseded)
             branches, descendants, local_benchmarks, superseded_branches = \
                 remove_superseded_branch_descendants(
                     branches, local_benchmarks, superseded_branches)
-            if not descendants.empty:
-                pruned_batches.append(descendants)
         if branches.empty:
             break
 
@@ -156,8 +152,6 @@ def run_export_algorithm(args):
             branches[arrived_by_approach], complete_infrastructure)
         infrastructure_inputs, dominated_entries = preselect_export_infrastructure_branches(
             data, infrastructure_inputs, complete_infrastructure, configuration)
-        if not dominated_entries.empty:
-            pruned_batches.append(dominated_entries)
         approach_inputs = branches[~arrived_by_approach]
 
         infrastructure_options = process_export_infrastructure_branches(
@@ -166,8 +160,6 @@ def run_export_algorithm(args):
             infrastructure_options, infrastructure_inputs, branch_number, data, complete_infrastructure)
         approach_options, minimal_distance_pruned = process_export_out_tolerance_branches(
             complete_infrastructure, approach_inputs, configuration, local_benchmarks)
-        if not minimal_distance_pruned.empty:
-            pruned_batches.append(minimal_distance_pruned)
         approach_options, branch_number = _complete_generated_branches(
             approach_options, approach_inputs, branch_number, data, complete_infrastructure)
         zero_options = process_export_zero_distance_branches(
@@ -180,20 +172,12 @@ def run_export_algorithm(args):
         branches = pd.concat(active_frames, ignore_index=False) if active_frames else pd.DataFrame()
         branches, pruned, local_benchmarks, newly_superseded = apply_export_local_benchmark(
             branches, local_benchmarks)
-        if not pruned.empty:
-            pruned_batches.append(pruned)
         superseded_branches.update(newly_superseded)
         branches, descendants, local_benchmarks, superseded_branches = \
             remove_superseded_branch_descendants(
                 branches, local_benchmarks, superseded_branches)
-        if not descendants.empty:
-            pruned_batches.append(descendants)
         export_branch_snapshot(branches, configuration['path_results'], location_index,
                                iteration, 'active')
-        pruned_branches = (pd.concat(pruned_batches, ignore_index=False)
-                           if pruned_batches else pd.DataFrame())
-        export_branch_snapshot(pruned_branches, configuration['path_results'], location_index,
-                               iteration, 'pruned')
         export_local_benchmark_snapshot(
             local_benchmarks, configuration['path_results'], location_index, iteration)
         print(str(location_index) + '-' + str(iteration)
@@ -202,10 +186,8 @@ def run_export_algorithm(args):
               + ' | Iteration [s]: ' + str(round(time.time() - iteration_started, 2)))
         iteration += 1
 
-    all_pruned = (pd.concat(pruned_batches, ignore_index=False)
-                  if pruned_batches else pd.DataFrame())
-    export_branch_snapshot(all_pruned, configuration['path_results'], location_index,
-                           iteration, 'all_pruned')
+    export_final_local_benchmark_branches(
+        local_benchmarks, configuration['path_results'], location_index, iteration)
     marker = os.path.join(configuration['path_results'], 'export_infrastructure_branches',
                           str(location_index), '_complete')
     with open(marker, 'w', encoding='utf-8') as handle:
