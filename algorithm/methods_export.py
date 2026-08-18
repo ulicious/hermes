@@ -274,6 +274,37 @@ def apply_complete_commodity_benchmark(branches, local_benchmarks, infrastructur
     return surviving, terminated
 
 
+def prefilter_export_branch_candidates(candidates, local_benchmarks, infrastructure_nodes):
+    """Apply state dominance before branch IDs and histories are materialized."""
+    if candidates.empty:
+        return candidates.copy(), candidates.copy()
+
+    assessed = update_branch_comparison_index(candidates.copy())
+    benchmarks = get_complete_commodity_benchmarks(
+        local_benchmarks, infrastructure_nodes, assessed['current_commodity'].unique())
+    commodity_limits = assessed['current_commodity'].map(benchmarks)
+    above_commodity_limit = (commodity_limits.notna()
+                             & (assessed['current_total_costs'] > commodity_limits))
+
+    existing_limits = assessed['comparison_index'].map(
+        lambda state: (local_benchmarks[state]['current_total_costs']
+                       if state in local_benchmarks else np.nan))
+    not_better_than_local = (existing_limits.notna()
+                             & (assessed['current_total_costs'] >= existing_limits))
+    rejected_mask = above_commodity_limit | not_better_than_local
+    rejected = assessed.loc[rejected_mask].copy()
+    eligible = assessed.loc[~rejected_mask].copy()
+
+    if not eligible.empty:
+        eligible.sort_values('current_total_costs', inplace=True, kind='stable')
+        duplicate_state = eligible.duplicated(subset=['comparison_index'], keep='first')
+        rejected = pd.concat([rejected, eligible.loc[duplicate_state]], ignore_index=False)
+        eligible = eligible.loc[~duplicate_state].copy()
+
+    return (drop_branch_comparison_columns(eligible),
+            drop_branch_comparison_columns(rejected))
+
+
 def process_export_out_tolerance_branches(domestic_infrastructure, branches,
                                           configuration, local_benchmarks):
     """Create road/new-pipeline branches with a complete-local-benchmark lower bound."""
@@ -588,8 +619,9 @@ def export_final_local_benchmark_branches(local_benchmarks, path_results, locati
         'final_local_benchmark_branches')
 
 
-def apply_export_conversion(branches, data, branch_number):
-    """Create every technically feasible conversion branch."""
+def apply_export_conversion(branches, data, branch_number, local_benchmarks,
+                            infrastructure_nodes):
+    """Create only conversion branches that can improve a benchmark state."""
     if branches.empty:
         return branches.copy(), branch_number
     rows = []
@@ -600,16 +632,13 @@ def apply_export_conversion(branches, data, branch_number):
         conversion_options = start.get_conversion_options()
         for end_name, end in commodities.items():
             if end_name == start_name:
-                conversion_costs = 0
-                efficiency = 1
-            elif not conversion_options[end_name]:
                 continue
-            else:
-                nodes = pd.Series([branch['current_node']], index=[previous_branch])
-                conversion_costs = start.get_conversion_costs_specific_commodity(nodes, end_name).iloc[0]
-                efficiency = start.get_conversion_efficiency_specific_commodity(nodes, end_name).iloc[0]
-            total_costs = ((branch['current_total_costs'] + conversion_costs) / efficiency
-                           if end_name != start_name else branch['current_total_costs'])
+            if not conversion_options[end_name]:
+                continue
+            nodes = pd.Series([branch['current_node']], index=[previous_branch])
+            conversion_costs = start.get_conversion_costs_specific_commodity(nodes, end_name).iloc[0]
+            efficiency = start.get_conversion_efficiency_specific_commodity(nodes, end_name).iloc[0]
+            total_costs = (branch['current_total_costs'] + conversion_costs) / efficiency
             row = branch.copy()
             row['previous_branch'] = previous_branch
             row['current_commodity'] = end_name
@@ -620,19 +649,24 @@ def apply_export_conversion(branches, data, branch_number):
             row['current_distance'] = 0
             row['taken_route'] = (start_name, end_name, efficiency)
             row['total_efficiency'] = branch['total_efficiency'] * efficiency
-            row['branch_index'] = 'S' + str(branch_number + len(rows))
             rows.append(row)
-    converted = pd.DataFrame(rows)
-    if converted.empty:
-        return converted, branch_number
-    inherited_columns = [column for column in converted.columns
+    candidates = pd.DataFrame(rows)
+    if candidates.empty:
+        return branches.copy(), branch_number
+    inherited_columns = [column for column in candidates.columns
                          if column.startswith('all_previous_')]
     inherited_columns += [column for column in
                           ('taken_routes', 'starting_latitude', 'starting_longitude')
-                          if column in converted.columns]
-    converted.drop(columns=inherited_columns, inplace=True)
+                          if column in candidates.columns]
+    candidates.drop(columns=inherited_columns, inplace=True)
+    candidates, _ = prefilter_export_branch_candidates(
+        candidates, local_benchmarks, infrastructure_nodes)
+    if candidates.empty:
+        return branches.copy(), branch_number
+    candidates['branch_index'] = ['S' + str(branch_number + i) for i in range(len(candidates))]
+    converted = candidates
     converted.index = converted['branch_index']
     converted.index.name = None
     branch_number += len(converted)
     converted = postprocessing_branches(converted, branches)
-    return converted, branch_number
+    return pd.concat([converted, branches], ignore_index=False), branch_number

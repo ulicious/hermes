@@ -20,6 +20,7 @@ from algorithm.methods_export import (apply_export_conversion,
                                       get_complete_export_infrastructure,
                                       get_export_infrastructure_scope,
                                       get_start_country,
+                                      prefilter_export_branch_candidates,
                                       prepare_export_commodities,
                                       prepare_export_infrastructure_branches,
                                       preselect_export_infrastructure_branches,
@@ -27,7 +28,6 @@ from algorithm.methods_export import (apply_export_conversion,
                                       process_export_out_tolerance_branches,
                                       process_export_zero_distance_branches)
 from algorithm.methods_export import remove_superseded_branch_descendants
-from algorithm.methods_geographic import update_branch_continents
 from algorithm.tracking import AlgorithmTracker, branch_count
 from data_processing.configuration import load_technology_data
 from data_processing.helpers_attach_costs import (
@@ -69,8 +69,7 @@ def _describe_export_infrastructure(complete_infrastructure):
     return (infrastructure_total, ', '.join(network_parts), ', '.join(type_parts))
 
 
-def _complete_generated_branches(branches, previous_branches, branch_number,
-                                 data, complete_infrastructure):
+def _complete_generated_branches(branches, previous_branches, branch_number):
     if branches.empty:
         return branches, branch_number
     branches = branches.copy()
@@ -79,7 +78,6 @@ def _complete_generated_branches(branches, previous_branches, branch_number,
     branches.index.name = None
     branch_number += len(branches)
     branches['current_conversion_costs'] = 0
-    branches = update_branch_continents(branches, complete_infrastructure, world=data['world'])
     branches = postprocessing_branches(branches, previous_branches)
     return branches, branch_number
 
@@ -174,7 +172,9 @@ def run_export_algorithm(args):
             unchanged = branches[~branches['current_node'].isin(possible_nodes)]
             with tracker.time_block(iteration=iteration, phase='conversion',
                                     method='apply_export_conversion', event='runtime'):
-                converted, branch_number = apply_export_conversion(convertible, data, branch_number)
+                converted, branch_number = apply_export_conversion(
+                    convertible, data, branch_number, local_benchmarks,
+                    complete_infrastructure.index)
                 branches = pd.concat([converted, unchanged], ignore_index=False)
             with tracker.time_block(iteration=iteration, phase='benchmark',
                                     method='apply_export_local_benchmark_pre_routing', event='runtime'):
@@ -221,26 +221,30 @@ def run_export_algorithm(args):
                                 method='process_export_infrastructure_branches', event='runtime'):
             infrastructure_options = process_export_infrastructure_branches(
                 data, infrastructure_inputs, complete_infrastructure, configuration)
-            infrastructure_options, branch_number = _complete_generated_branches(
-                infrastructure_options, infrastructure_inputs, branch_number, data, complete_infrastructure)
         with tracker.time_block(iteration=iteration, phase='routing',
                                 method='process_export_out_tolerance_branches', event='runtime'):
             approach_options, minimal_distance_pruned = process_export_out_tolerance_branches(
                 complete_infrastructure, approach_inputs, configuration, local_benchmarks)
-            approach_options, branch_number = _complete_generated_branches(
-                approach_options, approach_inputs, branch_number, data, complete_infrastructure)
         with tracker.time_block(iteration=iteration, phase='routing',
                                 method='process_export_zero_distance_branches', event='runtime'):
             zero_options = process_export_zero_distance_branches(
                 data, branches, complete_infrastructure)
-            zero_options, branch_number = _complete_generated_branches(
-                zero_options, branches, branch_number, data, complete_infrastructure)
 
         with tracker.time_block(iteration=iteration, phase='routing',
                                 method='combine_generated_options', event='runtime'):
-            active_frames = [frame for frame in (infrastructure_options, approach_options, zero_options)
-                             if not frame.empty]
-            branches = pd.concat(active_frames, ignore_index=False) if active_frames else pd.DataFrame()
+            candidate_frames = [frame for frame in
+                                (infrastructure_options, approach_options, zero_options)
+                                if not frame.empty]
+            candidates = (pd.concat(candidate_frames, ignore_index=True)
+                          if candidate_frames else pd.DataFrame())
+        with tracker.time_block(iteration=iteration, phase='benchmark',
+                                method='prefilter_generated_candidates', event='runtime'):
+            candidates, early_rejected = prefilter_export_branch_candidates(
+                candidates, local_benchmarks, complete_infrastructure.index)
+        with tracker.time_block(iteration=iteration, phase='routing_finalize',
+                                method='materialize_generated_branches', event='runtime'):
+            branches, branch_number = _complete_generated_branches(
+                candidates, branches, branch_number)
         with tracker.time_block(iteration=iteration, phase='benchmark',
                                 method='apply_export_local_benchmark_post_routing', event='runtime'):
             branches, pruned, local_benchmarks, newly_superseded = apply_export_local_benchmark(
