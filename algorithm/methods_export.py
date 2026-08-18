@@ -106,30 +106,62 @@ def get_start_country(location_data):
     raise ValueError('The start location has no country_start value.')
 
 
-def attach_infrastructure_countries(complete_infrastructure, world):
-    """Fill missing node countries; explicit port countries always take precedence."""
+def attach_infrastructure_countries(complete_infrastructure, world, target_country=None):
+    """Assign a target country after a cheap bounding-box prefilter."""
     infrastructure = complete_infrastructure.copy()
     if 'country' not in infrastructure.columns:
         infrastructure['country'] = None
 
-    missing = infrastructure['country'].isna()
-    if not missing.any() or world is None or world.empty:
+    if target_country is None:
+        missing = infrastructure['country'].isna()
+        if not missing.any() or world is None or world.empty:
+            return infrastructure
+        country_column = next((c for c in ('NAME_EN', 'name', 'country') if c in world.columns), None)
+        if country_column is None:
+            return infrastructure
+        for node, row in infrastructure.loc[missing].iterrows():
+            from shapely.geometry import Point
+            point = Point(row['longitude'], row['latitude'])
+            matches = world[world.geometry.apply(lambda geometry: geometry.covers(point))]
+            countries = matches[country_column].dropna().unique().tolist()
+            if len(countries) == 1:
+                infrastructure.at[node, 'country'] = countries[0]
         return infrastructure
+
+    home = normalize_country(target_country)
+    explicit_home = infrastructure['country'].map(normalize_country) == home
+    explicit = infrastructure.loc[explicit_home].copy()
+    missing = infrastructure['country'].isna()
+    if not missing.any():
+        return explicit
+    if world is None or world.empty:
+        return explicit
 
     country_column = next((c for c in ('NAME_EN', 'name', 'country') if c in world.columns), None)
     if country_column is None:
-        return infrastructure
+        return explicit
+    country_rows = world[world[country_column].map(normalize_country) == home]
+    if country_rows.empty:
+        raise ValueError('Start country not found in world polygons: ' + str(target_country))
 
-    # Covers is intentional: a node exactly on a border may match more than one
-    # polygon. Such ambiguity is left unresolved instead of assigning it silently.
-    for node, row in infrastructure.loc[missing].iterrows():
-        from shapely.geometry import Point
+    country_geometry = country_rows.geometry.unary_union
+    min_longitude, min_latitude, max_longitude, max_latitude = country_geometry.bounds
+    candidates = infrastructure.loc[missing]
+    candidates = candidates[
+        candidates['longitude'].between(min_longitude, max_longitude)
+        & candidates['latitude'].between(min_latitude, max_latitude)
+    ].copy()
+
+    # Only the usually much smaller bounding-box subset reaches the exact test.
+    from shapely.geometry import Point
+    inside = []
+    for node, row in candidates.iterrows():
         point = Point(row['longitude'], row['latitude'])
-        matches = world[world.geometry.apply(lambda geometry: geometry.covers(point))]
-        countries = matches[country_column].dropna().unique().tolist()
-        if len(countries) == 1:
-            infrastructure.at[node, 'country'] = countries[0]
-    return infrastructure
+        if country_geometry.covers(point):
+            inside.append(node)
+    candidates = candidates.loc[inside].copy()
+    candidates['country'] = target_country
+    return pd.concat([explicit, candidates], axis=0)
 
 
 def get_export_infrastructure_scope(complete_infrastructure, start_country):

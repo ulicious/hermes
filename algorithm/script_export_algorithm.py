@@ -2,8 +2,10 @@ import gc
 import math
 import os
 import time
+import warnings
 
 import pandas as pd
+from pandas.errors import PerformanceWarning
 from shapely.geometry import Point
 
 from algorithm.methods_algorithm import postprocessing_branches
@@ -59,6 +61,7 @@ def _prepare_location(location_index, location_data, data, config_file, configur
     location_data = location_data.copy().loc[[location_index]]
     location_data.index = ['Start']
     start_country = get_start_country(location_data)
+    print(str(location_index) + ': Start country: ' + str(start_country))
     data = data.copy()
     data['k'] = location_index
     data['location_index'] = location_index
@@ -72,13 +75,20 @@ def _prepare_location(location_index, location_data, data, config_file, configur
 
     complete_infrastructure = get_complete_export_infrastructure(data)
     complete_infrastructure = attach_infrastructure_countries(
-        complete_infrastructure, data.get('world'))
+        complete_infrastructure, data.get('world'), target_country=start_country)
 
     technology_conversion, _ = load_technology_data(config_file)
-    start_conversions = attach_conversion_costs_and_efficiency_to_infrastructure(
-        location_data, config_file, technology_conversion, with_tqdm=False)
-    calculate_conversion_costs_and_efficiencies_for_all_combinations(
-        config_file, start_conversions, technology_conversion)
+    # These shared preparation methods emit a CRS warning for the one-row start
+    # table and many pandas fragmentation warnings while adding conversion
+    # columns. Neither warning affects the resulting values; keep this runner's
+    # multiprocessing output readable without changing the shared methods.
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', message='CRS mismatch.*', category=UserWarning)
+        warnings.simplefilter('ignore', PerformanceWarning)
+        start_conversions = attach_conversion_costs_and_efficiency_to_infrastructure(
+            location_data, config_file, technology_conversion, with_tqdm=False)
+        calculate_conversion_costs_and_efficiencies_for_all_combinations(
+            config_file, start_conversions, technology_conversion)
     data['conversion_costs_and_efficiencies'] = pd.concat([
         data['conversion_costs_and_efficiencies'], start_conversions])
 
@@ -99,9 +109,13 @@ def run_export_algorithm(args):
     print(str(location_index) + ': Start Processing export infrastructure')
     started = time.time()
     tracker = AlgorithmTracker(location_index, configuration['path_results'])
+    preparation_started = time.time()
     location_data, data, complete_infrastructure, branches, branch_number = \
         _prepare_location(location_index, location_data, common_data, config_file, configuration)
     data['tracker'] = tracker
+    preparation_time = time.time() - preparation_started
+    print(str(location_index) + ': Preparation [s]: ' + str(round(preparation_time, 2))
+          + ' | Country infrastructure nodes: ' + str(len(complete_infrastructure)))
 
     if branches.empty or branches['current_total_costs'].map(math.isinf).all():
         export_branch_snapshot(branches, configuration['path_results'], location_index, 0, 'no_potential')
