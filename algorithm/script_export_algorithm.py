@@ -10,6 +10,7 @@ from shapely.geometry import Point
 
 from algorithm.methods_algorithm import postprocessing_branches
 from algorithm.methods_export import (apply_export_conversion,
+                                      apply_complete_commodity_benchmark,
                                       apply_export_local_benchmark,
                                       attach_infrastructure_countries,
                                       create_export_branches_at_start,
@@ -142,6 +143,13 @@ def run_export_algorithm(args):
             branches, descendants, local_benchmarks, superseded_branches = \
                 remove_superseded_branch_descendants(
                     branches, local_benchmarks, superseded_branches)
+            branches, globally_pruned = apply_complete_commodity_benchmark(
+                branches, local_benchmarks, complete_infrastructure.index)
+            if not globally_pruned.empty:
+                superseded_branches.update(globally_pruned['branch_index'].tolist())
+                branches, descendants, local_benchmarks, superseded_branches = \
+                    remove_superseded_branch_descendants(
+                        branches, local_benchmarks, superseded_branches)
         if branches.empty:
             break
 
@@ -176,6 +184,13 @@ def run_export_algorithm(args):
         branches, descendants, local_benchmarks, superseded_branches = \
             remove_superseded_branch_descendants(
                 branches, local_benchmarks, superseded_branches)
+        branches, globally_pruned = apply_complete_commodity_benchmark(
+            branches, local_benchmarks, complete_infrastructure.index)
+        if not globally_pruned.empty:
+            superseded_branches.update(globally_pruned['branch_index'].tolist())
+            branches, descendants, local_benchmarks, superseded_branches = \
+                remove_superseded_branch_descendants(
+                    branches, local_benchmarks, superseded_branches)
         export_branch_snapshot(branches, configuration['path_results'], location_index,
                                iteration, 'active')
         export_local_benchmark_snapshot(

@@ -247,6 +247,33 @@ def remove_superseded_branch_descendants(branches, local_benchmarks, superseded_
     return surviving, terminated, local_benchmarks, invalid
 
 
+def get_complete_commodity_benchmarks(local_benchmarks, infrastructure_nodes, commodities):
+    """Return maximum local costs only for commodities covering every node."""
+    nodes = [str(node) for node in infrastructure_nodes]
+    benchmarks = {}
+    for commodity in commodities:
+        states = [(node, str(commodity), False) for node in nodes]
+        if states and all(state in local_benchmarks for state in states):
+            benchmarks[commodity] = max(
+                local_benchmarks[state]['current_total_costs'] for state in states)
+    return benchmarks
+
+
+def apply_complete_commodity_benchmark(branches, local_benchmarks, infrastructure_nodes):
+    """Immediately remove branches already above a complete commodity benchmark."""
+    if branches.empty:
+        return branches.copy(), pd.DataFrame()
+    benchmarks = get_complete_commodity_benchmarks(
+        local_benchmarks, infrastructure_nodes, branches['current_commodity'].unique())
+    limits = branches['current_commodity'].map(benchmarks)
+    remove = limits.notna() & (branches['current_total_costs'] > limits)
+    surviving = branches.loc[~remove].copy()
+    terminated = branches.loc[remove].copy()
+    if not terminated.empty:
+        terminated['status'] = 'above_complete_commodity_benchmark'
+    return surviving, terminated
+
+
 def process_export_out_tolerance_branches(domestic_infrastructure, branches,
                                           configuration, local_benchmarks):
     """Create road/new-pipeline branches with a complete-local-benchmark lower bound."""
@@ -257,13 +284,9 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches,
         domestic_infrastructure['latitude'], domestic_infrastructure['longitude'],
         branches['latitude'], branches['longitude'])
     values = np.asarray(distances).transpose()
-    all_nodes = [str(node) for node in domestic_infrastructure.index]
-    complete_benchmark_maximum = {}
-    for commodity in branches['current_commodity'].unique():
-        states = [(node, str(commodity), False) for node in all_nodes]
-        if all(state in local_benchmarks for state in states):
-            complete_benchmark_maximum[commodity] = max(
-                local_benchmarks[state]['current_total_costs'] for state in states)
+    complete_benchmark_maximum = get_complete_commodity_benchmarks(
+        local_benchmarks, domestic_infrastructure.index,
+        branches['current_commodity'].unique())
 
     results = []
     pruned_indices = []
@@ -271,9 +294,22 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches,
         branch = branches.loc[branch_index]
         commodity = branch['current_commodity_object']
         visited = set(branch['all_previous_nodes'])
+        visited_infrastructure = {
+            infrastructure for infrastructure in branch['all_previous_infrastructure']
+            if isinstance(infrastructure, str)
+        }
         branch_options = []
         for row, node in enumerate(domestic_infrastructure.index):
             if node == branch['current_node'] or node in visited:
+                continue
+            node_infrastructure = domestic_infrastructure.at[node, 'graph']
+            if isinstance(node_infrastructure, str):
+                node_infrastructure = {node_infrastructure}
+            elif isinstance(node_infrastructure, (list, tuple, set)):
+                node_infrastructure = set(node_infrastructure)
+            else:
+                node_infrastructure = set()
+            if visited_infrastructure.intersection(node_infrastructure):
                 continue
             direct_distance = float(values[row, column])
             options = []
