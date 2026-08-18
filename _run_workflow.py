@@ -11,6 +11,7 @@ RUN_SETUP_PROJECT_FOLDER = False
 RUN_PROCESS_RAW_DATA = False
 RUN_CREATE_START_LOCATIONS = False
 RUN_MAIN_ALGORITHM = False
+RUN_EXPORT_INFRASTRUCTURE = False
 RUN_MIP_OPTIMIZATION = False
 RUN_PROCESS_PLOT_DATA = False
 RUN_PLOT_RESULTS = True
@@ -28,6 +29,7 @@ WORKFLOW_STEPS = [
     (RUN_PROCESS_RAW_DATA, 'scripts._1_script_process_raw_data'),
     (RUN_CREATE_START_LOCATIONS, 'scripts._2_create_random_locations'),
     (RUN_MAIN_ALGORITHM, 'scripts._3_main'),
+    (RUN_EXPORT_INFRASTRUCTURE, 'scripts._3_export_infrastructure'),
     (RUN_MIP_OPTIMIZATION, 'scripts._4_mip_optimization'),
     (RUN_PROCESS_PLOT_DATA, 'scripts._5_process_plot_data'),
     (RUN_PLOT_RESULTS, 'scripts._6_plot_results'),
