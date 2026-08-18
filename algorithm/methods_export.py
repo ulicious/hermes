@@ -175,11 +175,12 @@ def get_export_infrastructure_scope(complete_infrastructure, start_country):
 def apply_export_local_benchmark(branches, local_benchmarks):
     """Keep the cheapest branch for each local node/commodity/connector state."""
     if branches.empty:
-        return branches.copy(), branches.copy(), local_benchmarks
+        return branches.copy(), branches.copy(), local_benchmarks, set()
     assessed = update_branch_comparison_index(branches.copy())
     assessed.sort_values('current_total_costs', inplace=True, kind='stable')
     keep = []
     remove = []
+    superseded = set()
     seen_this_batch = set()
     for branch_index, branch in assessed.iterrows():
         state = branch['comparison_index']
@@ -191,9 +192,12 @@ def apply_export_local_benchmark(branches, local_benchmarks):
         if previous is None or costs <= previous['current_total_costs']:
             keep.append(branch_index)
             seen_this_batch.add(state)
+            if previous is not None and costs < previous['current_total_costs']:
+                superseded.add(previous['branch_index'])
             local_benchmarks[state] = {
                 'current_total_costs': costs,
                 'branch_index': branch['branch_index'],
+                'all_previous_branches': list(branch['all_previous_branches']),
             }
         else:
             remove.append(branch_index)
@@ -201,24 +205,71 @@ def apply_export_local_benchmark(branches, local_benchmarks):
     terminated = drop_branch_comparison_columns(assessed.loc[remove].copy())
     if not terminated.empty:
         terminated['status'] = 'local_benchmark_pruned'
-    return surviving, terminated, local_benchmarks
+    return surviving, terminated, local_benchmarks, superseded
+
+
+def remove_superseded_branch_descendants(branches, local_benchmarks, superseded_branches):
+    """Remove active descendants and stale benchmarks of replaced benchmark branches."""
+    invalid = set(superseded_branches)
+    if not invalid:
+        return branches.copy(), pd.DataFrame(), local_benchmarks, invalid
+
+    # Benchmark branches depending on an invalid predecessor are invalid roots
+    # themselves. Repeat until the dependency closure is stable.
+    while True:
+        newly_invalid = {
+            benchmark['branch_index']
+            for benchmark in local_benchmarks.values()
+            if invalid.intersection(benchmark.get('all_previous_branches', []))
+        } - invalid
+        if not newly_invalid:
+            break
+        invalid.update(newly_invalid)
+
+    stale_states = [
+        state for state, benchmark in local_benchmarks.items()
+        if benchmark['branch_index'] in invalid
+        or invalid.intersection(benchmark.get('all_previous_branches', []))
+    ]
+    for state in stale_states:
+        del local_benchmarks[state]
+
+    if branches.empty:
+        return branches.copy(), pd.DataFrame(), local_benchmarks, invalid
+    descendant_mask = branches['all_previous_branches'].apply(
+        lambda history: bool(invalid.intersection(history)))
+    terminated = branches.loc[descendant_mask].copy()
+    surviving = branches.loc[~descendant_mask].copy()
+    if not terminated.empty:
+        terminated['status'] = 'superseded_local_benchmark_ancestor'
+    return surviving, terminated, local_benchmarks, invalid
 
 
 def process_export_out_tolerance_branches(domestic_infrastructure, branches,
-                                          configuration):
-    """Create every reachable domestic road/new-pipeline branch without cost pruning."""
+                                          configuration, local_benchmarks):
+    """Create road/new-pipeline branches with a complete-local-benchmark lower bound."""
     if domestic_infrastructure.empty or branches.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
 
     distances = calc_distance_list_to_list(
         domestic_infrastructure['latitude'], domestic_infrastructure['longitude'],
         branches['latitude'], branches['longitude'])
     values = np.asarray(distances).transpose()
+    all_nodes = [str(node) for node in domestic_infrastructure.index]
+    complete_benchmark_maximum = {}
+    for commodity in branches['current_commodity'].unique():
+        states = [(node, str(commodity), False) for node in all_nodes]
+        if all(state in local_benchmarks for state in states):
+            complete_benchmark_maximum[commodity] = max(
+                local_benchmarks[state]['current_total_costs'] for state in states)
+
     results = []
+    pruned_indices = []
     for column, branch_index in enumerate(branches.index):
         branch = branches.loc[branch_index]
         commodity = branch['current_commodity_object']
         visited = set(branch['all_previous_nodes'])
+        branch_options = []
         for row, node in enumerate(domestic_infrastructure.index):
             if node == branch['current_node'] or node in visited:
                 continue
@@ -242,7 +293,7 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches,
                 routed_distance = (0 if direct_distance <= configuration['tolerance_distance']
                                    else direct_distance * configuration['no_road_multiplier'])
                 transport_costs = routed_distance * specific_costs / 1000
-                results.append({
+                branch_options.append({
                     'previous_branch': branch_index,
                     'current_node': node,
                     'current_distance': routed_distance,
@@ -257,7 +308,19 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches,
                     'taken_route': (branch['current_node'], transport_mean, routed_distance, node, 1),
                     'total_efficiency': branch['total_efficiency'],
                 })
-    return pd.DataFrame(results)
+
+        maximum = complete_benchmark_maximum.get(branch['current_commodity'])
+        if branch_options and maximum is not None:
+            minimal_total_costs = min(option['current_total_costs'] for option in branch_options)
+            if minimal_total_costs > maximum:
+                pruned_indices.append(branch_index)
+                continue
+        results.extend(branch_options)
+
+    pruned = branches.loc[pruned_indices].copy()
+    if not pruned.empty:
+        pruned['status'] = 'minimal_distance_above_complete_local_benchmark'
+    return pd.DataFrame(results), pruned
 
 
 def prepare_export_infrastructure_branches(branches, complete_infrastructure):
@@ -450,6 +513,28 @@ def export_branch_snapshot(branches, path_results, location_index, iteration, st
         if os.path.exists(temporary):
             os.remove(temporary)
     return destination
+
+
+def export_local_benchmark_snapshot(local_benchmarks, path_results, location_index, iteration):
+    """Write the cheapest known costs for every local branch state."""
+    rows = []
+    for state, benchmark in local_benchmarks.items():
+        node, commodity, road_new_allowed_next = state
+        rows.append({
+            'current_node': node,
+            'current_commodity': commodity,
+            'road_new_allowed_next': road_new_allowed_next,
+            'current_total_costs': benchmark['current_total_costs'],
+            'branch_index': benchmark['branch_index'],
+        })
+    snapshot = pd.DataFrame(rows, columns=[
+        'current_node', 'current_commodity', 'road_new_allowed_next',
+        'current_total_costs', 'branch_index'])
+    if not snapshot.empty:
+        snapshot.sort_values(
+            ['current_node', 'current_commodity', 'road_new_allowed_next'], inplace=True)
+    return export_branch_snapshot(
+        snapshot, path_results, location_index, iteration, 'local_benchmarks')
 
 
 def apply_export_conversion(branches, data, branch_number):
