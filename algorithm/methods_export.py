@@ -49,7 +49,6 @@ def get_complete_export_infrastructure(data):
 def create_export_branches_at_start(data):
     """Create initial commodity branches with production state only."""
     location = data['start']['location']
-    continent = data['start']['continent']
     rows = []
     for number, commodity in enumerate(data['commodities']['commodity_objects'].values()):
         name = commodity.get_name()
@@ -65,7 +64,6 @@ def create_export_branches_at_start(data):
             'previous_branch': None,
             'current_commodity': name,
             'current_commodity_object': commodity,
-            'current_continent': continent,
             'current_total_costs': production_costs,
             'current_transportation_costs': 0,
             'current_conversion_costs': 0,
@@ -165,17 +163,10 @@ def attach_infrastructure_countries(complete_infrastructure, world, target_count
     return pd.concat([explicit, candidates], axis=0)
 
 
-def get_export_infrastructure_scope(complete_infrastructure, start_country):
-    """Keep infrastructure located in the start country only."""
-    countries = complete_infrastructure['country'].map(normalize_country)
-    home = normalize_country(start_country)
-    return complete_infrastructure.loc[countries == home].copy()
-
-
 def apply_export_local_benchmark(branches, local_benchmarks):
     """Keep the cheapest branch for each local node/commodity/connector state."""
     if branches.empty:
-        return branches.copy(), branches.copy(), local_benchmarks, set()
+        return branches.copy(), 0, local_benchmarks, set()
     assessed = update_branch_comparison_index(branches.copy())
     assessed.sort_values('current_total_costs', inplace=True, kind='stable')
     keep = []
@@ -204,47 +195,21 @@ def apply_export_local_benchmark(branches, local_benchmarks):
         else:
             remove.append(branch_index)
     surviving = drop_branch_comparison_columns(assessed.loc[keep].copy())
-    terminated = drop_branch_comparison_columns(assessed.loc[remove].copy())
-    if not terminated.empty:
-        terminated['status'] = 'local_benchmark_pruned'
-    return surviving, terminated, local_benchmarks, superseded
+    return surviving, len(remove), local_benchmarks, superseded
 
 
 def remove_superseded_branch_descendants(branches, local_benchmarks, superseded_branches):
-    """Remove active descendants and stale benchmarks of replaced benchmark branches."""
+    """Remove active descendants while retaining every valid benchmark route."""
     invalid = set(superseded_branches)
     if not invalid:
-        return branches.copy(), pd.DataFrame(), local_benchmarks, invalid
-
-    # Benchmark branches depending on an invalid predecessor are invalid roots
-    # themselves. Repeat until the dependency closure is stable.
-    while True:
-        newly_invalid = {
-            benchmark['branch_index']
-            for benchmark in local_benchmarks.values()
-            if invalid.intersection(benchmark.get('all_previous_branches', []))
-        } - invalid
-        if not newly_invalid:
-            break
-        invalid.update(newly_invalid)
-
-    stale_states = [
-        state for state, benchmark in local_benchmarks.items()
-        if benchmark['branch_index'] in invalid
-        or invalid.intersection(benchmark.get('all_previous_branches', []))
-    ]
-    for state in stale_states:
-        del local_benchmarks[state]
+        return branches.copy(), 0, local_benchmarks, invalid
 
     if branches.empty:
-        return branches.copy(), pd.DataFrame(), local_benchmarks, invalid
+        return branches.copy(), 0, local_benchmarks, invalid
     descendant_mask = branches['all_previous_branches'].apply(
         lambda history: bool(invalid.intersection(history)))
-    terminated = branches.loc[descendant_mask].copy()
     surviving = branches.loc[~descendant_mask].copy()
-    if not terminated.empty:
-        terminated['status'] = 'superseded_local_benchmark_ancestor'
-    return surviving, terminated, local_benchmarks, invalid
+    return surviving, int(descendant_mask.sum()), local_benchmarks, invalid
 
 
 def get_complete_commodity_benchmarks(local_benchmarks, infrastructure_nodes, commodities):
@@ -262,22 +227,20 @@ def get_complete_commodity_benchmarks(local_benchmarks, infrastructure_nodes, co
 def apply_complete_commodity_benchmark(branches, local_benchmarks, infrastructure_nodes):
     """Immediately remove branches already above a complete commodity benchmark."""
     if branches.empty:
-        return branches.copy(), pd.DataFrame()
+        return branches.copy(), set()
     benchmarks = get_complete_commodity_benchmarks(
         local_benchmarks, infrastructure_nodes, branches['current_commodity'].unique())
     limits = branches['current_commodity'].map(benchmarks)
     remove = limits.notna() & (branches['current_total_costs'] > limits)
     surviving = branches.loc[~remove].copy()
-    terminated = branches.loc[remove].copy()
-    if not terminated.empty:
-        terminated['status'] = 'above_complete_commodity_benchmark'
-    return surviving, terminated
+    removed_branch_ids = set(branches.loc[remove, 'branch_index'].tolist())
+    return surviving, removed_branch_ids
 
 
 def prefilter_export_branch_candidates(candidates, local_benchmarks, infrastructure_nodes):
     """Apply state dominance before branch IDs and histories are materialized."""
     if candidates.empty:
-        return candidates.copy(), candidates.copy()
+        return candidates.copy(), 0
 
     assessed = update_branch_comparison_index(candidates.copy())
     benchmarks = get_complete_commodity_benchmarks(
@@ -292,17 +255,16 @@ def prefilter_export_branch_candidates(candidates, local_benchmarks, infrastruct
     not_better_than_local = (existing_limits.notna()
                              & (assessed['current_total_costs'] >= existing_limits))
     rejected_mask = above_commodity_limit | not_better_than_local
-    rejected = assessed.loc[rejected_mask].copy()
     eligible = assessed.loc[~rejected_mask].copy()
+    rejected_count = int(rejected_mask.sum())
 
     if not eligible.empty:
         eligible.sort_values('current_total_costs', inplace=True, kind='stable')
         duplicate_state = eligible.duplicated(subset=['comparison_index'], keep='first')
-        rejected = pd.concat([rejected, eligible.loc[duplicate_state]], ignore_index=False)
+        rejected_count += int(duplicate_state.sum())
         eligible = eligible.loc[~duplicate_state].copy()
 
-    return (drop_branch_comparison_columns(eligible),
-            drop_branch_comparison_columns(rejected))
+    return drop_branch_comparison_columns(eligible), rejected_count
 
 
 def process_export_out_tolerance_branches(domestic_infrastructure, branches,
@@ -386,10 +348,7 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches,
                 continue
         results.extend(branch_options)
 
-    pruned = branches.loc[pruned_indices].copy()
-    if not pruned.empty:
-        pruned['status'] = 'minimal_distance_above_complete_local_benchmark'
-    return pd.DataFrame(results), pruned
+    return pd.DataFrame(results), len(pruned_indices)
 
 
 def prepare_export_infrastructure_branches(branches, complete_infrastructure):
@@ -532,7 +491,7 @@ def preselect_export_infrastructure_branches(data, branches, complete_infrastruc
                                              configuration, number_probe_branches=5):
     """Remove pipeline entries dominated by cheaper entry plus inner-network transport."""
     if branches.empty:
-        return branches.copy(), branches.copy()
+        return branches.copy(), 0
 
     pipeline_branches = branches[
         branches['current_transport_mean'].isin(['Pipeline_Gas', 'Pipeline_Liquid'])
@@ -543,12 +502,12 @@ def preselect_export_infrastructure_branches(data, branches, complete_infrastruc
         probe_indices.extend(
             group['current_total_costs'].nsmallest(number_probe_branches).index.tolist())
     if not probe_indices:
-        return branches.copy(), pd.DataFrame()
+        return branches.copy(), 0
 
     probes = process_export_infrastructure_branches(
         data, branches.loc[probe_indices].copy(), complete_infrastructure, configuration)
     if probes.empty:
-        return branches.copy(), pd.DataFrame()
+        return branches.copy(), 0
 
     # Probe branches are comparison aids only. A tiny surcharge makes a direct
     # entry win when both alternatives are numerically equal.
@@ -561,10 +520,8 @@ def preselect_export_infrastructure_branches(data, branches, complete_infrastruc
 
     surviving_direct_indices = branches.index.intersection(combined.index)
     surviving = branches.loc[surviving_direct_indices].copy()
-    dominated = branches.drop(index=surviving_direct_indices).copy()
-    if not dominated.empty:
-        dominated['status'] = 'pipeline_entry_dominated'
-    return surviving, dominated
+    dominated_count = len(branches.index.difference(surviving_direct_indices))
+    return surviving, dominated_count
 
 
 def export_branch_snapshot(branches, path_results, location_index, iteration, stage):
