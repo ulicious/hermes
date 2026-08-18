@@ -243,6 +243,8 @@ def prefilter_export_branch_candidates(candidates, local_benchmarks, infrastruct
         return candidates.copy(), 0
 
     assessed = update_branch_comparison_index(candidates.copy())
+    finite_costs = np.isfinite(pd.to_numeric(
+        assessed['current_total_costs'], errors='coerce').to_numpy(dtype=float))
     benchmarks = get_complete_commodity_benchmarks(
         local_benchmarks, infrastructure_nodes, assessed['current_commodity'].unique())
     commodity_limits = assessed['current_commodity'].map(benchmarks)
@@ -254,7 +256,7 @@ def prefilter_export_branch_candidates(candidates, local_benchmarks, infrastruct
                        if state in local_benchmarks else np.nan))
     not_better_than_local = (existing_limits.notna()
                              & (assessed['current_total_costs'] >= existing_limits))
-    rejected_mask = above_commodity_limit | not_better_than_local
+    rejected_mask = (~finite_costs) | above_commodity_limit | not_better_than_local
     eligible = assessed.loc[~rejected_mask].copy()
     rejected_count = int(rejected_mask.sum())
 
@@ -419,6 +421,8 @@ def process_export_infrastructure_branches(data, branches, complete_infrastructu
         transport_mean = branch['current_transport_mean']
         if transport_mean not in ('Shipping', 'Pipeline_Gas', 'Pipeline_Liquid'):
             continue
+        if not np.isfinite(branch['current_total_costs']):
+            continue
         commodity = branch['current_commodity_object']
         if not commodity.get_transportation_options_specific_mean_of_transport(transport_mean):
             continue
@@ -461,6 +465,8 @@ def process_export_infrastructure_branches(data, branches, complete_infrastructu
                     pd.Series([distance], index=[node]), pd.Series([duration], index=[node]),
                     branch['current_total_costs'])
                 total_costs = totals.at[node]
+                if not np.isfinite(total_costs):
+                    continue
                 route_efficiency = efficiency.at[node]
                 total_efficiency = branch['total_efficiency'] * route_efficiency
                 transport_costs = total_costs - branch['current_total_costs']
@@ -595,7 +601,14 @@ def apply_export_conversion(branches, data, branch_number, local_benchmarks,
             nodes = pd.Series([branch['current_node']], index=[previous_branch])
             conversion_costs = start.get_conversion_costs_specific_commodity(nodes, end_name).iloc[0]
             efficiency = start.get_conversion_efficiency_specific_commodity(nodes, end_name).iloc[0]
+            if (not np.isfinite(branch['current_total_costs'])
+                    or not np.isfinite(conversion_costs)
+                    or not np.isfinite(efficiency)
+                    or efficiency <= 0):
+                continue
             total_costs = (branch['current_total_costs'] + conversion_costs) / efficiency
+            if not np.isfinite(total_costs):
+                continue
             row = branch.copy()
             row['previous_branch'] = previous_branch
             row['current_commodity'] = end_name

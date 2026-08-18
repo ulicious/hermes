@@ -141,7 +141,10 @@ def run_export_algorithm(args):
           + ' | ' + infrastructure_types)
     print(str(location_index) + ': Infrastructure node types: ' + node_types)
 
-    if branches.empty or branches['current_total_costs'].map(math.isinf).all():
+    finite_start_costs = pd.to_numeric(
+        branches['current_total_costs'], errors='coerce').map(math.isfinite)
+    branches = branches.loc[finite_start_costs].copy()
+    if branches.empty:
         export_branch_snapshot(branches, configuration['path_results'], location_index, 0, 'no_potential')
         return None
 
