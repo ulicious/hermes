@@ -7,6 +7,9 @@ import geopandas as gpd
 from data_processing.natural_earth_data import load_states, load_world
 
 
+MINIMAL_EXAMPLE_BOUNDS = (35, 71, -21, 45)
+
+
 def _load_world():
     return load_world()
 
@@ -41,7 +44,7 @@ def get_boundaries_from_config(config_file, prefix, use_minimal_example=None):
     if use_minimal_example is None:
         use_minimal_example = config_file.get('use_minimal_example', False)
     if use_minimal_example:
-        return 35, 71, -25, 45
+        return MINIMAL_EXAMPLE_BOUNDS
 
     required_keys = [
         prefix + 'minimal_latitude',
@@ -114,9 +117,13 @@ def get_start_location_information(config_file, world=None, states=None):
         states = _load_states()
 
     if config_file.get('use_minimal_example', False):
+        min_lat, max_lat, min_lon, max_lon = get_boundaries_from_config(
+            config_file, prefix='start_location_', use_minimal_example=True)
+        rectangle = create_rectangle(min_lat, max_lat, min_lon, max_lon)
         europe = world[world['CONTINENT'] == 'Europe']
-        return {'location': europe.unary_union.buffer(0),
-                'countries': europe['NAME_EN'].dropna().tolist(),
+        countries = europe[europe.geometry.intersects(rectangle)]
+        return {'location': rectangle,
+                'countries': countries['NAME_EN'].dropna().tolist(),
                 'continents': ['Europe'],
                 'country_states': {}}
 

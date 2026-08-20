@@ -1,4 +1,5 @@
 import os
+import time
 import matplotlib.pyplot as plt
 import shapely
 
@@ -19,6 +20,8 @@ from plotting.get_figures import get_number_figure, get_energy_carrier_figure, g
 from plotting.helpers_plotting import load_infrastructure_data, load_first_available_destination, \
     get_complete_infrastructure, load_result, plot_comparison_plot, match_routing_results
 from data_processing.configuration import load_algorithm_configuration, load_plotting_configuration
+
+time_start = time.time()
 
 
 def check_required_files_exist(required_files, purpose):
@@ -65,9 +68,29 @@ else:
 cmap = get_configured_colormap(config_file_plotting)
 plot_colors = get_plot_color_config(config_file_plotting)
 
+extent_result_frames = []
+extent_result_names = config_file_plotting.get('process_results', [])
+for result_name in extent_result_names:
+    result_file = os.path.join(path_files, result_name + '_processed_results.csv')
+    if os.path.exists(result_file):
+        extent_result_frames.append(pd.read_csv(result_file, index_col=0))
+
+if extent_result_frames:
+    extent_result_data = pd.concat(extent_result_frames, ignore_index=True)
+else:
+    extent_result_data = pd.DataFrame()
+
+extent_destination = None
+if str(config_file_plotting.get('plot_extent', 'default')).strip().lower() == 'results':
+    try:
+        extent_destination = load_first_available_destination(path_files, extent_result_names)
+    except FileNotFoundError:
+        pass
+
 global_plot_boundaries = resolve_plot_boundaries(
     config_file_plotting,
-    allow_results=False,
+    data=extent_result_data,
+    destination_location=extent_destination,
 )
 
 color_dictionary = plot_colors['commodity_colors']
@@ -660,3 +683,11 @@ for n, comparison in enumerate(config_file_plotting['solving_time_plot']):
         all_data.append(data)
 
     get_calculation_time(all_data, comparison, path_saving, str(n) + '_processing_times', nice_name_dictionary)
+
+
+if time.time() - time_start < 60:
+    print('total processing time [s]: ' + str(time.time() - time_start))
+elif time.time() - time_start < 3600:
+    print('total processing time [m]: ' + str((time.time() - time_start) / 60))
+else:
+    print('total processing time [h]: ' + str((time.time() - time_start) / 60 / 60))

@@ -3,6 +3,7 @@ import os
 import logging
 import shapely
 import multiprocessing
+import time
 
 import pandas as pd
 import geopandas as gpd
@@ -35,6 +36,8 @@ import warnings
 warnings.filterwarnings("ignore")
 
 logging.basicConfig(level=logging.INFO)
+
+time_start = time.time()
 
 
 def _as_float_or_inf(value):
@@ -117,18 +120,24 @@ def print_start_location_configuration(config_file):
     print('Start-location count setting: ' + str(config_file['number_locations']))
     print('Location creation type: ' + str(config_file['location_creation_type']))
     print('Start area type: ' + str(config_file['start_location_area_type']))
-    print(
-        'Start bounds: lat '
-        + str(config_file['start_location_minimal_latitude'])
-        + ' to '
-        + str(config_file['start_location_maximal_latitude'])
-        + ', lon '
-        + str(config_file['start_location_minimal_longitude'])
-        + ' to '
-        + str(config_file['start_location_maximal_longitude'])
-    )
-    print('Start countries: ' + str(config_file['start_location_countries']))
-    print('Origin continents: ' + str(config_file['origin_continents']))
+    if config_file['use_minimal_example']:
+        print('Minimal-example start bounds: lat 35 to 71, lon -21 to 45')
+        print('Minimal-example start land filter: Natural Earth continent Europe')
+        print('Minimal-example origin continents: [Europe]')
+        print('Configured start bounds, countries, and origin continents are overridden')
+    else:
+        print(
+            'Start bounds: lat '
+            + str(config_file['start_location_minimal_latitude'])
+            + ' to '
+            + str(config_file['start_location_maximal_latitude'])
+            + ', lon '
+            + str(config_file['start_location_minimal_longitude'])
+            + ' to '
+            + str(config_file['start_location_maximal_longitude'])
+        )
+        print('Start countries: ' + str(config_file['start_location_countries']))
+        print('Origin continents: ' + str(config_file['origin_continents']))
     print('Each-country coverage enabled: ' + str(config_file['each_country_at_least_one_location']))
     print('Island locations enabled: ' + str(config_file['create_locations_for_islands']))
     print('Island area threshold: ' + str(config_file['island_area_threshold']))
@@ -501,3 +510,11 @@ if create_mip_data:
 
         road_distances.to_csv(path + 'mip_data/' + str(ind) +  '_start_road_distances.csv')
         new_pipeline_distances.to_csv(path + 'mip_data/' + str(ind) + '_start_new_pipeline_distances.csv')
+
+
+if time.time() - time_start < 60:
+    print('total processing time [s]: ' + str(time.time() - time_start))
+elif time.time() - time_start < 3600:
+    print('total processing time [m]: ' + str((time.time() - time_start) / 60))
+else:
+    print('total processing time [h]: ' + str((time.time() - time_start) / 60 / 60))

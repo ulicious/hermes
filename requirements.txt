@@ -1,8 +1,39 @@
-cartopy==0.21.1
-geopandas==0.13.2
-pip-chill==1.0.3
-pyyaml==6.0.3
-plotly
-searoute==1.4.3
-seaborn
-tqdm==4.67.1
+# Supported runtime: Python 3.11
+#
+# Lower bounds reflect the API versions used and tested by HERMES. Upper bounds
+# prevent automatic upgrades across compatibility boundaries.
+
+# Numerical and tabular processing
+numpy~=1.26.4
+pandas~=2.2.0
+scipy~=1.15.3
+joblib~=1.3.2
+networkx~=3.2.1
+tables~=3.9.2
+openpyxl~=3.1.5
+
+# Geographic processing
+shapely~=2.0.3
+geopandas~=0.14.3
+fiona~=1.9.6
+pyproj~=3.7.1
+rtree~=1.4.0
+cartopy~=0.22.0
+geopy~=2.4.1
+geovoronoi==0.4.0
+geojson~=3.1.0
+vincenty==0.1.4
+searoute~=1.3.1
+
+# Plotting and configuration
+matplotlib~=3.8.3
+seaborn==0.13.2
+plotly~=6.7.0
+PyYAML~=6.0
+tqdm~=4.66.2
+psutil>=5.9,<8.0
+
+# Mixed-integer optimization
+# A matching Gurobi licence is required separately; installing the Python
+# package does not provide a licence.
+gurobipy~=12.0.3

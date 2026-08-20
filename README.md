@@ -1,75 +1,182 @@
-# HERMES: <ins>H</ins>ydrogen <ins>E</ins>conomy <ins>R</ins>outing <ins>M</ins>odel for cost-<ins>e</ins>fficient <ins>S</ins>upply
+# HERMES: Hydrogen Economy Routing Model for cost-efficient Supply
 
-HERMES is a multi commodity multi mean of transport algorithm,
-capable to find the most cost-effective transportation route from pre-defined starting points to a desired location.
-The algorithm derives possible solutions for transportation from a starting point to the final destination.
-Based on the underlying infrastructure data, the algorithm iteratively explores infrastructure nodes and calculates
-costs for each reached node. It terminates as soon as it reaches the final destination and exploration
-to other nodes is not possible anymore
+HERMES is a multi-commodity routing model for hydrogen and hydrogen-derived energy carriers. It combines production and conversion costs with ports, shipping routes, gas pipelines, liquid pipelines, roads, and potential new pipelines to search for cost-efficient supply paths to a user-defined destination.
 
-# Documentation
+The full user documentation is available on [Read the Docs](https://hermes-h2.readthedocs.io/en/main/index.html).
 
-A full documentary is provided here: https://hermes-h2.readthedocs.io/en/main/index.html. There you can find more information on the installation process, which should only take a few minutes, and the operation of the code.
+## Quickstart
 
-# Data availability & Demo
+HERMES keeps the source repository separate from a generated project folder. Install it with a virtual environment.
 
-Most of the data used are available in this repository, but can be found here as well: DOI: 10.5281/zenodo.15350282
+Linux and macOS (Bash):
 
-Configuration templates and provided input data are stored in the repository `data` folder. Before processing data, use `_run_workflow.py` with `PROJECT_FOLDER` set and `RUN_SETUP_PROJECT_FOLDER = True` to create the working folder structure and copy the editable configuration files directly into `PROJECT_FOLDER/` and the raw input data into `PROJECT_FOLDER/raw_data/`. The setup step writes the given project folder path into the copied `1_algorithm_configuration.yaml`. If setup is run again, copied files are overwritten.
+```bash
+git clone https://github.com/ulicious/hermes.git
+cd hermes
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
 
-Users should adjust `1_algorithm_configuration.yaml`, `2_techno_economic_data_transportation.yaml`, `3_techno_economic_data_conversion.yaml`, and `4_plotting_configuration.yaml` in `PROJECT_FOLDER/`. Only the central `project_folder_path` is stored as a path in `1_algorithm_configuration.yaml`. All subfolders and raw-data file names are fixed by the code and are derived from the project folder. For example, `location_data.csv` and `country_data.csv` are expected in `PROJECT_FOLDER/raw_data/` and are not configured in the YAML file.
+Windows (PowerShell):
 
-If an older project folder still contains numbered configuration files or a `config/` subfolder from a previous layout, the setup step removes the known obsolete configuration files and writes the current files directly into `PROJECT_FOLDER/`.
+```powershell
+git clone https://github.com/ulicious/hermes.git
+Set-Location hermes
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
 
-The workflow scripts are stored in `scripts/` and are normally started through `_run_workflow.py`. Advanced users can still run a single step from the repository root via module call, e.g. `python -m scripts._3_main PROJECT_FOLDER` or `python -m scripts._3_main --project-folder PROJECT_FOLDER`. To run the main algorithm with an alternative algorithm configuration file, use `python -m scripts._3_main PROJECT_FOLDER --algorithm-config path/to/config.yaml`. The `HERMES_PROJECT_FOLDER` environment variable can also be used.
+Installation normally takes approximately 10–20 minutes on a desktop computer
+with a broadband connection. Download speed and the availability of binary
+wheels for the geographic dependencies can change this substantially.
 
-For less experienced users, `_run_workflow.py` provides one central entry point. Set `PROJECT_FOLDER` and the `RUN_*` booleans at the top of the file, then run `python _run_workflow.py`. The script starts the selected workflow modules in order and passes the project folder automatically.
+Then:
 
-The central runner can start setup, raw-data processing, start-location creation, the main algorithm, MIP optimization, plot-data processing, plotting, and algorithm-tracking analysis. Keep only the desired `RUN_*` flags set to `True`.
+1. Open `_run_workflow.py` and set `PROJECT_FOLDER` to a separate working directory.
+2. Set only `RUN_SETUP_PROJECT_FOLDER = True` and run `python _run_workflow.py`.
+3. Edit the four YAML configuration files copied into `PROJECT_FOLDER`.
+4. Disable setup and enable the required processing stages in `_run_workflow.py`.
+5. Run `python _run_workflow.py` again.
 
-For running multiple algorithm scenarios without repeatedly editing `1_algorithm_configuration.yaml`, set `RUN_ALGORITHM_CONFIG_BATCH = True` in `_run_workflow.py` and place alternative algorithm configuration YAML files in `PROJECT_FOLDER/algorithm_configurations/`. The runner executes `scripts._3_main` once per YAML file for all remaining locations. Results for each scenario are written to `PROJECT_FOLDER/results/<configuration filename>/location_results/` and tracking logs to `PROJECT_FOLDER/results/<configuration filename>/algorithm_tracking/`. The default `1_algorithm_configuration.yaml` still writes to the normal `PROJECT_FOLDER/results/location_results/` folder.
+All runner switches are disabled by default. Setup overwrites copied configuration and bundled input files when it is deliberately run again.
 
-This data is the necessary input for the full model and the demo version. For the demo version, please indicate that in the general configuration at: use_minimal_example. This will only consider Europe.
+## Demo: minimal example
 
-Runtime of the data processing and calculation of the case study is around 1 hour on a normal desktop computer, but heavily depends on the system's hardware.
+The HERMES demo is activated in the copied
+`PROJECT_FOLDER/1_algorithm_configuration.yaml`:
 
-The demo will calculate the most cost-efficient transport routes and provides most cost-efficient supply costs.
+```yaml
+use_minimal_example: true
+```
 
-# System Requirements
+This restricts geographic preprocessing, start locations, and pipeline
+infrastructure to the frame 35–71° N and 21° W–45° E. Start locations must also
+lie on land classified as Europe by Natural Earth. It does not replace other
+configuration values such as `number_locations`; the values supplied with the
+demo configuration and data remain applicable.
 
-The model should be available on any operating system which allows the utilization of the applied python packages. It was tested with the following system:
+After setup and configuration, select these runner stages:
 
-The processor is an AMD Ryzen Threadripper 3990X 64-Core at 2.9 GHz, allowing us to utilize up to 128 CPUs. The system has 256 GB of RAM. The installed operating system is Ubuntu 20.04.6 LTS.
+```python
+RUN_SETUP_PROJECT_FOLDER = False
+RUN_PROCESS_RAW_DATA = True
+RUN_CREATE_START_LOCATIONS = True
+RUN_MAIN_ALGORITHM = True
+```
 
-## Python dependencies
+Then run:
 
-geopandas~=0.14.3
-matplotlib~=3.8.3
-pandas~=2.2.0
-shapely~=2.0.3
-joblib~=1.3.2
-tqdm~=4.66.2
-geopy~=2.4.1
-requests~=2.31.0
-searoute~=1.3.1
-networkx~=3.2.1
+```bash
+python _run_workflow.py
+```
+
+A successful demo run creates at least:
+
+```text
+PROJECT_FOLDER/processed_data/
+PROJECT_FOLDER/start_destination_combinations.csv
+PROJECT_FOLDER/results/location_results/
+```
+
+The location-results directory contains a final solution or a status file for
+each processed start location.
+
+Reference runtime for the minimal example:
+
+- Raw-data and infrastructure processing: approximately 15 minutes
+  (measured: 14.98 minutes).
+- Start-location creation: approximately 2 minutes
+  (measured: 1.71 minutes).
+- Routing algorithm: approximately 8 minutes
+  (measured: 8.38 minutes).
+- Optional plot-data processing: approximately 23 seconds
+  (measured: 22.66 seconds).
+- Optional plot generation: approximately 31 seconds
+  (measured: 30.83 seconds).
+- Complete measured workflow including plot generation: approximately
+  26 minutes (sum of measured stages: 25.96 minutes).
+
+The measured times are reference values rather than guarantees. Runtime
+depends on hardware, available CPU cores, storage performance, network speed for
+the initial Natural Earth download, and the selected memory/storage settings.
+
+## Inputs and outputs
+
+Setup copies bundled inputs to `PROJECT_FOLDER/raw_data/`. Standard inputs include location and country data, gas and oil pipeline workbooks, seaports, and `water.zip`. Natural Earth datasets are downloaded during the first preprocessing run, which therefore requires Internet access.
+
+Principal outputs are stored under:
+
+- `results/location_results/` for per-location routing results
+- `results/algorithm_tracking/` for optional tracking logs
+- `results/processed_results/` for plotting-ready tables
+- `results/plots/` for figures
+
+See the documentation for the complete [workflow](https://hermes-h2.readthedocs.io/en/main/workflow.html), [configuration parameters](https://hermes-h2.readthedocs.io/en/main/parameters.html), [result files](https://hermes-h2.readthedocs.io/en/main/results.html), [custom data](https://hermes-h2.readthedocs.io/en/main/custom_data.html), [project structure](https://hermes-h2.readthedocs.io/en/main/project_overview.html), and [advanced usage](https://hermes-h2.readthedocs.io/en/main/advanced_usage.html).
+
+## Data availability
+
+Most input data is included in the repository. The associated dataset is also available via DOI [10.5281/zenodo.15350282](https://doi.org/10.5281/zenodo.15350282).
+
+## System requirements
+
+HERMES currently supports Python 3.11 and the packages in `requirements.txt`.
+The current code and dependency set have been used with:
+
+- Python 3.11.9 on Microsoft Windows build 10.0.26200.8655
+- Ubuntu 20.04.6 LTS for the original large case study
+
+No non-standard hardware or GPU is required. Runtime and memory consumption
+depend strongly on the geographic scope, input data, preprocessing options, and
+number of parallel workers. The minimal example requires substantially fewer
+resources than a full global run. Low-memory and low-storage modes are available
+for constrained systems, with corresponding runtime trade-offs.
+
+<details>
+<summary>Software dependencies and supported versions</summary>
+
+```text
 numpy~=1.26.4
-h5py~=3.7.0
-pyyaml~=6.0.1
-geojson~=3.1.0
-cartopy~=0.22.0
-vincenty~=0.1.4
-openpyxl~=3.1.2
+pandas~=2.2.0
+scipy~=1.15.3
+joblib~=1.3.2
+networkx~=3.2.1
 tables~=3.9.2
+openpyxl~=3.1.5
+shapely~=2.0.3
+geopandas~=0.14.3
+fiona~=1.9.6
+pyproj~=3.7.1
+rtree~=1.4.0
+cartopy~=0.22.0
+geopy~=2.4.1
+geovoronoi==0.4.0
+geojson~=3.1.0
+vincenty==0.1.4
+searoute~=1.3.1
+matplotlib~=3.8.3
+seaborn==0.13.2
+plotly~=6.7.0
+PyYAML~=6.0
+tqdm~=4.66.2
+psutil>=5.9,<8.0
+gurobipy~=12.0.3
+```
 
-# Citation
+The authoritative install list is `requirements.txt`.
 
-Soon
+</details>
 
-# Big thanks to
+The optional MIP workflow additionally requires generated MIP data and a compatible Gurobi installation and licence. The Gurobi Python package is included in `requirements.txt`; the licence must be provided separately.
 
-- genthalili's SeaRoute package (https://github.com/genthalili/searoute-py/tree/main)
-- NetworkX: Aric A. Hagberg, Daniel A. Schult and Pieter J. Swart, “Exploring network structure, dynamics, and function using NetworkX”, in Proceedings of the 7th Python in Science Conference (SciPy2008), Gäel Varoquaux, Travis Vaught, and Jarrod Millman (Eds), (Pasadena, CA USA), pp. 11–15, Aug 2008
+## Citation
 
-# todos:
-- test again with single point
+Citation information is not yet available.
+
+## Acknowledgements
+
+- [SeaRoute](https://github.com/genthalili/searoute-py)
+- NetworkX: Aric A. Hagberg, Daniel A. Schult and Pieter J. Swart, “Exploring network structure, dynamics, and function”, Proceedings of the 7th Python in Science Conference, 2008.

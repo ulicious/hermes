@@ -134,16 +134,32 @@ def print_infrastructure_configuration(config_file):
     print('Low storage mode: ' + str(config_file['use_low_storage']))
     print('Low memory mode: ' + str(config_file['use_low_memory']))
     print('Configured cores: ' + str(config_file['number_cores']))
-    print(
-        'Infrastructure bounds: lat '
-        + str(config_file['infrastructure_minimal_latitude'])
-        + ' to '
-        + str(config_file['infrastructure_maximal_latitude'])
-        + ', lon '
-        + str(config_file['infrastructure_minimal_longitude'])
-        + ' to '
-        + str(config_file['infrastructure_maximal_longitude'])
-    )
+    if config_file['use_minimal_example']:
+        effective_bounds = get_boundaries_from_config(
+            config_file, prefix='infrastructure_', use_minimal_example=True)
+        print(
+            'Minimal-example central bounds: lat '
+            + str(effective_bounds[0])
+            + ' to '
+            + str(effective_bounds[1])
+            + ', lon '
+            + str(effective_bounds[2])
+            + ' to '
+            + str(effective_bounds[3])
+        )
+        print('Minimal-example pipeline clipping bounds: same as central bounds')
+        print('Minimal-example ports and landmasses filter: continent Europe')
+    else:
+        print(
+            'Infrastructure bounds: lat '
+            + str(config_file['infrastructure_minimal_latitude'])
+            + ' to '
+            + str(config_file['infrastructure_maximal_latitude'])
+            + ', lon '
+            + str(config_file['infrastructure_minimal_longitude'])
+            + ' to '
+            + str(config_file['infrastructure_maximal_longitude'])
+        )
     print('Pipeline connection point distance setting: '
           + str(config_file['minimal_distance_between_pipeline_connection_points']))
     print('Pipeline gap distance setting: ' + str(config_file['gap_distance']))

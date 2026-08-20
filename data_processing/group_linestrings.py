@@ -668,43 +668,18 @@ def group_LineStrings(name, num_cores, path_to_file, path_processed_data, gap_di
     single_lines = data_new['geometry'].tolist()
     single_lines_copy = single_lines.copy()
 
-    if use_minimal_example:
-        # If minimal example is applied, we set a frame on top of Europe and only consider pipelines within this frame
+    min_latitude, max_latitude, min_longitude, max_longitude = boundaries
+    frame_polygon = Polygon([
+        Point(min_longitude, max_latitude),
+        Point(max_longitude, max_latitude),
+        Point(max_longitude, min_latitude),
+        Point(min_longitude, min_latitude),
+    ])
 
-        x_split_point_left = -21
-        x_split_point_right = 45
-
-        y_split_point_top = 71
-        y_split_point_bottom = 35
-
-        frame_polygon = Polygon([Point(x_split_point_left, y_split_point_top),
-                                 Point(x_split_point_right, y_split_point_top),
-                                 Point(x_split_point_right, y_split_point_bottom),
-                                 Point(x_split_point_left, y_split_point_bottom)])
-
-        new_single_lines = []
-        for line in single_lines:
-
-            if line.intersects(frame_polygon):
-                new_single_lines.append(line.intersection(frame_polygon))
-
-    else:
-        x_split_point_left = boundaries[3]
-        x_split_point_right = boundaries[2]
-
-        y_split_point_top = boundaries[0]
-        y_split_point_bottom = boundaries[1]
-
-        frame_polygon = Polygon([Point(x_split_point_left, y_split_point_top),
-                                 Point(x_split_point_right, y_split_point_top),
-                                 Point(x_split_point_right, y_split_point_bottom),
-                                 Point(x_split_point_left, y_split_point_bottom)])
-
-        new_single_lines = []
-        for line in single_lines:
-
-            if line.intersects(frame_polygon):
-                new_single_lines.append(line.intersection(frame_polygon))
+    new_single_lines = []
+    for line in single_lines:
+        if line.intersects(frame_polygon):
+            new_single_lines.append(line.intersection(frame_polygon))
 
     single_lines = new_single_lines
 

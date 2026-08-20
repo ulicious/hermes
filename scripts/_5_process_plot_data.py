@@ -5,6 +5,7 @@ import itertools
 import os
 import math
 import ast
+import time
 import shapely
 import numpy as np
 
@@ -20,6 +21,8 @@ from data_processing.configuration import (
     load_plotting_configuration,
     validate_plotting_result_cases,
 )
+
+time_start = time.time()
 
 # script to process results
 # load configuration file
@@ -315,4 +318,12 @@ for folder in results_to_process:
         data.loc[affected_index, 'commodity'] = '> ' + str(i + 50) + ' € MWh$^{-1}$'
 
         create_weighted_routing_data_script(data, complete_infrastructure, infrastructure_data, path_processed_results,
-                                            folder, column_to_sort='commodity')
+                                            folder, config_file['number_cores'], column_to_sort='commodity')
+
+
+if time.time() - time_start < 60:
+    print('total processing time [s]: ' + str(time.time() - time_start))
+elif time.time() - time_start < 3600:
+    print('total processing time [m]: ' + str((time.time() - time_start) / 60))
+else:
+    print('total processing time [h]: ' + str((time.time() - time_start) / 60 / 60))

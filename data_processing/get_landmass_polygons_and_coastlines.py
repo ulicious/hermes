@@ -3,8 +3,9 @@ import os
 os.environ["OGR_ORGANIZE_POLYGONS"] = "SKIP"
 
 import geopandas as gpd
+import pandas as pd
 
-from shapely.geometry import MultiPolygon
+from shapely.geometry import MultiPolygon, box
 
 import zipfile
 import fiona
@@ -16,7 +17,7 @@ from shapely.ops import unary_union
 from data_processing.natural_earth_data import get_natural_earth_shapefile, load_world
 
 
-def create_water_availability_polygon(BASE_DIR):
+def create_water_availability_polygon(BASE_DIR, use_minimal_example=False):
 
     BASE_DIR = Path(BASE_DIR)
 
@@ -28,6 +29,10 @@ def create_water_availability_polygon(BASE_DIR):
     threshold = 3.0
     coast_distance_km = 50
     metric_crs = "EPSG:3857"
+    minimal_bounds = (-25, 35, 45, 71)
+    # Include nearby source geometries so that the 50 km coastal buffer remains
+    # correct at the edge of the minimal-example area.
+    minimal_read_bounds = (-26, 34, 46, 72)
 
     def unzip_file(zip_path, extract_to):
         if not zip_path.exists():
@@ -63,19 +68,24 @@ def create_water_availability_polygon(BASE_DIR):
 
     gdb_path = gdb_paths[0]
 
-    gdf = gpd.read_file(
-        gdb_path,
-        layer="annual",
-        GEOMETRY_NAME="geometry",
-        promote_to_multi=True
-    )
+    read_options = {
+        "layer": "annual",
+        "GEOMETRY_NAME": "geometry",
+        "promote_to_multi": True,
+    }
+    if use_minimal_example:
+        read_options["bbox"] = minimal_read_bounds
+    gdf = gpd.read_file(gdb_path, **read_options)
 
     gdf = gdf[[risk_column, "geometry"]].copy()
     gdf = gdf[gdf.geometry.notnull()].copy()
     gdf = gdf[gdf[risk_column].notna()].copy()
     gdf = repair_geometries(gdf)
 
-    coastline = gpd.read_file(coastline_shp)
+    if use_minimal_example:
+        coastline = gpd.read_file(coastline_shp, bbox=minimal_read_bounds)
+    else:
+        coastline = gpd.read_file(coastline_shp)
 
     if coastline.crs is None:
         coastline = coastline.set_crs("EPSG:4326")
@@ -120,6 +130,22 @@ def create_water_availability_polygon(BASE_DIR):
     gdf_available = repair_geometries(gdf_available)
 
     gdf_available = gdf_available.to_crs("EPSG:4326")
+
+    if use_minimal_example:
+        minimal_frame = box(*minimal_bounds)
+        gdf_available = gdf_available[
+            gdf_available.geometry.intersects(minimal_frame)
+        ].copy()
+        gdf_available["geometry"] = gdf_available.geometry.intersection(minimal_frame)
+        gdf_available = repair_geometries(gdf_available)
+
+    # Older GeoPandas/Fiona versions cannot infer a file schema from pandas'
+    # nullable StringDtype (used by newer pandas versions). Store such columns
+    # as regular Python strings/objects before writing the GeoPackage.
+    for column in gdf_available.columns:
+        if (column != gdf_available.geometry.name
+                and isinstance(gdf_available[column].dtype, pd.StringDtype)):
+            gdf_available[column] = gdf_available[column].astype(object)
 
     return gdf_available
 
@@ -175,6 +201,9 @@ def get_landmass_polygons_and_coastlines(path_raw_data, use_minimal_example=Fals
     polygons = gpd.GeoDataFrame(geometry=merged_polygons)
     coastlines = gpd.GeoDataFrame(geometry=coastlines)
 
-    water_availability = create_water_availability_polygon(path_raw_data)
+    water_availability = create_water_availability_polygon(
+        path_raw_data,
+        use_minimal_example=use_minimal_example,
+    )
 
     return polygons, coastlines, water_availability

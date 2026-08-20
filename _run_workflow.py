@@ -4,7 +4,7 @@ import sys
 
 
 # Defaults to the folder from which the workflow is started.
-PROJECT_FOLDER = os.getcwd()
+PROJECT_FOLDER = 'C:/Users/mt5285/Documents/Transportmodell/' # os.getcwd()
 
 # Select which workflow steps should run.
 RUN_SETUP_PROJECT_FOLDER = False

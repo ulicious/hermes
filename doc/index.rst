@@ -1,16 +1,12 @@
-.. HERMES: Hydrogen Economy Routing Model for cost-efficient Supply documentation master file, created by
-   sphinx-quickstart on Tue Oct  8 11:11:51 2024.
-
 HERMES: Hydrogen Economy Routing Model for cost-efficient Supply
 ================================================================
 
 HERMES is a multi-commodity routing model for hydrogen and hydrogen-derived
-energy carriers. It combines preprocessing of ports, gas pipelines, liquid
-pipeline infrastructure, and location-specific conversion costs with a routing
-heuristic that searches for the lowest-cost supply path to a user-defined
+energy carriers. It combines production and conversion costs with several
+transport options to search for cost-efficient supply paths to a user-defined
 destination.
 
-The current workflow is split into four main steps:
+The current workflow is split into four main stages:
 
 1. Process raw infrastructure and techno-economic input data.
 2. Create start locations and attach production and conversion costs.
@@ -22,11 +18,9 @@ configuration files in one batch. In that mode each scenario writes its
 ``location_results`` and ``algorithm_tracking`` outputs to a result folder named
 exactly like the configuration file.
 
-The documentation in this folder reflects the current repository structure,
-the active YAML configuration files, and the parameter set used by the
-latest code in ``scripts._1_script_process_raw_data``,
-``scripts._2_create_random_locations``, ``scripts._3_main``,
-``scripts._5_process_plot_data``, and ``scripts._6_plot_results``.
+Start with :doc:`getting_started` for a reproducible installation and first
+run. :doc:`workflow` explains the processing stages and their prerequisites,
+while :doc:`parameters` documents the available configuration.
 
 Citation
 ========
@@ -43,8 +37,12 @@ Big thanks to:
    :maxdepth: 3
 
    getting_started
+   workflow
+   project_overview
+   results
+   advanced_usage
+   custom_data
    parameters
-   methodology_deepdive
 
 .. role:: underline
     :class: underline

@@ -1,7 +1,6 @@
 import shapely
 import math
 import itertools
-import multiprocessing
 import ast
 import os
 
@@ -14,6 +13,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 
+from joblib import Parallel, delayed
 from tqdm import tqdm
 from shapely import wkt
 from shapely.geometry import MultiLineString, Point, LineString
@@ -223,7 +223,7 @@ def get_complete_infrastructure(data, final_destination):
 
 
 def create_weighted_routing_data_script(data, complete_infrastructure, infrastructure_data, path_processed_results,
-                                        folder, column_to_sort=None):
+                                        folder, number_workers, column_to_sort=None):
 
     if column_to_sort is None:
 
@@ -231,9 +231,6 @@ def create_weighted_routing_data_script(data, complete_infrastructure, infrastru
         latitudes = data['latitude'].tolist()
         routes = data['routes'].tolist()
         quantities = data['quantity'].tolist()
-
-        # Create a pool of worker processes
-        pool = multiprocessing.Pool(processes=100, maxtasksperchild=1)
 
         # Create an iterable of tuples, each containing the task ID and shared_dict
         task_args = list(zip(routes,
@@ -245,13 +242,9 @@ def create_weighted_routing_data_script(data, complete_infrastructure, infrastru
                              range(len(data.index))))
 
         # Start processing tasks and ensure parallelism
-        geometry_results = []
-        for result in tqdm(list(pool.map(get_geometry_segments, task_args))):
-            geometry_results.append(result)
-
-        # Close and join the worker pool
-        pool.close()
-        pool.join()
+        geometry_results = Parallel(n_jobs=number_workers)(
+            delayed(get_geometry_segments)(task) for task in tqdm(task_args)
+        )
 
         result_dfs = []
         replacement_dict = {}
@@ -301,9 +294,6 @@ def create_weighted_routing_data_script(data, complete_infrastructure, infrastru
             routes = subdata['routes'].tolist()
             quantities = subdata['quantity'].tolist()
 
-            # # Create a pool of worker processes
-            pool = multiprocessing.Pool(processes=100, maxtasksperchild=1)
-            #
             # Create an iterable of tuples, each containing the task ID and shared_dict
             task_args = list(zip(routes,
                                  quantities,
@@ -316,16 +306,9 @@ def create_weighted_routing_data_script(data, complete_infrastructure, infrastru
             task_args = tqdm(task_args)
 
             # Start processing tasks and ensure parallelism
-            geometry_results = []
-            for result in list(pool.map(get_geometry_segments, task_args)):
-                geometry_results.append(result)
-
-            # Close and join the worker pool
-            pool.close()
-            pool.join()
-
-            # from joblib import Parallel, delayed
-            # geometry_results = Parallel(n_jobs=100)(delayed(get_geometry_segments)(i) for i in task_args)
+            geometry_results = Parallel(n_jobs=number_workers)(
+                delayed(get_geometry_segments)(task) for task in task_args
+            )
 
             result_dfs = []
             replacement_dict = {}
@@ -378,7 +361,13 @@ def get_geometry_segments(args):
     if isinstance(r_local, str):
         r_local = ast.literal_eval(r_local)
 
-    quantity_local = args[1]
+    try:
+        quantity_local = float(args[1])
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            'Route quantity must be a numeric value, got '
+            + repr(args[1])
+        ) from error
 
     if quantity_local == 0:
         return {}, {}
@@ -1366,26 +1355,19 @@ def match_routing_results(result_list, result_names, complete_infrastructure, in
         routes = matching_df['routes'].tolist()
         quantities = matching_df['quantity'].tolist()
 
-        # Create a pool of worker processes
-        pool = multiprocessing.Pool(processes=100, maxtasksperchild=1)
-
         # Create an iterable of tuples, each containing the task ID and shared_dict
-        task_args = zip(routes,
-                        quantities,
-                        longitudes,
-                        latitudes,
-                        itertools.repeat(complete_infrastructure),
-                        itertools.repeat(infrastructure_data),
-                        range(len(matching_df.index)))
+        task_args = list(zip(routes,
+                             quantities,
+                             longitudes,
+                             latitudes,
+                             itertools.repeat(complete_infrastructure),
+                             itertools.repeat(infrastructure_data),
+                             range(len(matching_df.index))))
 
         # Start processing tasks and ensure parallelism
-        geometry_results = []
-        for result in tqdm(list(pool.map(get_geometry_segments, task_args))):
-            geometry_results.append(result)
-
-        # Close and join the worker pool
-        pool.close()
-        pool.join()
+        geometry_results = Parallel(n_jobs=number_workers)(
+            delayed(get_geometry_segments)(task) for task in tqdm(task_args)
+        )
 
         result_dfs = []
         replacement_dict = {}
