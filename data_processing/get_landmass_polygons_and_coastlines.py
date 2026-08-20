@@ -58,7 +58,7 @@ def create_water_availability_polygon(BASE_DIR, use_minimal_example=False):
         raise FileNotFoundError(
             'Missing Natural Earth coastline shapefile:\n'
             + str(coastline_shp)
-            + '\nRun _run_workflow.py with RUN_PROCESS_RAW_DATA = True once to download Natural Earth data into raw_data.'
+            + '\nRun _run_workflow.py with RUN_SETUP_PROJECT_FOLDER = True to download the versioned Zenodo dataset.'
         )
 
     gdb_paths = list(aqueduct_extract_dir.rglob("*.gdb"))

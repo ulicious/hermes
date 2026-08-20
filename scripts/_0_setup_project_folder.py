@@ -11,7 +11,7 @@ from data_processing.configuration import (
 def main():
     parser = argparse.ArgumentParser(
         prog='python -m scripts._0_setup_project_folder',
-        description='Create the HERMES project folder structure and copy input/config files.'
+        description='Create the HERMES project folder structure, copy configs, and download input data.'
     )
     parser.add_argument(
         'project_folder',
@@ -28,7 +28,7 @@ def main():
         if not os.path.exists(path_file):
             raise FileNotFoundError('Expected copied configuration file is missing: ' + path_file)
         print(path_file)
-    print('Raw data files were copied to:')
+    print('Raw data files were downloaded from Zenodo to:')
     print(os.path.join(project_folder, 'raw_data'))
     print('Algorithm configuration batch folder created:')
     print(os.path.join(project_folder, 'algorithm_configurations'))

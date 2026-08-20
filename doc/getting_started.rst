@@ -7,8 +7,8 @@ Getting started
 ###############
 
 HERMES currently supports Python 3.11. It uses two separate locations: the repository contains the Python code
-and input templates, while a user-selected project folder contains editable
-configuration, copied inputs, processed data, and results.
+and configuration templates, while a user-selected project folder contains editable
+configuration, downloaded inputs, processed data, and results.
 
 Commands on this page must be run from the repository root. Quote paths that
 contain spaces.
@@ -76,14 +76,17 @@ Then run:
 
    python _run_workflow.py
 
-Setup creates the project structure, copies bundled inputs to ``raw_data/``,
-copies four editable YAML files to the project-folder root, and stores the
-absolute project path in ``1_algorithm_configuration.yaml``.
+Setup creates the project structure, downloads the versioned input dataset from
+Zenodo to ``raw_data/``, verifies its checksums, extracts the included Natural
+Earth archive, copies four editable YAML files to the project-folder root, and
+stores the absolute project path in ``1_algorithm_configuration.yaml``. The
+initial setup therefore requires Internet access.
 
 .. warning::
 
-   Running setup again overwrites the copied YAML files and bundled raw inputs.
-   Disable ``RUN_SETUP_PROJECT_FOLDER`` after initial setup.
+   Running setup again overwrites the copied YAML files. Raw inputs whose
+   checksums match the published dataset are reused. Disable
+   ``RUN_SETUP_PROJECT_FOLDER`` after initial setup.
 
 Configure the first run
 #######################

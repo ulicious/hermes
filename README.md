@@ -42,7 +42,7 @@ Then:
 4. Disable setup and enable the required processing stages in `_run_workflow.py`.
 5. Run `python _run_workflow.py` again.
 
-All runner switches are disabled by default. Setup overwrites copied configuration and bundled input files when it is deliberately run again.
+All runner switches are disabled by default. Setup overwrites copied configuration files when it is deliberately run again. Input files that already match the published checksums are reused.
 
 ## Demo: minimal example
 
@@ -102,11 +102,11 @@ Reference runtime for the minimal example:
 
 The measured times are reference values rather than guarantees. Runtime
 depends on hardware, available CPU cores, storage performance, network speed for
-the initial Natural Earth download, and the selected memory/storage settings.
+the initial Zenodo data download, and the selected memory/storage settings.
 
 ## Inputs and outputs
 
-Setup copies bundled inputs to `PROJECT_FOLDER/raw_data/`. Standard inputs include location and country data, gas and oil pipeline workbooks, seaports, and `water.zip`. Natural Earth datasets are downloaded during the first preprocessing run, which therefore requires Internet access.
+Setup downloads the versioned input dataset from [Zenodo record 22031725](https://zenodo.org/records/22031725) to `PROJECT_FOLDER/raw_data/`. It verifies every file against the checksum published for this HERMES data release and extracts `natural_earth.zip`. The initial setup therefore requires Internet access; matching local files are reused on later setup runs.
 
 Principal outputs are stored under:
 
@@ -119,7 +119,7 @@ See the documentation for the complete [workflow](https://hermes-h2.readthedocs.
 
 ## Data availability
 
-Most input data is included in the repository. The associated dataset is also available via DOI [10.5281/zenodo.15350282](https://doi.org/10.5281/zenodo.15350282).
+The input data for this HERMES release is published separately as **HERMES raw data** via DOI [10.5281/zenodo.22031725](https://doi.org/10.5281/zenodo.22031725). Setup downloads this fixed record automatically so that all users work with the same input version.
 
 ## System requirements
 

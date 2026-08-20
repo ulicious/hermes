@@ -3,8 +3,8 @@ Project overview
 ################
 
 HERMES separates the source-code repository from a user-selected project
-folder. The repository contains executable code, templates, and documentation.
-The project folder contains editable configurations, copied raw inputs,
+folder. The repository contains executable code, configuration templates, and
+documentation. The project folder contains editable configurations, downloaded raw inputs,
 processed data, and results. Keeping these two locations separate prevents a
 model run from writing generated files into the source tree.
 
@@ -16,7 +16,7 @@ Repository files used by operators
    hermes/
    |-- _run_workflow.py    select and start workflow stages
    |-- requirements.txt    Python dependencies
-   |-- data/               templates and bundled inputs copied by setup
+   |-- configs/            editable YAML templates copied by setup
    `-- doc/                user documentation sources
 
 Most users only edit ``_run_workflow.py`` in the repository. Configuration and
@@ -28,10 +28,10 @@ Data flow
 
 .. code-block:: text
 
-   repository data/ templates
-              |
-              |  0 setup
-              v
+   repository configs/ + Zenodo dataset
+                    |
+                    |  0 setup
+                    v
    PROJECT_FOLDER/raw_data + editable YAML files
               |
               |  1 raw-data processing
@@ -74,7 +74,8 @@ only after their corresponding workflow stage runs.
    |-- 4_plotting_configuration.yaml
    |-- algorithm_configurations/
    |-- raw_data/
-   |   `-- natural_earth/                 downloaded and extracted on demand
+   |   |-- natural_earth.zip              downloaded from Zenodo
+   |   `-- natural_earth/                 extracted during setup
    |-- processed_data/
    |   |-- inner_infrastructure_distances/
    |   `-- mip_data/

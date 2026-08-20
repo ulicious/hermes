@@ -14,7 +14,7 @@ run once in the order listed below. All switches are disabled by default.
      - Purpose
      - Main prerequisite
    * - ``RUN_SETUP_PROJECT_FOLDER``
-     - Create folders and copy configuration templates and bundled inputs.
+     - Create folders, copy configuration templates, and download versioned inputs.
      - Repository checkout
    * - ``RUN_PROCESS_RAW_DATA``
      - Download supporting geography and process infrastructure and costs.
@@ -62,7 +62,8 @@ fails. Once raw and processed data exist, disable stages that are not needed.
 Inputs and downloads
 ####################
 
-Setup copies the following standard inputs to ``PROJECT_FOLDER/raw_data/``:
+Setup downloads the following standard inputs from Zenodo record ``22031725``
+to ``PROJECT_FOLDER/raw_data/``:
 
 * ``location_data.csv``
 * ``country_data.csv``
@@ -70,10 +71,12 @@ Setup copies the following standard inputs to ``PROJECT_FOLDER/raw_data/``:
 * ``network_pipelines_oil.xlsx``
 * ``seaports.geojson``
 * ``water.zip``
+* ``natural_earth.zip``
 
-Their filenames and locations are fixed by the code. Raw-data processing also
-downloads Natural Earth datasets when their extracted shapefiles do not exist.
-The first preprocessing run therefore requires Internet access.
+Their filenames, checksums, and record are fixed by the code. Setup verifies
+each download and extracts ``natural_earth.zip`` into ``raw_data/natural_earth/``.
+The initial setup therefore requires Internet access; raw-data processing does
+not download a newer Natural Earth release independently.
 
 Outputs by stage
 ################

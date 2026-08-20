@@ -26,7 +26,7 @@ from data_processing.helpers_continent_connections import (
     build_continent_connectivity,
     save_continent_connectivity,
 )
-from data_processing.natural_earth_data import download_natural_earth_data
+from data_processing.natural_earth_data import validate_natural_earth_data
 from data_processing.configuration import (
     load_algorithm_configuration,
     load_technology_data,
@@ -219,7 +219,7 @@ minimal_distances_file_has_data = csv_has_rows(path_processed_data + 'minimal_di
 infrastructure_enforce_update_of_data = config_file['infrastructure_enforce_update_of_data']
 create_mip_data = config_file['create_mip_data']
 
-download_natural_earth_data(path_raw_data, force_update=infrastructure_enforce_update_of_data)
+validate_natural_earth_data(path_raw_data)
 
 destination = get_destination(config_file)  # todo: possible to load the natural earth data instead of using old packagaes
 

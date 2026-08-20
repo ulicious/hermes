@@ -1,14 +1,8 @@
-import logging
 import os
-import urllib.request
-import zipfile
 
 import geopandas as gpd
 
 from data_processing.configuration import load_algorithm_configuration
-
-
-logger = logging.getLogger(__name__)
 
 
 NATURAL_EARTH_DATASETS = [
@@ -36,52 +30,27 @@ def get_natural_earth_dataset_folder(path_raw_data, resolution, category, name):
     return os.path.join(get_natural_earth_folder(path_raw_data), resolution + '_' + category, name)
 
 
-def get_natural_earth_url(resolution, category, name):
-    return 'https://naturalearth.s3.amazonaws.com/{resolution}_{category}/ne_{resolution}_{name}.zip'.format(
-        resolution=resolution,
-        category=category,
-        name=name,
-    )
-
-
 def get_natural_earth_shapefile(path_raw_data, resolution, category, name):
     dataset_folder = get_natural_earth_dataset_folder(path_raw_data, resolution, category, name)
     shapefile_name = 'ne_{resolution}_{name}.shp'.format(resolution=resolution, name=name)
     return os.path.join(dataset_folder, shapefile_name)
 
 
-def download_natural_earth_data(path_raw_data, force_update=False, datasets=None):
-    """Download and extract all Natural Earth datasets used by the project into raw_data."""
+def validate_natural_earth_data(path_raw_data, datasets=None):
+    """Require the Natural Earth files installed by the Zenodo-backed setup."""
     if datasets is None:
         datasets = NATURAL_EARTH_DATASETS
-
-    natural_earth_folder = get_natural_earth_folder(path_raw_data)
-    os.makedirs(natural_earth_folder, exist_ok=True)
-
-    for resolution, category, name in datasets:
-        shapefile_path = get_natural_earth_shapefile(path_raw_data, resolution, category, name)
-        if os.path.exists(shapefile_path) and not force_update:
-            logger.info('Natural Earth data already available: %s', shapefile_path)
-            continue
-
-        dataset_folder = get_natural_earth_dataset_folder(path_raw_data, resolution, category, name)
-        os.makedirs(dataset_folder, exist_ok=True)
-
-        zip_path = os.path.join(dataset_folder, 'ne_{resolution}_{name}.zip'.format(
-            resolution=resolution,
-            name=name,
-        ))
-        url = get_natural_earth_url(resolution, category, name)
-
-        logger.info('Download Natural Earth data: %s', url)
-        urllib.request.urlretrieve(url, zip_path)
-
-        logger.info('Extract Natural Earth data to %s', dataset_folder)
-        with zipfile.ZipFile(zip_path, 'r') as zip_file:
-            zip_file.extractall(dataset_folder)
-
-        if not os.path.exists(shapefile_path):
-            raise FileNotFoundError('Natural Earth download did not create expected shapefile: ' + shapefile_path)
+    missing = [
+        get_natural_earth_shapefile(path_raw_data, resolution, category, name)
+        for resolution, category, name in datasets
+        if not os.path.isfile(get_natural_earth_shapefile(path_raw_data, resolution, category, name))
+    ]
+    if missing:
+        raise FileNotFoundError(
+            'Missing Natural Earth data installed by the HERMES setup:\n'
+            + '\n'.join(missing)
+            + '\nRun _run_workflow.py with RUN_SETUP_PROJECT_FOLDER = True.'
+        )
 
 
 def read_natural_earth(path_raw_data=None, resolution='10m', category='cultural', name='admin_0_countries_deu'):
@@ -93,7 +62,7 @@ def read_natural_earth(path_raw_data=None, resolution='10m', category='cultural'
         raise FileNotFoundError(
             'Missing Natural Earth shapefile:\n'
             + shapefile_path
-            + '\nRun _run_workflow.py with RUN_PROCESS_RAW_DATA = True once to download Natural Earth data into raw_data.'
+            + '\nRun _run_workflow.py with RUN_SETUP_PROJECT_FOLDER = True to download the versioned Zenodo dataset.'
         )
 
     return gpd.read_file(shapefile_path)
