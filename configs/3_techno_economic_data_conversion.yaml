@@ -1,0 +1,247 @@
+# Conversion cost outputs are combined as [EUR/MWh_output].
+# NOTE: specific_investment is used as [EUR/MW_output] by the cost formula.
+# Existing source comments disagreed between kW and MW; verify this capacity basis.
+
+strike_prices:
+   Hydrogen_Gas: 66.29  # [EUR/MWh_commodity]
+   Hydrogen_Liquid: 66.299  # [EUR/MWh_commodity]
+   Ammonia: 119.706  # [EUR/MWh_commodity]
+   Methanol: 110.155  # [EUR/MWh_commodity]
+   Methane_Gas: 22.68  # [EUR/MWh_commodity]
+   Methane_Liquid: 47.896  # [EUR/MWh_commodity]
+   DBT: 0  # [EUR/MWh_commodity]
+   MCH: 0  # [EUR/MWh_commodity]
+   FTF: 33.12  # [EUR/MWh_commodity]
+
+cost_type:
+   # viable options:
+   # 'location' --> costs will be looked up for each location (from location_data)
+   # ['COUNTRY_NAME_1', 'COUNTRY_NAME_2', ...] --> costs will be looked up for specific country, else for location. If 'all_countries' --> always country (from country_data)
+   # 'uniform' --> as set in techno_economic_data_conversion
+   # IMPORTANT: If 'location' or 'country' is chosen, they have to be available in respective file
+   Hydrogen_Gas: 'location'  # [-] selector
+   Electricity: 'location'  # [-] selector
+   CO2: 'uniform'  # [-] selector
+   Nitrogen: 'uniform'  # [-] selector
+   Low_Temperature_Heat: 'uniform'  # [-] selector
+   Mid_Temperature_Heat: 'uniform'  # [-] selector
+   High_Temperature_Heat: 'uniform'  # [-] selector
+   interest_rate: ['Germany']  # [-] selector; 'location' is not available
+
+# Set uniform prices and economic assumptions.
+uniform_costs:
+   Hydrogen_Gas: 0  # [EUR/MWh_H2]
+   Electricity: 45  # [EUR/MWh_el]
+   CO2: 145  # [EUR/t_CO2]
+   Low_Temperature_Heat: 50  # [EUR/MWh_th]
+   Mid_Temperature_Heat: 50  # [EUR/MWh_th]
+   High_Temperature_Heat: 50  # [EUR/MWh_th]
+   Nitrogen: 55  # [EUR/t_N2]
+   interest_rate: 0.06  # [-] annual fraction
+
+Hydrogen_Gas:
+   potential_conversions: ['Hydrogen_Liquid', 'Ammonia', 'Methanol', 'Methane_Gas', 'DBT', 'MCH', 'FTF']  # [-]
+   Hydrogen_Liquid:
+      specific_investment: 1497967  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.08  # [1/a] fraction of investment per year
+      lifetime: 20  # [a]
+      electricity_demand: 0.2034  # [MWh_el/MWh_output]
+      co2_demand: 0  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0  # [MWh_th/MWh_output]
+      heat_demand_niveau: None  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 0.9835  # [-] fraction
+      efficiency_external_heat: 0.9835  # [-] fraction
+   Ammonia:
+      specific_investment: 513871  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.03  # [1/a] fraction of investment per year
+      lifetime: 20  # [a]
+      electricity_demand: 0.0514  # [MWh_el/MWh_output]
+      co2_demand: 0  # [t_CO2/MWh_output]
+      nitrogen_demand: 0.16  # [t_N2/MWh_output]
+      heat_demand: 0  # [MWh_th/MWh_output]
+      heat_demand_niveau: None  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 0.878  # [-] fraction
+      efficiency_external_heat: 0.878  # [-] fraction
+   Methanol:
+      specific_investment: 1090000  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.0175  # [1/a] fraction of investment per year
+      lifetime: 30  # [a]
+      electricity_demand: 0.0172  # [MWh_el/MWh_output]
+      co2_demand: 0.247  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0  # [MWh_th/MWh_output]
+      heat_demand_niveau: None  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 0.7986  # [-] fraction
+      efficiency_external_heat: 0.7986  # [-] fraction
+   Methane_Gas:
+      specific_investment: 278000  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.04  # [1/a] fraction of investment per year
+      lifetime: 30  # [a]
+      electricity_demand: 0  # [MWh_el/MWh_output]
+      co2_demand: 0.198  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0  # [MWh_th/MWh_output]
+      heat_demand_niveau: None  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 0.8334  # [-] fraction
+      efficiency_external_heat: 0.8334  # [-] fraction
+   DBT:
+      specific_investment: 256026  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.04  # [1/a] fraction of investment per year
+      lifetime: 20  # [a]
+      electricity_demand: 0.003  # [MWh_el/MWh_output]
+      co2_demand: 0  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0  # [MWh_th/MWh_output]
+      heat_demand_niveau: None  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 0.999  # [-] fraction
+      efficiency_external_heat: 0.999  # [-] fraction
+   MCH:
+      specific_investment: 157016  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.04  # [1/a] fraction of investment per year
+      lifetime: 20  # [a]
+      electricity_demand: 0.006  # [MWh_el/MWh_output]
+      co2_demand: 0  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0  # [MWh_th/MWh_output]
+      heat_demand_niveau: None  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 0.999  # [-] fraction
+      efficiency_external_heat: 0.999  # [-] fraction
+   FTF:
+      specific_investment: 1600000  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.03  # [1/a] fraction of investment per year
+      lifetime: 25  # [a]
+      electricity_demand: 0.0179  # [MWh_el/MWh_output]
+      co2_demand: 0.406  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0  # [MWh_th/MWh_output]
+      heat_demand_niveau: None  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 0.8323  # [-] fraction
+      efficiency_external_heat: 0.8323  # [-] fraction
+
+Hydrogen_Liquid:
+   potential_conversions: ['Hydrogen_Gas']  # [-]
+   Hydrogen_Gas:
+      specific_investment: 4320  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.03  # [1/a] fraction of investment per year
+      lifetime: 10  # [a]
+      electricity_demand: 0.0180  # [MWh_el/MWh_output]
+      co2_demand: 0  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0  # [MWh_th/MWh_output]
+      heat_demand_niveau: None  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 1  # [-] fraction
+      efficiency_external_heat: 1  # [-] fraction
+
+Ammonia:
+   potential_conversions: ['Hydrogen_Gas']  # [-]
+   Hydrogen_Gas:
+      specific_investment: 264026  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.03  # [1/a] fraction of investment per year
+      lifetime: 20  # [a]
+      electricity_demand: 0.0285  # [MWh_el/MWh_output]
+      co2_demand: 0  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0.19951995  # [MWh_th/MWh_output]
+      heat_demand_niveau: 'mid_temperature'  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 0.9326  # [-] fraction
+      efficiency_external_heat: 1.1458  # [-] fraction
+
+Methanol:
+   potential_conversions: ['Hydrogen_Gas']  # [-]
+   Hydrogen_Gas:
+      specific_investment: 16318  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.04  # [1/a] fraction of investment per year
+      lifetime: 20  # [a]
+      electricity_demand: 0.0960  # [MWh_el/MWh_output]
+      co2_demand: 0  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0.1350135  # [MWh_th/MWh_output]
+      heat_demand_niveau: 'mid_temperature'  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 0.9431  # [-] fraction
+      efficiency_external_heat: 1.0807  # [-] fraction
+
+Methane_Gas:
+   potential_conversions: ['Hydrogen_Gas', 'Methane_Liquid']  # [-]
+   Hydrogen_Gas:
+      specific_investment: 470085  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.03  # [1/a] fraction of investment per year
+      lifetime: 30  # [a]
+      electricity_demand: 0  # [MWh_el/MWh_output]
+      co2_demand: 0  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0.33363336  # [MWh_th/MWh_output]
+      heat_demand_niveau: 'high_temperature'  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 0.695  # [-] fraction
+      efficiency_external_heat: 0.948  # [-] fraction
+   Methane_Liquid:
+      specific_investment: 740000  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.035  # [1/a] fraction of investment per year
+      lifetime: 25  # [a]
+      electricity_demand: 0.0360  # [MWh_el/MWh_output]
+      co2_demand: 0  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0  # [MWh_th/MWh_output]
+      heat_demand_niveau: None  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 1  # [-] fraction
+      efficiency_external_heat: 1  # [-] fraction
+
+Methane_Liquid:
+   potential_conversions: ['Methane_Gas']  # [-]
+   Methane_Gas:
+      specific_investment: 280000  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.035  # [1/a] fraction of investment per year
+      lifetime: 30  # [a]
+      electricity_demand: 0  # [MWh_el/MWh_output]
+      co2_demand: 0  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0  # [MWh_th/MWh_output]
+      heat_demand_niveau: None  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 0.98  # [-] fraction
+      efficiency_external_heat: 0.98  # [-] fraction
+
+DBT:
+   potential_conversions: ['Hydrogen_Gas']  # [-]
+   Hydrogen_Gas:
+      specific_investment: 282028  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.04  # [1/a] fraction of investment per year
+      lifetime: 20  # [a]
+      electricity_demand: 0.003  # [MWh_el/MWh_output]
+      co2_demand: 0  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0.3480348  # [MWh_th/MWh_output]
+      heat_demand_niveau: 'mid_temperature'  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 0.652  # [-] fraction
+      efficiency_external_heat: 1  # [-] fraction
+
+MCH:
+   potential_conversions: ['Hydrogen_Gas']  # [-]
+   Hydrogen_Gas:
+      specific_investment: 127013  # [EUR/MW_output] basis to verify
+      fixed_maintenance: 0.04  # [1/a] fraction of investment per year
+      lifetime: 20  # [a]
+      electricity_demand: 0.135  # [MWh_el/MWh_output]
+      co2_demand: 0  # [t_CO2/MWh_output]
+      nitrogen_demand: 0  # [t_N2/MWh_output]
+      heat_demand: 0.19951995  # [MWh_th/MWh_output]
+      heat_demand_niveau: 'mid_temperature'  # [-] heat grade category
+      operating_hours: 8000  # [h/a]
+      efficiency_autothermal: 0.595  # [-] fraction
+      efficiency_external_heat: 1  # [-] fraction
+
+FTF:
+   potential_conversions: []  # [-]
