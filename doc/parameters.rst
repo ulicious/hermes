@@ -25,11 +25,11 @@ These settings define paths, computational limits, the globally available
 commodities and transport means, and whether preprocessing artefacts should be
 reused or rebuilt.
 
-``project_folder_path`` is the only path stored in
-``1_algorithm_configuration.yaml``. The code derives all required subfolders from
-this project folder. Raw-data file names such as ``location_data.csv`` and
-``country_data.csv`` are fixed by the code and are therefore not listed as
-configuration parameters.
+``project_folder_path`` defines the project root. The code derives all required
+subfolders from it. The five required raw-data settings select filenames inside
+``PROJECT_FOLDER/raw_data/``: ``country_data``, ``location_data``,
+``network_pipelines_gas``, ``network_pipelines_oil``, and ``seaports``. They
+must contain filenames only, without directory components.
 
 .. csv-table::
    :header-rows: 1

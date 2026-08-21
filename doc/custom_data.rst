@@ -3,8 +3,8 @@ Custom data
 ###########
 
 HERMES can use modified raw inputs or externally processed infrastructure data.
-Custom data must follow the filenames, columns, units, coordinate conventions,
-and folder structure expected by the standard workflow.
+Custom data must follow the configured filenames, required columns, units,
+coordinate conventions, and folder structure expected by the standard workflow.
 
 Modify raw inputs
 #################
@@ -15,9 +15,12 @@ added to or removed from the copied input files before raw-data processing.
 Do not edit repository templates unless the change should affect every newly
 created project folder.
 
-Raw input filenames are fixed by the code and cannot currently be redirected
-through YAML configuration. After changing raw infrastructure, rerun raw-data
-processing and start-location creation before running the algorithm.
+Set ``country_data``, ``location_data``, ``network_pipelines_gas``,
+``network_pipelines_oil``, and ``seaports`` in
+``1_algorithm_configuration.yaml`` to the corresponding filenames inside
+``PROJECT_FOLDER/raw_data/``. Directory components are not accepted. After
+changing raw infrastructure, rerun raw-data processing and start-location
+creation before running the algorithm.
 
 Use processed data
 ##################

@@ -1,5 +1,11 @@
 # general configuration
 project_folder_path: ''  # full path of folder
+# raw-data filenames inside PROJECT_FOLDER/raw_data
+country_data: 'country_data.csv'
+location_data: 'location_data.csv'
+network_pipelines_gas: 'network_pipelines_gas.xlsx'
+network_pipelines_oil: 'network_pipelines_oil.xlsx'
+seaports: 'seaports.geojson'
 use_minimal_example: False
 use_low_storage: False  # distances are not precalculated --> lower storage demand but higher memory and time demand
 use_low_memory: False  # avoids parallel processing and large matrix implementations --> lower memory demand but higher time demand

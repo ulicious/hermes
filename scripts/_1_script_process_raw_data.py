@@ -28,6 +28,7 @@ from data_processing.helpers_continent_connections import (
 )
 from data_processing.natural_earth_data import validate_natural_earth_data
 from data_processing.configuration import (
+    get_raw_data_path,
     load_algorithm_configuration,
     load_technology_data,
 )
@@ -107,6 +108,9 @@ def print_infrastructure_configuration(config_file):
     print('Selected infrastructure settings:')
     print('Configuration file: ' + str(config_file.get('_configuration_path')))
     print('Project folder: ' + str(config_file['project_folder_path']))
+    print('Gas pipeline data: ' + str(config_file['network_pipelines_gas']))
+    print('Oil pipeline data: ' + str(config_file['network_pipelines_oil']))
+    print('Seaport data: ' + str(config_file['seaports']))
     print('Infrastructure update mode - conversion costs/efficiencies only: '
           + str(config_file['infrastructure_update_only_conversion_costs_and_efficiency']))
     print('Infrastructure data force update: ' + str(config_file['infrastructure_enforce_update_of_data']))
@@ -268,14 +272,14 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
     if not (('gas_network_data' in files_in_folder) & (not infrastructure_enforce_update_of_data)):
         # process gas pipelines
         logging.info('Gas pipelines')
-        path_gas_pipeline_data = path_raw_data + 'network_pipelines_gas.xlsx'
+        path_gas_pipeline_data = get_raw_data_path(config_file, 'network_pipelines_gas')
         group_LineStrings('gas', num_cores, path_gas_pipeline_data, path_processed_data, gap_distance,
                           boundaries, destination, use_minimal_example=use_minimal_example)
 
     if not (('oil_network_data' in files_in_folder) & (not infrastructure_enforce_update_of_data)):
         # process oil pipelines
         logging.info('Oil pipelines')
-        path_oil_pipeline_data = path_raw_data + 'network_pipelines_oil.xlsx'
+        path_oil_pipeline_data = get_raw_data_path(config_file, 'network_pipelines_oil')
         group_LineStrings('oil', num_cores, path_oil_pipeline_data, path_processed_data, gap_distance,
                           boundaries, destination, use_minimal_example=use_minimal_example)
 
@@ -331,7 +335,14 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
     # process ports
     logging.info('Processing ports')
     if not (ports_file_has_data & (not infrastructure_enforce_update_of_data)):
-        ports = process_ports(path_raw_data, coastlines, landmasses, boundaries, destination, use_minimal_example=use_minimal_example)
+        ports = process_ports(
+            get_raw_data_path(config_file, 'seaports'),
+            coastlines,
+            landmasses,
+            boundaries,
+            destination,
+            use_minimal_example=use_minimal_example,
+        )
         ports = write_csv_with_schema(ports, path_processed_data + 'ports.csv', PORT_COLUMNS)
     else:
         ports = read_csv_or_empty(path_processed_data + 'ports.csv', PORT_COLUMNS)

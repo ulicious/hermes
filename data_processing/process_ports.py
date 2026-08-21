@@ -11,12 +11,12 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
-def process_ports(path_data, coastlines, landmasses, boundaries, destination, use_minimal_example=False):
+def process_ports(ports_file, coastlines, landmasses, boundaries, destination, use_minimal_example=False):
 
     """
     processes raw ports data to dataframe and connects port to the closest coastline
 
-    @param str path_data: path to ports data
+    @param str ports_file: path to the configured seaport GeoJSON file
     @param geopandas.GeoDataFrame coastlines: coastlines to allow connection of ports to coastline
     @param bool use_minimal_example: removes all ports outside of Europe in case of minimal example
     @return: dataframe containing all information on ports
@@ -24,7 +24,6 @@ def process_ports(path_data, coastlines, landmasses, boundaries, destination, us
 
     ports = pd.DataFrame(columns=['latitude', 'longitude', 'name', 'country', 'continent',
                                   'longitude_on_coastline', 'latitude_on_coastline'])
-    ports_file = path_data + 'seaports.geojson'
     if not os.path.exists(ports_file):
         return ports
 

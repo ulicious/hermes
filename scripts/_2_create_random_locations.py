@@ -26,8 +26,7 @@ from data_processing.natural_earth_data import load_states, load_world
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_start_locations, \
     check_if_location_is_valid, attach_feedstock_costs_and_interest_rate
 from data_processing.configuration import (
-    COUNTRY_DATA_FILE,
-    LOCATION_DATA_FILE,
+    get_raw_data_path,
     load_algorithm_configuration,
     load_technology_data,
 )
@@ -98,6 +97,8 @@ def print_start_location_configuration(config_file):
     print('Selected start-location settings:')
     print('Configuration file: ' + str(config_file.get('_configuration_path')))
     print('Project folder: ' + str(config_file['project_folder_path']))
+    print('Country data: ' + str(config_file['country_data']))
+    print('Location data: ' + str(config_file['location_data']))
     print('Start-location update mode - conversion costs/efficiencies only: '
           + str(config_file['start_locations_update_only_conversion_costs_and_efficiency']))
     print('MIP data enabled: ' + str(config_file['create_mip_data']))
@@ -166,8 +167,10 @@ logging.info(
 
 world_surface = Polygon([Point([-180, -90]), Point([-180, 90]), Point([180, 90]), Point([180, -90])])
 
-levelized_costs_location = pd.read_csv(path_raw_data + LOCATION_DATA_FILE, index_col=0, sep=';')
-levelized_costs_country = pd.read_csv(path_raw_data + COUNTRY_DATA_FILE, index_col=0)
+levelized_costs_location = pd.read_csv(
+    get_raw_data_path(config_file, 'location_data'), index_col=0, sep=';')
+levelized_costs_country = pd.read_csv(
+    get_raw_data_path(config_file, 'country_data'), index_col=0)
 
 techno_economic_data_conversion, _ = load_technology_data(config_file)
 

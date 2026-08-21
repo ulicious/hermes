@@ -1,5 +1,10 @@
 Assumption / Setting;Values;Explanation;Comment
 project_folder_path;string;Path to project folder;
+country_data;filename;Country-level production-cost input inside raw_data/;Default: country_data.csv
+location_data;filename;Location-level production-cost input inside raw_data/;Default: location_data.csv
+network_pipelines_gas;filename;Gas-pipeline workbook inside raw_data/;Default: network_pipelines_gas.xlsx
+network_pipelines_oil;filename;Oil-pipeline workbook inside raw_data/;Default: network_pipelines_oil.xlsx
+seaports;filename;Seaport GeoJSON input inside raw_data/;Default: seaports.geojson
 use_minimal_example;True / False;Reduces infrastructure data and random locations to Europe;
 use_low_storage;True / False;If True, precomputed inner-network distances are skipped to reduce storage demand;Usually increases routing time
 use_low_memory;True / False;If True, memory-saving code paths are used and parallel processing is reduced;Usually increases runtime

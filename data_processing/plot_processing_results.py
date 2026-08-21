@@ -8,7 +8,7 @@ import random
 
 from data_processing.helpers_geometry import get_boundaries_from_config
 from data_processing.natural_earth_data import load_world_lowres
-from data_processing.configuration import load_algorithm_configuration
+from data_processing.configuration import get_raw_data_path, load_algorithm_configuration
 
 
 def _read_csv_or_empty(path, columns=None, index_col=0):
@@ -42,7 +42,7 @@ def plot_original_pipeline_data():
         plt.show()
 
     # read global energy monitor data
-    data_gas = pd.read_excel(path_raw_data + 'network_pipelines_gas.xlsx')
+    data_gas = pd.read_excel(get_raw_data_path(config_file, 'network_pipelines_gas'))
 
     # filter pipeline data based on status
     data_gas = data_gas.loc[data_gas['Status'].isin(['Operating', 'Construction'])]
@@ -89,7 +89,7 @@ def plot_original_pipeline_data():
         gas_lines = new_single_lines
 
         # read global energy monitor data
-        data_oil = pd.read_excel(path_raw_data + 'network_pipelines_oil.xlsx')
+        data_oil = pd.read_excel(get_raw_data_path(config_file, 'network_pipelines_oil'))
 
         # filter pipeline data based on status
         data_oil = data_oil.loc[data_oil['Status'].isin(['Operating', 'Construction'])]

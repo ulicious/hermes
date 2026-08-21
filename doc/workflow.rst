@@ -73,8 +73,12 @@ to ``PROJECT_FOLDER/raw_data/``:
 * ``water.zip``
 * ``natural_earth.zip``
 
-Their filenames, checksums, and record are fixed by the code. Setup verifies
-each download and extracts ``natural_earth.zip`` into ``raw_data/natural_earth/``.
+These are the default filenames used by the supplied algorithm configuration.
+The five main input filenames can be changed through ``country_data``,
+``location_data``, ``network_pipelines_gas``, ``network_pipelines_oil``, and
+``seaports``. The Zenodo record and checksums for the default downloads are
+fixed by the code. Setup verifies each download and extracts
+``natural_earth.zip`` into ``raw_data/natural_earth/``.
 The initial setup therefore requires Internet access; raw-data processing does
 not download a newer Natural Earth release independently.
 

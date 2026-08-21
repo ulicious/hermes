@@ -8,7 +8,6 @@ from shipping import shipping
 # Plots für Darstellung Transportkosten in Abhängigkeit von Entfernung und Kapazität
 
 
-pipelines = pd.read_excel('input_data/network_pipelines_gas.xlsx')
 data_costs = pd.read_excel('input_data/Data Aggregation.xlsx', sheet_name='working data')
 
 index_conditioning = 9

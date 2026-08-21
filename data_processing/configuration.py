@@ -28,8 +28,13 @@ ALGORITHM_CONFIG = '1_algorithm_configuration.yaml'
 TRANSPORTATION_CONFIG = '2_techno_economic_data_transportation.yaml'
 CONVERSION_CONFIG = '3_techno_economic_data_conversion.yaml'
 PLOTTING_CONFIG = '4_plotting_configuration.yaml'
-LOCATION_DATA_FILE = 'location_data.csv'
-COUNTRY_DATA_FILE = 'country_data.csv'
+RAW_DATA_CONFIG_KEYS = (
+    'country_data',
+    'location_data',
+    'network_pipelines_gas',
+    'network_pipelines_oil',
+    'seaports',
+)
 
 CONFIG_FILENAMES = [
     ALGORITHM_CONFIG,
@@ -115,7 +120,36 @@ def normalize_algorithm_configuration(config_file):
     for key in BOOLEAN_CONFIG_KEYS:
         if key in config_file:
             config_file[key] = _as_bool(config_file[key])
+    for key in RAW_DATA_CONFIG_KEYS:
+        if key not in config_file:
+            raise KeyError(
+                "Missing required raw-data filename '" + key
+                + "' in " + ALGORITHM_CONFIG + '.'
+            )
+        filename = config_file[key]
+        if not isinstance(filename, str) or not filename.strip():
+            raise ValueError(
+                "Raw-data filename '" + key + "' in " + ALGORITHM_CONFIG
+                + ' must be a non-empty string.'
+            )
+        filename = filename.strip()
+        if filename != os.path.basename(filename):
+            raise ValueError(
+                "Raw-data filename '" + key + "' must be a filename without a directory: "
+                + filename
+            )
+        config_file[key] = filename
     return config_file
+
+
+def get_raw_data_path(config_file, key):
+    if key not in RAW_DATA_CONFIG_KEYS:
+        raise KeyError('Unknown raw-data configuration key: ' + str(key))
+    return os.path.join(
+        config_file['project_folder_path'],
+        'raw_data',
+        config_file[key],
+    )
 
 
 def get_config_folder(project_folder_path):

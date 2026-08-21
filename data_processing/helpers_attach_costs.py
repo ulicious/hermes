@@ -12,7 +12,7 @@ from collections import defaultdict
 from algorithm.methods_geographic import calc_distance_list_to_single
 from data_processing.helpers_geometry import round_to_quarter
 from data_processing.natural_earth_data import load_world
-from data_processing.configuration import COUNTRY_DATA_FILE, LOCATION_DATA_FILE
+from data_processing.configuration import get_raw_data_path
 
 
 def _config_flag(config_file, key):
@@ -616,11 +616,14 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
     path_raw_data = config_file['project_folder_path'] + 'raw_data/'
 
     try:
-        levelized_costs_location = pd.read_csv(path_raw_data + LOCATION_DATA_FILE, index_col=0)
+        levelized_costs_location = pd.read_csv(
+            get_raw_data_path(config_file, 'location_data'), index_col=0)
     except:
-        levelized_costs_location = pd.read_csv(path_raw_data + LOCATION_DATA_FILE, index_col=0, sep=';')
+        levelized_costs_location = pd.read_csv(
+            get_raw_data_path(config_file, 'location_data'), index_col=0, sep=';')
 
-    levelized_costs_country = pd.read_csv(path_raw_data + COUNTRY_DATA_FILE, index_col=0)
+    levelized_costs_country = pd.read_csv(
+        get_raw_data_path(config_file, 'country_data'), index_col=0)
 
     # add country information to options
     not_shipping_options = [i for i in locations.index if 'H' not in i]

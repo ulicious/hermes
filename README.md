@@ -108,6 +108,8 @@ the initial Zenodo data download, and the selected memory/storage settings.
 
 Setup downloads the versioned input dataset from [Zenodo record 22031725](https://zenodo.org/records/22031725) to `PROJECT_FOLDER/raw_data/`. It verifies every file against the checksum published for this HERMES data release and extracts `natural_earth.zip`. The initial setup therefore requires Internet access; matching local files are reused on later setup runs.
 
+The required `country_data`, `location_data`, `network_pipelines_gas`, `network_pipelines_oil`, and `seaports` settings in `1_algorithm_configuration.yaml` select the corresponding filenames inside `PROJECT_FOLDER/raw_data/`. The supplied configuration points to the files downloaded from the Zenodo record.
+
 Principal outputs are stored under:
 
 - `results/location_results/` for per-location routing results
