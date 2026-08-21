@@ -2,7 +2,9 @@ Assumption / Setting;Values;Explanation
 infrastructure_plot;True / False;plots infrastructure in a single plot
 start_locations_infrastructure_destination_plot;True / False;plots start locations, infrastructure and destination without optimization results
 water_availability_plot;True / False;plots water availability in a single plot
+h2_potential_grid_cell_plot;True / False;plots H2 potential in the original location_data grid cells with an automatically selected energy unit
 production_costs_plot;list with result names;creates h2 production costs plot for results in csv
+potential_plot;list with result names;creates H2 potential plots for the aggregated start-location Voronoi cells
 conversion_costs_plot;list with result names;creates conversion costs plot for results in csv
 transport_costs_plot;list with result names;creates transport costs plot for results in csv
 total_supply_costs_plot;list with result names;creates total supply costs plot for results in csv

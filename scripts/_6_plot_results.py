@@ -16,10 +16,11 @@ from plotting.get_figures import get_number_figure, get_energy_carrier_figure, g
     get_used_locations_figure, get_calculation_time, get_sankey_diagram, \
     get_start_locations_infrastructure_destination_figure, \
     get_tight_boundaries_for_start_locations_infrastructure_destination, get_water_availability_figure, \
-    safe_output_path, resolve_plot_boundaries, get_configured_colormap, get_plot_color_config
+    safe_output_path, resolve_plot_boundaries, get_configured_colormap, get_plot_color_config, \
+    get_hydrogen_potential_plot_scale
 from plotting.helpers_plotting import load_infrastructure_data, load_first_available_destination, \
     get_complete_infrastructure, load_result, plot_comparison_plot, match_routing_results
-from data_processing.configuration import load_algorithm_configuration, load_plotting_configuration
+from data_processing.configuration import load_algorithm_configuration, load_plotting_configuration, get_raw_data_path
 
 time_start = time.time()
 
@@ -29,6 +30,74 @@ def check_required_files_exist(required_files, purpose):
     if missing_files:
         missing_files_text = '\n'.join('- ' + file for file in missing_files)
         raise FileNotFoundError(f'Missing data for {purpose}:\n{missing_files_text}')
+
+
+def plot_h2_potential(data, boundaries, fig_title, geometry_source=None):
+    required_columns = {'Hydrogen_Gas_Quantity'}
+    missing_columns = sorted(required_columns.difference(data.columns))
+    if missing_columns:
+        raise ValueError(
+            'Missing data for H2-potential plotting:\n- column '
+            + '\n- column '.join(repr(column) for column in missing_columns)
+        )
+    geometry_available = 'geometry' in data.columns
+    geometry_source_available = (
+        geometry_source is not None
+        and not geometry_source.empty
+        and 'geometry' in geometry_source.columns
+    )
+    if not geometry_available and not geometry_source_available:
+        raise ValueError("H2-potential plotting requires a 'geometry' column.")
+
+    potential_data = data.copy()
+    if not geometry_available:
+        valid_locations = potential_data.index.intersection(geometry_source.index)
+        potential_data = potential_data.loc[valid_locations].copy()
+    potential_data['Hydrogen_Gas_Quantity'] = pd.to_numeric(
+        potential_data['Hydrogen_Gas_Quantity'], errors='coerce'
+    )
+    valid_potential = (
+        np.isfinite(potential_data['Hydrogen_Gas_Quantity'])
+        & (potential_data['Hydrogen_Gas_Quantity'] >= 0)
+    )
+    if geometry_available:
+        valid_potential &= potential_data['geometry'].apply(
+            lambda geometry: hasattr(geometry, 'is_empty') and not geometry.is_empty
+        )
+    potential_data = potential_data[valid_potential].copy()
+    if potential_data.empty:
+        raise ValueError('H2-potential plotting requires at least one valid cell quantity and geometry.')
+
+    potential_divisor, potential_unit = get_hydrogen_potential_plot_scale(
+        potential_data['Hydrogen_Gas_Quantity'].max()
+    )
+    potential_column = 'Hydrogen_Gas_Quantity_plot'
+    potential_data[potential_column] = (
+        potential_data['Hydrogen_Gas_Quantity'] / potential_divisor
+    )
+    maximum_display_value = potential_data[potential_column].max()
+    only_zero_potential = np.isclose(maximum_display_value, 0)
+    potential_norm = mpl.colors.Normalize(
+        vmin=0,
+        vmax=1 if only_zero_potential else maximum_display_value,
+    )
+    get_number_figure(
+        potential_data,
+        potential_norm,
+        cmap,
+        boundaries,
+        destination_location=None,
+        column=potential_column,
+        use_voronoi=True,
+        production_costs=geometry_source,
+        save=True,
+        save_path=path_saving,
+        fig_title=fig_title,
+        plot_colors=plot_colors,
+        unit=potential_unit,
+        colorbar_ticks=[0] if only_zero_potential else None,
+        export_column='Hydrogen_Gas_Quantity',
+    )
 
 
 # get general configuration
@@ -113,6 +182,7 @@ profit_plot_results = config_file_plotting['profit_plot']
 all_costs_plot_results = config_file_plotting['all_costs_plot']
 commodity_plot_results = config_file_plotting['commodity_plot']
 efficiency_plot_results = config_file_plotting['efficiency_plot']
+potential_plot_results = config_file_plotting.get('potential_plot', [])
 full_plot_results = config_file_plotting['full_plot']
 
 commodity_transport_mean_results = config_file_plotting['commodity_transport_mean_plot']
@@ -128,7 +198,8 @@ matched_supply_routes_plot = config_file_plotting['matched_supply_routes_plot']
 all_results = list(set(production_plot_results + conversion_plot_results + transport_plot_results
                        + total_supply_costs_plot_results + profit_plot_results
                        + all_costs_plot_results + commodity_plot_results
-                       + efficiency_plot_results + sankey_plot_results + routes_plot_results
+                       + efficiency_plot_results + potential_plot_results
+                       + sankey_plot_results + routes_plot_results
                        + full_plot_results + weighted_routes_plot_results + commodity_transport_mean_results
                        + supply_curve_results))
 
@@ -173,6 +244,24 @@ if config_file_plotting['start_locations_infrastructure_destination_plot']:
     get_start_locations_infrastructure_destination_figure(
         production_costs, global_plot_boundaries, path_data, destination,
         save=True, path_saving=path_saving, plot_colors=plot_colors)
+
+# H2 potential in the original input-data grid cells
+if config_file_plotting.get('h2_potential_grid_cell_plot', False):
+    location_data_file = get_raw_data_path(config_file_general, 'location_data')
+    check_required_files_exist([location_data_file], 'H2 grid-cell potential plotting')
+    grid_cell_potential_data = pd.read_csv(
+        location_data_file,
+        sep=';',
+        usecols=['latitude', 'longitude', 'Hydrogen_Gas_Quantity', 'polygon'],
+    )
+    grid_cell_potential_data['geometry'] = grid_cell_potential_data['polygon'].apply(
+        lambda geometry: shapely.wkt.loads(geometry) if isinstance(geometry, str) and geometry else None
+    )
+    plot_h2_potential(
+        grid_cell_potential_data,
+        global_plot_boundaries,
+        'h2_potential_grid_cells',
+    )
 
 # result plots
 for r in all_results:
@@ -235,6 +324,14 @@ for r in all_results:
                           use_voronoi=True, production_costs=production_costs,
                           save=True, save_path=path_saving, fig_title=r + '_efficiency',
                           plot_colors=plot_colors)
+
+    if r in potential_plot_results:
+        plot_h2_potential(
+            data.copy(),
+            scenario_boundaries,
+            r + '_h2_potential_voronoi',
+            geometry_source=production_costs,
+        )
 
     if r in routes_plot_results:
         get_routes_figure(data.copy(), transport_mean_line_styles, line_widths, color_dictionary, nice_name_dictionary,

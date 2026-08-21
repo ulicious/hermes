@@ -753,6 +753,30 @@ def _get_even_colorbar_ticks(vmin, vmax, tick_count):
     return np.linspace(vmin, vmax, tick_count)
 
 
+def get_hydrogen_potential_plot_scale(max_quantity_mwh):
+    """Return the divisor and colorbar label for H2 potential stored in MWh."""
+    max_quantity_mwh = float(max_quantity_mwh)
+    if not np.isfinite(max_quantity_mwh) or max_quantity_mwh < 0:
+        raise ValueError('The maximum H2 potential must be a finite, non-negative value.')
+
+    if max_quantity_mwh < 1:
+        return 1e-3, r'H$_2$ potential [kWh]'
+    if max_quantity_mwh < 1e3:
+        return 1, r'H$_2$ potential [MWh]'
+    if max_quantity_mwh < 1e6:
+        return 1e3, r'H$_2$ potential [GWh]'
+
+    max_quantity_twh = max_quantity_mwh / 1e6
+    exponent = max(0, math.floor(math.log10(max_quantity_twh)) - 2)
+    scaled_maximum = max_quantity_twh / 10 ** exponent
+    if round(scaled_maximum, 1) >= 1000:
+        exponent += 1
+    divisor = 1e6 * 10 ** exponent
+    if exponent == 0:
+        return divisor, r'H$_2$ potential [TWh]'
+    return divisor, rf'H$_2$ potential [10$^{{{exponent}}}$ TWh]'
+
+
 def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_name_dictionary,
                       infrastructure_data, complete_infrastructure, boundaries, destination_location, fig_title='',
                       add_legend=True,
@@ -1476,7 +1500,8 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
                       width=15.69, height=9,
                       fig_title='', add_fig_title=False, column='costs', limit_scale=False, add_colorbar=True,
                       plot_era=False, use_voronoi=False, s=0.5, production_costs=None,
-                      return_fig=False, save=False, save_path='', fig=None, plot_colors=None):
+                      return_fig=False, save=False, save_path='', fig=None, plot_colors=None,
+                      unit=None, colorbar_ticks=None, export_column=None):
 
     centimeter_to_inch = 1 / 2.54
     plot_colors = _merged_color_config(plot_colors)
@@ -1491,13 +1516,17 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
     countries.drop([antarctica], inplace=True)
     countries.plot(color=plot_colors['map_colors']['land'], ax=ax)
 
-    data = data[data['costs'] != math.inf].copy()
+    if 'costs' in data.columns:
+        data = data[data['costs'] != math.inf].copy()
+    data[column] = pd.to_numeric(data[column], errors='coerce')
+    data = data[np.isfinite(data[column])].copy()
     col = data[column].map(norm).map(cmap_chosen)
 
-    if 'costs' in column:
-        unit = '€ MWh$^{-1}$'
-    else:
-        unit = '%'
+    if unit is None:
+        if 'costs' in column:
+            unit = '€ MWh$^{-1}$'
+        else:
+            unit = '%'
 
     data['color'] = col
     col = col.values.tolist()
@@ -1595,10 +1624,12 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
         cbar.ax.tick_params(labelsize=9)
         cbar.set_label(unit, rotation=0, labelpad=5, fontsize=9)
 
-        ticks = np.asarray(cbar.get_ticks(), dtype=float)
-        vmin, vmax = norm.vmin, norm.vmax
-
-        ticks = _get_even_colorbar_ticks(vmin, vmax, len(ticks))
+        if colorbar_ticks is None:
+            ticks = np.asarray(cbar.get_ticks(), dtype=float)
+            vmin, vmax = norm.vmin, norm.vmax
+            ticks = _get_even_colorbar_ticks(vmin, vmax, len(ticks))
+        else:
+            ticks = np.asarray(colorbar_ticks, dtype=float)
 
         if len(ticks) > 0:
             cbar.set_ticks(ticks)
@@ -1626,7 +1657,9 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
 
             plt.close(fig)
 
-            data[['latitude', 'longitude', column]].to_excel(
+            if export_column is None:
+                export_column = column
+            data[['latitude', 'longitude', export_column]].to_excel(
                 safe_output_path(save_path, fig_title + '.xlsx'))
 
 

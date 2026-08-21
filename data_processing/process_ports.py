@@ -25,7 +25,7 @@ def process_ports(ports_file, coastlines, landmasses, boundaries, destination, u
     ports = pd.DataFrame(columns=['latitude', 'longitude', 'name', 'country', 'continent',
                                   'longitude_on_coastline', 'latitude_on_coastline'])
     if not os.path.exists(ports_file):
-        return ports
+        raise FileNotFoundError('Configured seaport data file is missing:\n' + ports_file)
 
     with open(ports_file) as f:
         gj = geojson.load(f)

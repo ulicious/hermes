@@ -14,12 +14,14 @@ CONFIG_TEMPLATE_FOLDER = os.path.join(PROJECT_ROOT, 'configs')
 ZENODO_DATA_RECORD_ID = '22031725'
 ZENODO_DATA_DOI = '10.5281/zenodo.22031725'
 ZENODO_DATA_BASE_URL = 'https://zenodo.org/api/records/{}/files'.format(ZENODO_DATA_RECORD_ID)
-ZENODO_DATA_FILES = {
-    'country_data.csv': 'b83d231131455c66dcb86ffc7581a4ac',
-    'location_data.csv': '28dd310b4276d8f04b9ae6a23478ba39',
-    'network_pipelines_gas.xlsx': '03452282e65fe8fb8a8fe9934c2d6f6c',
-    'network_pipelines_oil.xlsx': '9970c32b11ee79341df6f4be94dc6009',
-    'seaports.geojson': 'cf7cec9a71fbdd429f40dd78dbb02542',
+ZENODO_CONFIGURED_DATA_FILES = {
+    'country_data': ('country_data.csv', 'b83d231131455c66dcb86ffc7581a4ac'),
+    'location_data': ('location_data.csv', '28dd310b4276d8f04b9ae6a23478ba39'),
+    'network_pipelines_gas': ('network_pipelines_gas.xlsx', '03452282e65fe8fb8a8fe9934c2d6f6c'),
+    'network_pipelines_oil': ('network_pipelines_oil.xlsx', '9970c32b11ee79341df6f4be94dc6009'),
+    'seaports': ('seaports.geojson', 'cf7cec9a71fbdd429f40dd78dbb02542'),
+}
+ZENODO_FIXED_DATA_FILES = {
     'water.zip': 'e922f99c19605acf089272245a38405f',
     'natural_earth.zip': '53ff58b372937e390f89dc480cea6e09',
 }
@@ -133,7 +135,7 @@ def normalize_algorithm_configuration(config_file):
                 + ' must be a non-empty string.'
             )
         filename = filename.strip()
-        if filename != os.path.basename(filename):
+        if filename in {'.', '..'} or '/' in filename or '\\' in filename:
             raise ValueError(
                 "Raw-data filename '" + key + "' must be a filename without a directory: "
                 + filename
@@ -257,24 +259,24 @@ def _md5(path_file):
     return digest.hexdigest()
 
 
-def _download_zenodo_file(filename, expected_md5, destination):
+def _download_zenodo_file(source_filename, expected_md5, destination):
     if os.path.isfile(destination) and _md5(destination) == expected_md5:
-        print('Zenodo input already available: ' + filename)
+        print('Zenodo input already available: ' + destination)
         return
 
-    url = ZENODO_DATA_BASE_URL + '/' + filename + '/content'
+    url = ZENODO_DATA_BASE_URL + '/' + source_filename + '/content'
     temporary_path = destination + '.part'
     if os.path.exists(temporary_path):
         os.remove(temporary_path)
 
-    print('Downloading HERMES input data: ' + filename)
+    print('Downloading HERMES input data: ' + source_filename + ' -> ' + destination)
     try:
         with urllib.request.urlopen(url) as response, open(temporary_path, 'wb') as target:
             shutil.copyfileobj(response, target)
         actual_md5 = _md5(temporary_path)
         if actual_md5 != expected_md5:
             raise ValueError(
-                'Checksum mismatch for downloaded file ' + filename
+                'Checksum mismatch for downloaded file ' + source_filename
                 + ': expected ' + expected_md5 + ', got ' + actual_md5
             )
         os.replace(temporary_path, destination)
@@ -314,10 +316,16 @@ def _extract_natural_earth(path_raw_data):
         )
 
 
-def download_raw_data(project_folder_path):
-    path_raw_data = os.path.join(project_folder_path, 'raw_data')
+def download_raw_data(config_file):
+    path_raw_data = os.path.join(config_file['project_folder_path'], 'raw_data')
     os.makedirs(path_raw_data, exist_ok=True)
-    for filename, expected_md5 in ZENODO_DATA_FILES.items():
+    for config_key, (source_filename, expected_md5) in ZENODO_CONFIGURED_DATA_FILES.items():
+        _download_zenodo_file(
+            source_filename,
+            expected_md5,
+            get_raw_data_path(config_file, config_key),
+        )
+    for filename, expected_md5 in ZENODO_FIXED_DATA_FILES.items():
         _download_zenodo_file(
             filename,
             expected_md5,
@@ -331,7 +339,8 @@ def setup_project_folder(project_folder_path):
     create_project_folder_structure(project_folder_path)
     remove_legacy_config_files(project_folder_path)
     copy_config_files(project_folder_path)
-    download_raw_data(project_folder_path)
+    config_file = load_algorithm_configuration(project_folder_path)
+    download_raw_data(config_file)
     return project_folder_path
 
 

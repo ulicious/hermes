@@ -793,6 +793,10 @@ def load_result(r, path_files, config_file_plotting, production_costs, with_rout
     # overwrite production costs with h2 production costs
     if not production_costs.empty and 'Hydrogen_Gas' in production_costs.columns:
         data['production_costs'] = _align_start_location_column(data, production_costs, 'Hydrogen_Gas')
+    if not production_costs.empty and 'Hydrogen_Gas_Quantity' in production_costs.columns:
+        data['Hydrogen_Gas_Quantity'] = _align_start_location_column(
+            data, production_costs, 'Hydrogen_Gas_Quantity'
+        )
     if 'country_start' not in data.columns and not production_costs.empty and 'country_start' in production_costs.columns:
         data['country_start'] = _align_start_location_column(data, production_costs, 'country_start')
     if 'continent_start' not in data.columns and not production_costs.empty and 'continent_start' in production_costs.columns:

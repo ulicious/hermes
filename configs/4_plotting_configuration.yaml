@@ -21,9 +21,11 @@ custom_plot_extent:
 infrastructure_plot: False  # plots infrastructure
 start_locations_infrastructure_destination_plot: False  # plots start locations, infrastructure and destination without optimization results
 water_availability_plot: False  # plots water availability based on processed Aqueduct data
+h2_potential_grid_cell_plot: False  # plots H2 potential in the original location_data grid cells
 
 # single result plots; ['results_1', 'results_2']
 production_costs_plot: []  # name of results in results/; creates h2 production costs plot for results in csv
+potential_plot: []  # name of results in results/; creates H2 potential plot for aggregated start-location Voronoi cells
 conversion_costs_plot: []  # name of results in results/; creates conversion costs plot for results in csv
 transport_costs_plot: []  # name of results in results/; creates transport costs plot for results in csv
 total_supply_costs_plot: []  # name of results in results/; creates total_supply costs plot for results in csv
