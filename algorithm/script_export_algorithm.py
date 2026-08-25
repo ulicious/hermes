@@ -14,8 +14,6 @@ from algorithm.methods_export import (apply_export_conversion,
                                       apply_export_local_benchmark,
                                       attach_infrastructure_countries,
                                       create_export_branches_at_start,
-                                      export_branch_snapshot,
-                                      export_final_local_benchmark_branches,
                                       export_local_benchmark_snapshot,
                                       get_complete_export_infrastructure,
                                       get_start_country,
@@ -81,6 +79,24 @@ def _complete_generated_branches(branches, previous_branches, branch_number):
     return branches, branch_number
 
 
+def _write_complete_marker(path_results, location_index):
+    marker = os.path.join(path_results, 'export_infrastructure_branches',
+                          str(location_index), '_complete')
+    os.makedirs(os.path.dirname(marker), exist_ok=True)
+    with open(marker, 'w', encoding='utf-8') as handle:
+        handle.write('complete')
+
+
+def _target_coverage(local_benchmarks, infrastructure_nodes, target_commodities):
+    covered = {(str(node), str(commodity)) for node, commodity, _ in local_benchmarks}
+    missing = {
+        commodity: [str(node) for node in infrastructure_nodes
+                    if (str(node), str(commodity)) not in covered]
+        for commodity in target_commodities
+    }
+    return {commodity: nodes for commodity, nodes in missing.items() if nodes}
+
+
 def _prepare_location(location_index, location_data, data, config_file):
     location_data = location_data.copy().loc[[location_index]]
     location_data.index = ['Start']
@@ -113,6 +129,7 @@ def _prepare_location(location_index, location_data, data, config_file):
 
     commodities, commodity_names = prepare_export_commodities(config_file, location_data, data)
     data['commodities']['all_commodities'] = commodity_names
+    data['commodities']['target_commodities'] = list(dict.fromkeys(config_file['target_commodity']))
     for commodity in commodities:
         data['commodities']['commodity_objects'][commodity.get_name()] = commodity
 
@@ -145,12 +162,16 @@ def run_export_algorithm(args):
         branches['current_total_costs'], errors='coerce').map(math.isfinite)
     branches = branches.loc[finite_start_costs].copy()
     if branches.empty:
-        export_branch_snapshot(branches, configuration['path_results'], location_index, 0, 'no_potential')
+        export_local_benchmark_snapshot(
+            {}, configuration['path_results'], location_index, 0,
+            data['commodities']['target_commodities'], stage='final_local_benchmarks')
+        _write_complete_marker(configuration['path_results'], location_index)
+        tracker.event(phase='location', method='run_export_algorithm', event='stop_no_potential',
+                      after=0, runtime_s=time.time() - started)
         return None
 
     local_benchmarks = {}
     superseded_branches = set()
-    export_branch_snapshot(branches, configuration['path_results'], location_index, 0, 'initial')
     iteration = 0
     while not branches.empty:
         iteration_started = time.time()
@@ -285,10 +306,9 @@ def run_export_algorithm(args):
             filter_counts['global_descendants_post_routing'] = global_descendant_count
         with tracker.time_block(iteration=iteration, phase='export',
                                 method='export_iteration_snapshots', event='runtime'):
-            export_branch_snapshot(branches, configuration['path_results'], location_index,
-                                   iteration, 'active')
             export_local_benchmark_snapshot(
-                local_benchmarks, configuration['path_results'], location_index, iteration)
+                local_benchmarks, configuration['path_results'], location_index, iteration,
+                data['commodities']['target_commodities'])
         iteration_runtime = time.time() - iteration_started
         tracker.event(iteration=iteration, phase='iteration', method='run_export_algorithm',
                       event='runtime', before=iteration_input_count,
@@ -302,16 +322,36 @@ def run_export_algorithm(args):
         iteration += 1
 
     with tracker.time_block(iteration=iteration, phase='export',
-                            method='export_final_local_benchmark_branches', event='runtime'):
-        export_final_local_benchmark_branches(
-            local_benchmarks, configuration['path_results'], location_index, iteration)
-    marker = os.path.join(configuration['path_results'], 'export_infrastructure_branches',
-                          str(location_index), '_complete')
-    with open(marker, 'w', encoding='utf-8') as handle:
-        handle.write('complete')
+                            method='export_final_local_benchmarks', event='runtime'):
+        export_local_benchmark_snapshot(
+            local_benchmarks, configuration['path_results'], location_index, iteration,
+            data['commodities']['target_commodities'],
+            stage='final_local_benchmarks')
+    missing_targets = _target_coverage(
+        local_benchmarks, complete_infrastructure.index,
+        data['commodities']['target_commodities'])
+    expected_states = (len(complete_infrastructure)
+                       * len(data['commodities']['target_commodities']))
+    missing_states = sum(len(nodes) for nodes in missing_targets.values())
+    print(str(location_index) + ': Target benchmark coverage: '
+          + str(expected_states - missing_states) + '/' + str(expected_states)
+          + ' node-commodity combinations')
+    if missing_targets:
+        print(str(location_index) + ': Missing target combinations '
+              + '(technically unreachable unless routing coverage is incomplete): '
+              + ', '.join(commodity + '=' + str(len(nodes))
+                          for commodity, nodes in missing_targets.items()))
+    _write_complete_marker(configuration['path_results'], location_index)
     tracker.event(phase='location', method='run_export_algorithm', event='end',
                   runtime_s=time.time() - started,
-                  details={'total_branches_created': branch_number})
+                  details={'total_branches_created': branch_number,
+                           'target_states_expected': expected_states,
+                           'target_states_covered': expected_states - missing_states,
+                           'target_states_missing': missing_states,
+                           'missing_target_states_by_commodity': {
+                               commodity: len(nodes)
+                               for commodity, nodes in missing_targets.items()
+                           }})
     print(str(location_index) + ': finished export enumeration in '
           + str(math.ceil((time.time() - started) / 60)) + ' minutes.')
     gc.collect()

@@ -15,11 +15,23 @@ from data_processing.configuration import load_technology_data
 
 
 def prepare_export_commodities(config_file, location_data, data):
-    """Create every configured commodity relevant to export routing."""
+    """Create target commodities plus intermediates required for conversion."""
     conversion_data, transportation_data = load_technology_data(config_file)
+    config_file = config_file.copy()
+    targets = list(dict.fromkeys(config_file['target_commodity']))
+    unknown_targets = [commodity for commodity in targets
+                       if commodity not in config_file['available_commodity']]
+    if unknown_targets:
+        raise ValueError('Target commodities are not available commodities: '
+                         + ', '.join(unknown_targets))
+    config_file['available_commodity'] = [
+        commodity for commodity in config_file['available_commodity']
+        if commodity in targets
+        or conversion_data[commodity]['potential_conversions']
+    ]
     return create_commodity_objects(
         location_data, data['conversion_costs_and_efficiencies'], conversion_data,
-        transportation_data, config_file.copy())
+        transportation_data, config_file)
 
 
 def get_complete_export_infrastructure(data):
@@ -187,6 +199,7 @@ def apply_export_local_benchmark(branches, local_benchmarks):
                 superseded.add(previous['branch_index'])
             local_benchmarks[state] = {
                 'current_total_costs': costs,
+                'total_efficiency': branch['total_efficiency'],
                 'branch_index': branch['branch_index'],
                 'all_previous_branches': list(branch['all_previous_branches']),
                 'branch_data': branch.drop(
@@ -539,7 +552,7 @@ def export_branch_snapshot(branches, path_results, location_index, iteration, st
     handle, temporary = tempfile.mkstemp(prefix=filename + '.', suffix='.tmp', dir=folder)
     os.close(handle)
     try:
-        branches.to_csv(temporary)
+        branches.to_csv(temporary, index=False)
         os.replace(temporary, destination)
     finally:
         if os.path.exists(temporary):
@@ -547,39 +560,33 @@ def export_branch_snapshot(branches, path_results, location_index, iteration, st
     return destination
 
 
-def export_local_benchmark_snapshot(local_benchmarks, path_results, location_index, iteration):
-    """Write the cheapest known costs for every local branch state."""
+def export_local_benchmark_snapshot(local_benchmarks, path_results, location_index, iteration,
+                                    target_commodities, stage='local_benchmarks'):
+    """Write the cheapest cost and its efficiency for every node and commodity."""
     rows = []
+    targets = set(target_commodities)
     for state, benchmark in local_benchmarks.items():
-        node, commodity, road_new_allowed_next = state
+        node, commodity, _ = state
+        if commodity not in targets:
+            continue
         rows.append({
             'current_node': node,
             'current_commodity': commodity,
-            'road_new_allowed_next': road_new_allowed_next,
             'current_total_costs': benchmark['current_total_costs'],
-            'branch_index': benchmark['branch_index'],
+            'total_efficiency': benchmark['total_efficiency'],
         })
     snapshot = pd.DataFrame(rows, columns=[
-        'current_node', 'current_commodity', 'road_new_allowed_next',
-        'current_total_costs', 'branch_index'])
+        'current_node', 'current_commodity', 'current_total_costs',
+        'total_efficiency'])
     if not snapshot.empty:
         snapshot.sort_values(
-            ['current_node', 'current_commodity', 'road_new_allowed_next'], inplace=True)
+            ['current_total_costs'], inplace=True, kind='stable')
+        snapshot.drop_duplicates(
+            subset=['current_node', 'current_commodity'], keep='first', inplace=True)
+        snapshot.sort_values(
+            ['current_node', 'current_commodity'], inplace=True, kind='stable')
     return export_branch_snapshot(
-        snapshot, path_results, location_index, iteration, 'local_benchmarks')
-
-
-def export_final_local_benchmark_branches(local_benchmarks, path_results, location_index, iteration):
-    """Write only the complete branches currently setting local benchmarks."""
-    rows = [benchmark['branch_data'] for benchmark in local_benchmarks.values()
-            if 'branch_data' in benchmark]
-    branches = pd.DataFrame(rows)
-    if not branches.empty and 'branch_index' in branches.columns:
-        branches.index = branches['branch_index'].tolist()
-        branches.index.name = None
-    return export_branch_snapshot(
-        branches, path_results, location_index, iteration,
-        'final_local_benchmark_branches')
+        snapshot, path_results, location_index, iteration, stage)
 
 
 def apply_export_conversion(branches, data, branch_number, local_benchmarks,
