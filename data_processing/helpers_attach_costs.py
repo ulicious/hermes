@@ -9,7 +9,7 @@ import tqdm
 import math
 from collections import defaultdict
 
-from algorithm.methods_conversion import calculate_conversion_costs, chain_conversion_costs
+from algorithm.methods_conversion import calculate_conversion_costs as apply_conversion_costs, chain_conversion_costs
 from algorithm.methods_geographic import calc_distance_list_to_single
 from data_processing.helpers_geometry import round_to_quarter
 from data_processing.natural_earth_data import load_world
@@ -464,7 +464,7 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
 
         conversion_costs, conversion_efficiency = conversion_script('Hydrogen_Gas', commodity)
 
-        locations[commodity] = calculate_conversion_costs(
+        locations[commodity] = apply_conversion_costs(
             hydrogen_costs, conversion_costs, conversion_efficiency)
 
         # as direct conversion from hydrogen to some commodities is not possible, we have to apply second conversion
@@ -478,7 +478,7 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
 
                 conversion_costs_2, conversion_efficiency_2 = conversion_script(commodity, commodity_2)
 
-                new_costs = calculate_conversion_costs(
+                new_costs = apply_conversion_costs(
                     locations[commodity], conversion_costs_2, conversion_efficiency_2)
 
                 # other routes might be possible as well so use the cheapest route
@@ -488,7 +488,7 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
                     locations[commodity_2] = new_costs.min(axis=1)
 
                 else:
-                    locations[commodity_2] = calculate_conversion_costs(
+                    locations[commodity_2] = apply_conversion_costs(
                         locations[commodity], conversion_costs_2, conversion_efficiency_2)
 
     return locations
