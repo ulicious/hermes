@@ -4,6 +4,8 @@ import math
 from collections import defaultdict, deque
 
 import pandas as pd
+
+from algorithm.methods_conversion import calculate_conversion_costs
 import networkx as nx
 
 from mixed_integer_program.mip_data_helpers import create_transport_edges
@@ -462,7 +464,10 @@ def calculate_route_objective(edges, production_costs, route):
         edge = edges[edge_key]
         edge_costs = edge[3]
         edge_loss = edge[4]
-        total_costs = (total_costs + edge_costs) / (1 - edge_loss)
+        if edge[0] == 'conversion':
+            total_costs = calculate_conversion_costs(total_costs, edge_costs, 1 - edge_loss)
+        else:
+            total_costs = (total_costs + edge_costs) / (1 - edge_loss)
 
     return total_costs
 
@@ -510,7 +515,11 @@ def filter_edges_by_warm_start_costs(edges, conversion_edges, transport_edges,
             removed_edges.add(key)
             continue
 
-        edge_lower_bound = (minimal_production_costs + edge_costs) / (1 - edge_loss)
+        if edge[0] == 'conversion':
+            edge_lower_bound = calculate_conversion_costs(
+                minimal_production_costs, edge_costs, 1 - edge_loss)
+        else:
+            edge_lower_bound = (minimal_production_costs + edge_costs) / (1 - edge_loss)
         if edge_lower_bound > warm_start_costs:
             removed_edges.add(key)
 

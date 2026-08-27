@@ -9,6 +9,7 @@ import tqdm
 import math
 from collections import defaultdict
 
+from algorithm.methods_conversion import calculate_conversion_costs, chain_conversion_costs
 from algorithm.methods_geographic import calc_distance_list_to_single
 from data_processing.helpers_geometry import round_to_quarter
 from data_processing.natural_earth_data import load_world
@@ -311,7 +312,7 @@ def attach_weighted_costs(i, locations, levelized_costs_location, spatial_index,
 def calculate_conversion_costs(specific_investment, depreciation_period, fixed_maintenance,
                                operating_hours, interest_rate,
                                electricity_costs, electricity_demand, co2_costs, co2_demand,
-                               nitrogen_costs, nitrogen_demand, heat_demand=0, heat_costs=0):
+                               nitrogen_costs, nitrogen_demand, heat_demand=0, heat_costs=0, opex=0):
 
     """
     Uses annuity method, investment, operation and maintenance parameters, and costs of commodity to calculate the
@@ -330,6 +331,7 @@ def calculate_conversion_costs(specific_investment, depreciation_period, fixed_m
     @param float nitrogen_demand:
     @param float heat_demand:
     @param float heat_costs:
+    @param float opex: fixed operating costs in EUR/MWh_output
     @return: conversion costs
     """
 
@@ -339,7 +341,7 @@ def calculate_conversion_costs(specific_investment, depreciation_period, fixed_m
     conversion_costs \
         = specific_investment * (annuity_factor + fixed_maintenance) / operating_hours \
         + electricity_costs * electricity_demand + co2_costs * co2_demand \
-        + nitrogen_costs * nitrogen_demand + heat_demand * heat_costs
+        + nitrogen_costs * nitrogen_demand + heat_demand * heat_costs + opex
 
     # some parameters might be nan (for example, no defined interest rate since offshore) --> replace nan with inf in that case
     conversion_costs = conversion_costs.replace(np.nan, np.inf)
@@ -374,6 +376,7 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
         fixed_maintenance = techno_economic_data_conversion[start_commodity][target_commodity]['fixed_maintenance']
         lifetime = techno_economic_data_conversion[start_commodity][target_commodity]['lifetime']
         operating_hours = techno_economic_data_conversion[start_commodity][target_commodity]['operating_hours']
+        opex = techno_economic_data_conversion[start_commodity][target_commodity].get('opex', 0)
 
         interest_rate = locations['interest_rate']
 
@@ -382,7 +385,7 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
                 = calculate_conversion_costs(specific_investment, lifetime, fixed_maintenance,
                                              operating_hours, interest_rate,
                                              electricity_costs, electricity_demand, co2_costs, co2_demand,
-                                             nitrogen_costs, nitrogen_demand)
+                                             nitrogen_costs, nitrogen_demand, opex=opex)
 
             efficiency = techno_economic_data_conversion[start_commodity][target_commodity]['efficiency_autothermal']
 
@@ -397,7 +400,7 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
                     = calculate_conversion_costs(specific_investment, lifetime, fixed_maintenance,
                                                  operating_hours, interest_rate,
                                                  electricity_costs, electricity_demand, co2_costs, co2_demand,
-                                                 nitrogen_costs, nitrogen_demand, heat_demand, heat_costs)
+                                                 nitrogen_costs, nitrogen_demand, heat_demand, heat_costs, opex)
 
                 efficiency = techno_economic_data_conversion[start_commodity][target_commodity][
                     'efficiency_external_heat']
@@ -409,7 +412,7 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
                     = calculate_conversion_costs(specific_investment, lifetime, fixed_maintenance,
                                                  operating_hours, interest_rate,
                                                  electricity_costs, electricity_demand, co2_costs, co2_demand,
-                                                 nitrogen_costs, nitrogen_demand, heat_demand, heat_costs)
+                                                 nitrogen_costs, nitrogen_demand, heat_demand, heat_costs, opex)
                 efficiency \
                     = techno_economic_data_conversion[start_commodity][target_commodity]['efficiency_external_heat']
 
@@ -420,7 +423,7 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
                     = calculate_conversion_costs(specific_investment, lifetime, fixed_maintenance,
                                                  operating_hours, interest_rate,
                                                  electricity_costs, electricity_demand, co2_costs, co2_demand,
-                                                 nitrogen_costs, nitrogen_demand, heat_demand, heat_costs)
+                                                 nitrogen_costs, nitrogen_demand, heat_demand, heat_costs, opex)
 
                 efficiency \
                     = techno_economic_data_conversion[start_commodity][target_commodity]['efficiency_external_heat']
@@ -430,7 +433,7 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
                     = calculate_conversion_costs(specific_investment, lifetime, fixed_maintenance,
                                                  operating_hours, interest_rate,
                                                  electricity_costs, electricity_demand, co2_costs, co2_demand,
-                                                 nitrogen_costs, nitrogen_demand)
+                                                 nitrogen_costs, nitrogen_demand, opex=opex)
 
                 efficiency \
                     = techno_economic_data_conversion[start_commodity][target_commodity]['efficiency_autothermal']
@@ -461,7 +464,8 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
 
         conversion_costs, conversion_efficiency = conversion_script('Hydrogen_Gas', commodity)
 
-        locations[commodity] = (hydrogen_costs + conversion_costs) / conversion_efficiency
+        locations[commodity] = calculate_conversion_costs(
+            hydrogen_costs, conversion_costs, conversion_efficiency)
 
         # as direct conversion from hydrogen to some commodities is not possible, we have to apply second conversion
         for commodity_2 in techno_economic_data_conversion[commodity]['potential_conversions']:
@@ -474,7 +478,8 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
 
                 conversion_costs_2, conversion_efficiency_2 = conversion_script(commodity, commodity_2)
 
-                new_costs = (locations[commodity] + conversion_costs_2) / conversion_efficiency_2
+                new_costs = calculate_conversion_costs(
+                    locations[commodity], conversion_costs_2, conversion_efficiency_2)
 
                 # other routes might be possible as well so use the cheapest route
                 if commodity_2 in locations.columns:
@@ -483,7 +488,8 @@ def attach_conversion_costs_and_efficiency_to_start_locations(locations, techno_
                     locations[commodity_2] = new_costs.min(axis=1)
 
                 else:
-                    locations[commodity_2] = (locations[commodity] + conversion_costs_2) / conversion_efficiency_2
+                    locations[commodity_2] = calculate_conversion_costs(
+                        locations[commodity], conversion_costs_2, conversion_efficiency_2)
 
     return locations
 
@@ -551,6 +557,7 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
                 fixed_maintenance = techno_economic_data_conversion[c1_local][c2_local]['fixed_maintenance']
                 lifetime = techno_economic_data_conversion[c1_local][c2_local]['lifetime']
                 operating_hours = techno_economic_data_conversion[c1_local][c2_local]['operating_hours']
+                opex = techno_economic_data_conversion[c1_local][c2_local].get('opex', 0)
 
                 interest_rate = locations_to_process['interest_rate']
 
@@ -559,7 +566,7 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
                         = calculate_conversion_costs(specific_investment, lifetime, fixed_maintenance,
                                                      operating_hours, interest_rate,
                                                      electricity_costs, electricity_demand, co2_costs, co2_demand,
-                                                     nitrogen_costs, nitrogen_demand)
+                                                     nitrogen_costs, nitrogen_demand, opex=opex)
 
                     conversion_efficiency = techno_economic_data_conversion[c1_local][c2_local]['efficiency_autothermal']
 
@@ -574,7 +581,7 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
                             = calculate_conversion_costs(specific_investment, lifetime, fixed_maintenance,
                                                          operating_hours, interest_rate,
                                                          electricity_costs, electricity_demand, co2_costs, co2_demand,
-                                                         nitrogen_costs, nitrogen_demand, heat_demand, heat_costs)
+                                                         nitrogen_costs, nitrogen_demand, heat_demand, heat_costs, opex)
 
                         conversion_efficiency = techno_economic_data_conversion[c1_local][c2_local]['efficiency_external_heat']
 
@@ -585,7 +592,7 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
                             = calculate_conversion_costs(specific_investment, lifetime, fixed_maintenance,
                                                          operating_hours, interest_rate,
                                                          electricity_costs, electricity_demand, co2_costs, co2_demand,
-                                                         nitrogen_costs, nitrogen_demand, heat_demand, heat_costs)
+                                                         nitrogen_costs, nitrogen_demand, heat_demand, heat_costs, opex)
                         conversion_efficiency = techno_economic_data_conversion[c1_local][c2_local]['efficiency_external_heat']
 
                     elif heat_demand_niveau == 'high_temperature' and _config_flag(config_file, 'high_temp_heat_available_at_' + location):
@@ -595,7 +602,7 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
                             = calculate_conversion_costs(specific_investment, lifetime, fixed_maintenance,
                                                          operating_hours, interest_rate,
                                                          electricity_costs, electricity_demand, co2_costs, co2_demand,
-                                                         nitrogen_costs, nitrogen_demand, heat_demand, heat_costs)
+                                                         nitrogen_costs, nitrogen_demand, heat_demand, heat_costs, opex)
 
                         conversion_efficiency = techno_economic_data_conversion[c1_local][c2_local]['efficiency_external_heat']
 
@@ -604,7 +611,7 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
                             = calculate_conversion_costs(specific_investment, lifetime, fixed_maintenance,
                                                          operating_hours, interest_rate,
                                                          electricity_costs, electricity_demand, co2_costs, co2_demand,
-                                                         nitrogen_costs, nitrogen_demand)
+                                                         nitrogen_costs, nitrogen_demand, opex=opex)
 
                         conversion_efficiency = techno_economic_data_conversion[c1_local][c2_local]['efficiency_autothermal']
 
@@ -841,15 +848,13 @@ def select_lowest_conversion_costs_and_efficiencies(conversion_costs_list, effic
     conversion_costs_df = conversion_costs_df.apply(pd.to_numeric, errors='coerce').replace(np.nan, np.inf)
     efficiency_df = efficiency_df.apply(pd.to_numeric, errors='coerce').replace(np.nan, 0)
     efficiency_df = efficiency_df.replace(0, np.nan)
-    cost_efficiency = (conversion_costs_df / efficiency_df).replace(np.nan, np.inf)
-
     if conversion_costs_df.empty:
         return pd.Series(dtype=float), pd.Series(dtype=float)
 
-    if (cost_efficiency >= conversion_costs_df).to_numpy().all():
-        index_min = cost_efficiency.idxmin(axis=1)
-    else:
-        index_min = conversion_costs_df.idxmin(axis=1)
+    # With output-based conversion costs, applying a conversion to zero input
+    # costs yields exactly its fixed conversion costs. Do not divide those
+    # costs by efficiency when selecting the lowest fixed-cost alternative.
+    index_min = conversion_costs_df.idxmin(axis=1)
 
     column_positions = conversion_costs_df.columns.get_indexer(index_min)
     valid_rows = column_positions >= 0
@@ -907,8 +912,8 @@ def calculate_conversion_costs_and_efficiencies_for_all_combinations(config_file
                         eff_1 = locations[c1 + '-' + c + '-conversion_efficiency']
                         eff_2 = locations[c + '-' + c2 + '-conversion_efficiency']
 
-                        conversion_costs = conv_1 + conv_2 * eff_1
-                        efficiency = eff_1 * eff_2
+                        conversion_costs, efficiency = chain_conversion_costs(
+                            conv_1, eff_1, conv_2, eff_2)
 
                         conversion_costs_list.append(conversion_costs)
                         efficiency_list.append(efficiency)
@@ -960,8 +965,8 @@ def calculate_conversion_costs_and_efficiencies_for_all_combinations(config_file
                         eff_1 = locations[c1 + '-' + c + '-conversion_efficiency']
                         eff_2 = locations[c + '-' + c2 + '-conversion_efficiency']
 
-                        conversion_costs = conv_1 + conv_2 * eff_1
-                        efficiency = eff_1 * eff_2
+                        conversion_costs, efficiency = chain_conversion_costs(
+                            conv_1, eff_1, conv_2, eff_2)
 
                         conversion_costs_list.append(conversion_costs)
                         efficiency_list.append(efficiency)

@@ -1,5 +1,8 @@
 Assumption / Setting;Values;Explanation;Comment
 project_folder_path;string;Path to project folder;
+transportation_config;path;Transportation configuration used by this case;Relative to the project folder
+conversion_config;path;Conversion configuration used by this case;Relative to the project folder
+plotting_config;path;Plotting configuration used by this case;Relative to the project folder
 country_data;filename;Country-level production-cost input inside raw_data/;Default: country_data.csv
 location_data;filename;Location-level production-cost input inside raw_data/;Default: location_data.csv
 network_pipelines_gas;filename;Gas-pipeline workbook inside raw_data/;Default: network_pipelines_gas.xlsx

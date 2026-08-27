@@ -151,7 +151,8 @@ def calculate_uniform_conversion_data(nodes, commodities, techno_economic_data_c
                 (annuity_factor + technology['fixed_maintenance']) / technology['operating_hours'] + \
                 uniform_costs['Electricity'] * technology['electricity_demand'] + \
                 uniform_costs['CO2'] * technology['co2_demand'] + \
-                uniform_costs['Nitrogen'] * technology['nitrogen_demand']
+                uniform_costs['Nitrogen'] * technology['nitrogen_demand'] + \
+                technology.get('opex', 0)
 
             conversion_data[commodity_start + '-' + commodity_end + '-conversion_costs'] = conversion_costs
             conversion_data[commodity_start + '-' + commodity_end + '-conversion_efficiency'] = \

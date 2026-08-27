@@ -30,6 +30,14 @@ ALGORITHM_CONFIG = '1_algorithm_configuration.yaml'
 TRANSPORTATION_CONFIG = '2_techno_economic_data_transportation.yaml'
 CONVERSION_CONFIG = '3_techno_economic_data_conversion.yaml'
 PLOTTING_CONFIG = '4_plotting_configuration.yaml'
+TRANSPORTATION_CONFIG_KEY = 'transportation_config'
+CONVERSION_CONFIG_KEY = 'conversion_config'
+PLOTTING_CONFIG_KEY = 'plotting_config'
+CONFIG_REFERENCE_KEYS = {
+    TRANSPORTATION_CONFIG_KEY: TRANSPORTATION_CONFIG,
+    CONVERSION_CONFIG_KEY: CONVERSION_CONFIG,
+    PLOTTING_CONFIG_KEY: PLOTTING_CONFIG,
+}
 RAW_DATA_CONFIG_KEYS = (
     'country_data',
     'location_data',
@@ -141,6 +149,19 @@ def normalize_algorithm_configuration(config_file):
                 + filename
             )
         config_file[key] = filename
+    for key, default_filename in CONFIG_REFERENCE_KEYS.items():
+        if key not in config_file:
+            raise KeyError(
+                "Missing required configuration reference '" + key
+                + "' in " + ALGORITHM_CONFIG + ". Expected a path such as '"
+                + default_filename + "'."
+            )
+        filename = config_file[key]
+        if not isinstance(filename, str) or not filename.strip():
+            raise ValueError(
+                "Configuration reference '" + key + "' must be a non-empty path."
+            )
+        config_file[key] = filename.strip()
     return config_file
 
 
@@ -168,9 +189,13 @@ def _path_is_inside_folder(path_file, path_folder):
     return os.path.commonpath([path_file, path_folder]) == path_folder
 
 
-def _load_project_yaml(config_file, filename):
+def get_referenced_config_path(config_file, config_key):
+    if config_key not in CONFIG_REFERENCE_KEYS:
+        raise KeyError('Unknown configuration reference: ' + str(config_key))
     project_folder_path = os.path.abspath(config_file['project_folder_path'])
-    config_path = os.path.abspath(os.path.join(get_config_folder(project_folder_path), filename))
+    filename = config_file[config_key]
+    config_path = filename if os.path.isabs(filename) else os.path.join(project_folder_path, filename)
+    config_path = os.path.abspath(config_path)
     if not _path_is_inside_folder(config_path, project_folder_path):
         raise ValueError(
             'Configuration file is outside the project folder:\n'
@@ -179,8 +204,13 @@ def _load_project_yaml(config_file, filename):
             + project_folder_path
         )
     if not os.path.exists(config_path):
-        raise FileNotFoundError('Missing configuration file:\n' + config_path)
-    return load_yaml(config_path)
+        raise FileNotFoundError(
+            "Missing configuration file referenced by '" + config_key + "':\n" + config_path)
+    return config_path
+
+
+def _load_project_yaml(config_file, config_key):
+    return load_yaml(get_referenced_config_path(config_file, config_key))
 
 
 def _template_config_path(filename):
@@ -436,7 +466,10 @@ def load_algorithm_configuration(project_folder_path=None, algorithm_config_path
 def load_plotting_configuration(config_file=None):
     if config_file is None:
         config_file = load_algorithm_configuration()
-    return _load_project_yaml(config_file, PLOTTING_CONFIG)
+    plotting_config = _load_project_yaml(config_file, PLOTTING_CONFIG_KEY)
+    plotting_config['_configuration_path'] = get_referenced_config_path(config_file, PLOTTING_CONFIG_KEY)
+    plotting_config['_conversion_config_path'] = get_referenced_config_path(config_file, CONVERSION_CONFIG_KEY)
+    return plotting_config
 
 
 def validate_plotting_result_cases(config_file, plotting_config):
@@ -473,6 +506,6 @@ def validate_plotting_result_cases(config_file, plotting_config):
 
 
 def load_technology_data(config_file):
-    conversion_data = _load_project_yaml(config_file, CONVERSION_CONFIG)
-    transportation_data = _load_project_yaml(config_file, TRANSPORTATION_CONFIG)
+    conversion_data = _load_project_yaml(config_file, CONVERSION_CONFIG_KEY)
+    transportation_data = _load_project_yaml(config_file, TRANSPORTATION_CONFIG_KEY)
     return conversion_data, transportation_data

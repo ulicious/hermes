@@ -5,6 +5,8 @@ import numpy as np
 
 from collections import defaultdict
 
+from algorithm.methods_conversion import calculate_conversion_costs
+
 
 def _as_list(value):
     if isinstance(value, list):
@@ -89,7 +91,8 @@ def _calculate_shipping_required_candidates(
             if (not np.isfinite(global_conversion_costs)) or global_conversion_efficiency <= 0:
                 continue
 
-            shipping_base_costs = (current_costs + global_conversion_costs) / global_conversion_efficiency
+            shipping_base_costs = calculate_conversion_costs(
+                current_costs, global_conversion_costs, global_conversion_efficiency)
         else:
             shipping_base_costs = current_costs.copy()
 
@@ -133,11 +136,9 @@ def _calculate_shipping_required_candidates(
                     )
 
                 reconversion_costs, reconversion_efficiency = destination_conversion_cache[cache_key]
-                candidate_values = np.min(
-                    (shipping_base_costs[:, None] + shipping_transport_costs[:, None] + reconversion_costs[None, :])
-                    / reconversion_efficiency[None, :],
-                    axis=1,
-                )
+                candidate_values = np.min(calculate_conversion_costs(
+                    shipping_base_costs[:, None] + shipping_transport_costs[:, None],
+                    reconversion_costs[None, :], reconversion_efficiency[None, :]), axis=1)
             else:
                 candidate_values = shipping_base_costs + shipping_transport_costs
 
@@ -260,10 +261,10 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmarks, c
                     convertible_nodes = non_shipping_current_nodes[non_shipping_can_convert_at_start].tolist()
                     conversion_costs_first = c_start_object.get_conversion_costs_specific_commodity(convertible_nodes, c_transported)
                     conversion_efficiency_first = c_start_object.get_conversion_efficiency_specific_commodity(convertible_nodes, c_transported)
-                    conversion_costs[non_shipping_can_convert_at_start] = (
-                        non_shipping_current_costs[non_shipping_can_convert_at_start]
-                        + conversion_costs_first.to_numpy(dtype=float, copy=False)
-                    ) / conversion_efficiency_first.to_numpy(dtype=float, copy=False)
+                    conversion_costs[non_shipping_can_convert_at_start] = calculate_conversion_costs(
+                        non_shipping_current_costs[non_shipping_can_convert_at_start],
+                        conversion_costs_first.to_numpy(dtype=float, copy=False),
+                        conversion_efficiency_first.to_numpy(dtype=float, copy=False))
             else:
                 conversion_costs = current_costs[~shipping_required_mask].copy()
 
@@ -323,11 +324,9 @@ def calculate_cheapest_option_to_final_destination(data, branches, benchmarks, c
                             )
 
                         reconversion_costs, reconversion_efficiency = destination_conversion_cache[cache_key]
-                        candidate_values = np.min(
-                            (conversion_costs[:, None] + transport_costs[:, None] + reconversion_costs[None, :])
-                            / reconversion_efficiency[None, :],
-                            axis=1,
-                        )
+                        candidate_values = np.min(calculate_conversion_costs(
+                            conversion_costs[:, None] + transport_costs[:, None],
+                            reconversion_costs[None, :], reconversion_efficiency[None, :]), axis=1)
                     else:
                         candidate_values = conversion_costs + transport_costs
 
@@ -457,7 +456,9 @@ def calculate_cheapest_option_to_closest_infrastructure(data, branches, configur
 
                     # calculate conversion costs for locations where conversion is possible
                     c_start_df.loc[first_location_conversion_possible, c_transported + '-conversion_costs'] = \
-                        (c_start_df.loc[first_location_conversion_possible, cost_column_name] + conversion_costs_first) / conversion_efficiency_first
+                        calculate_conversion_costs(
+                            c_start_df.loc[first_location_conversion_possible, cost_column_name],
+                            conversion_costs_first, conversion_efficiency_first)
 
                     # calculate conversion costs for locations where conversion is impossible
                     c_start_df.loc[first_location_conversion_not_possible, c_transported + '-conversion_costs'] = math.inf
@@ -552,9 +553,10 @@ def calculate_cheapest_option_to_closest_infrastructure(data, branches, configur
                                     min_eff_index = conversion_efficiency_second[conversion_efficiency_second == efficiency].index
                                     min_costs = conversion_costs_second.loc[min_eff_index].min()
 
-                                    costs = (c_start_df.loc[:, c_transported + '-conversion_costs']
-                                     + c_start_df.loc[:, c_transported + '-transportation_costs-' + m]
-                                     + min_costs) / efficiency
+                                    costs = calculate_conversion_costs(
+                                        c_start_df.loc[:, c_transported + '-conversion_costs']
+                                        + c_start_df.loc[:, c_transported + '-transportation_costs-' + m],
+                                        min_costs, efficiency)
 
                                     total_costs.append(costs)
 
@@ -563,18 +565,20 @@ def calculate_cheapest_option_to_closest_infrastructure(data, branches, configur
 
                                 # # calculate conversion costs for locations where conversion is possible
                                 # cheapest_options.loc[second_location_conversion_possible, name_column] = \
-                                #     (c_start_df.loc[second_location_conversion_possible, c_transported + '-conversion_costs']
-                                #      + c_start_df.loc[second_location_conversion_possible, c_transported + '-transportation_costs-' + m]
-                                #      + conversion_costs_second) / conversion_efficiency_second
+                                #     calculate_conversion_costs(
+                                #         c_start_df.loc[second_location_conversion_possible, c_transported + '-conversion_costs']
+                                #         + c_start_df.loc[second_location_conversion_possible, c_transported + '-transportation_costs-' + m],
+                                #         conversion_costs_second, conversion_efficiency_second)
 
                                 # # if no conversion at location possible, we use minimal conversion costs and efficiency
                                 # min_conversion_costs = c_transported_object.get_minimal_conversion_costs(c_end)
                                 # min_conversion_efficiency = c_transported_object.get_minimal_conversion_efficiency(c_end)
                                 #
                                 # cheapest_options.loc[second_location_conversion_not_possible, name_column] = \
-                                #     (c_start_df.loc[second_location_conversion_not_possible, c_transported + '-conversion_costs']
-                                #      + c_start_df.loc[second_location_conversion_not_possible, c_transported + '-transportation_costs-' + m]
-                                #      + min_conversion_costs) / min_conversion_efficiency
+                                #     calculate_conversion_costs(
+                                #         c_start_df.loc[second_location_conversion_not_possible, c_transported + '-conversion_costs']
+                                #         + c_start_df.loc[second_location_conversion_not_possible, c_transported + '-transportation_costs-' + m],
+                                #         min_conversion_costs, min_conversion_efficiency)
 
                                 created_columns.append(name_column)
                             else:
@@ -681,7 +685,9 @@ def calculate_minimal_costs_conversion_for_oil_and_gas_infrastructure(data, bran
 
                             # calculate costs for branches with possible conversion locations
                             cheapest_options.loc[location_conversion_possible, c_start + '_' + c_conversion + '_' + m] = \
-                                (c_start_df.loc[location_conversion_possible, cost_column_name] + conversion_costs) / conversion_efficiency
+                                calculate_conversion_costs(
+                                    c_start_df.loc[location_conversion_possible, cost_column_name],
+                                    conversion_costs, conversion_efficiency)
 
                             # set not possible conversion branches to infinity
                             cheapest_options.loc[location_conversion_not_possible, c_start + '_' + c_conversion + '_' + m] = math.inf

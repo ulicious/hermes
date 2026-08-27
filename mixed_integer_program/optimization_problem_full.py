@@ -12,6 +12,8 @@ from gurobipy import GRB
 
 from shapely.geometry import Point
 
+from algorithm.methods_conversion import calculate_conversion_costs
+
 try:
     from .prepare_data import prepare_data, create_edges_from_distance_only, create_graph, calculate_route_objective
 except ImportError:
@@ -217,13 +219,15 @@ class OptimizationGurobiModel:
                 self.model.addConstr(self.costs[start] == self.production_costs[commodity],
                                      name=name)
 
+            required_end_costs = calculate_conversion_costs(self.costs[start], costs, 1 - efficiency) \
+                if data[0] == 'conversion' else (self.costs[start] + costs) / (1 - efficiency)
             if self.use_big_m_constraints:
-                self.model.addConstr((self.costs[start] + costs) / (1 - efficiency) - self.costs[end]
+                self.model.addConstr(required_end_costs - self.costs[end]
                                      <= (1 - self.edge_binaries[edge]) * self.BigM,
                                      name=name)
             else:
-                # self.model.addGenConstrIndicator(self.edge_binaries[edge], 1, (self.costs[start] + costs) / (1 - efficiency) - self.costs[end] <= 0)
-                self.model.addGenConstrIndicator(self.edge_binaries[edge], 1, (self.costs[start] + costs) / (1 - efficiency) - self.costs[end], GRB.LESS_EQUAL, 0.0)
+                self.model.addGenConstrIndicator(self.edge_binaries[edge], 1,
+                                                 required_end_costs - self.costs[end], GRB.LESS_EQUAL, 0.0)
 
             # if 'start' not in start:
             #     self.model.addConstr((self.costs[start] + costs) / (1 - efficiency) - self.costs[end]
@@ -570,7 +574,11 @@ class OptimizationGurobiModel:
                             costs = data[3]
                             efficiency = data[4]
 
-                        new_costs = (sum(total_costs) + costs) / (1 - efficiency)
+                        if data[0] == 'conversion':
+                            new_costs = calculate_conversion_costs(
+                                sum(total_costs), costs, 1 - efficiency)
+                        else:
+                            new_costs = (sum(total_costs) + costs) / (1 - efficiency)
                         total_costs += [new_costs - sum(total_costs)]
 
                     # print(total_costs)
@@ -757,7 +765,11 @@ class OptimizationGurobiModel:
                     costs = data[3]
                     efficiency = data[4]
 
-                new_costs = (sum(total_costs) + costs) / (1 - efficiency)
+                if data[0] == 'conversion':
+                    new_costs = calculate_conversion_costs(
+                        sum(total_costs), costs, 1 - efficiency)
+                else:
+                    new_costs = (sum(total_costs) + costs) / (1 - efficiency)
                 total_costs += [new_costs - sum(total_costs)]
 
             print(total_costs)

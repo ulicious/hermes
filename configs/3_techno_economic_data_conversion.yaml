@@ -44,6 +44,7 @@ Hydrogen_Gas:
    Hydrogen_Liquid:
       specific_investment: 1497967  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.08  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 20  # [a]
       electricity_demand: 0.2034  # [MWh_el/MWh_output]
       co2_demand: 0  # [t_CO2/MWh_output]
@@ -56,6 +57,7 @@ Hydrogen_Gas:
    Ammonia:
       specific_investment: 513871  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.03  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 20  # [a]
       electricity_demand: 0.0514  # [MWh_el/MWh_output]
       co2_demand: 0  # [t_CO2/MWh_output]
@@ -68,6 +70,7 @@ Hydrogen_Gas:
    Methanol:
       specific_investment: 1090000  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.0175  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 30  # [a]
       electricity_demand: 0.0172  # [MWh_el/MWh_output]
       co2_demand: 0.247  # [t_CO2/MWh_output]
@@ -80,6 +83,7 @@ Hydrogen_Gas:
    Methane_Gas:
       specific_investment: 278000  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.04  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 30  # [a]
       electricity_demand: 0  # [MWh_el/MWh_output]
       co2_demand: 0.198  # [t_CO2/MWh_output]
@@ -92,6 +96,7 @@ Hydrogen_Gas:
    DBT:
       specific_investment: 256026  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.04  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 20  # [a]
       electricity_demand: 0.003  # [MWh_el/MWh_output]
       co2_demand: 0  # [t_CO2/MWh_output]
@@ -104,6 +109,7 @@ Hydrogen_Gas:
    MCH:
       specific_investment: 157016  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.04  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 20  # [a]
       electricity_demand: 0.006  # [MWh_el/MWh_output]
       co2_demand: 0  # [t_CO2/MWh_output]
@@ -116,6 +122,7 @@ Hydrogen_Gas:
    FTF:
       specific_investment: 1600000  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.03  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 25  # [a]
       electricity_demand: 0.0179  # [MWh_el/MWh_output]
       co2_demand: 0.406  # [t_CO2/MWh_output]
@@ -131,6 +138,7 @@ Hydrogen_Liquid:
    Hydrogen_Gas:
       specific_investment: 4320  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.03  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 10  # [a]
       electricity_demand: 0.0180  # [MWh_el/MWh_output]
       co2_demand: 0  # [t_CO2/MWh_output]
@@ -146,6 +154,7 @@ Ammonia:
    Hydrogen_Gas:
       specific_investment: 264026  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.03  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 20  # [a]
       electricity_demand: 0.0285  # [MWh_el/MWh_output]
       co2_demand: 0  # [t_CO2/MWh_output]
@@ -161,6 +170,7 @@ Methanol:
    Hydrogen_Gas:
       specific_investment: 16318  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.04  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 20  # [a]
       electricity_demand: 0.0960  # [MWh_el/MWh_output]
       co2_demand: 0  # [t_CO2/MWh_output]
@@ -176,6 +186,7 @@ Methane_Gas:
    Hydrogen_Gas:
       specific_investment: 470085  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.03  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 30  # [a]
       electricity_demand: 0  # [MWh_el/MWh_output]
       co2_demand: 0  # [t_CO2/MWh_output]
@@ -188,6 +199,7 @@ Methane_Gas:
    Methane_Liquid:
       specific_investment: 740000  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.035  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 25  # [a]
       electricity_demand: 0.0360  # [MWh_el/MWh_output]
       co2_demand: 0  # [t_CO2/MWh_output]
@@ -203,6 +215,7 @@ Methane_Liquid:
    Methane_Gas:
       specific_investment: 280000  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.035  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 30  # [a]
       electricity_demand: 0  # [MWh_el/MWh_output]
       co2_demand: 0  # [t_CO2/MWh_output]
@@ -218,6 +231,7 @@ DBT:
    Hydrogen_Gas:
       specific_investment: 282028  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.04  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 20  # [a]
       electricity_demand: 0.003  # [MWh_el/MWh_output]
       co2_demand: 0  # [t_CO2/MWh_output]
@@ -233,6 +247,7 @@ MCH:
    Hydrogen_Gas:
       specific_investment: 127013  # [EUR/MW_output] basis to verify
       fixed_maintenance: 0.04  # [1/a] fraction of investment per year
+      opex: 0  # [EUR/MWh_output]
       lifetime: 20  # [a]
       electricity_demand: 0.135  # [MWh_el/MWh_output]
       co2_demand: 0  # [t_CO2/MWh_output]

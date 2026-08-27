@@ -8,6 +8,7 @@ import numpy as np
 from shapely.geometry import Point
 from shapely.ops import nearest_points
 
+from algorithm.methods_conversion import calculate_conversion_costs
 from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list, calc_distance_list_to_list, \
     check_if_reachable_on_land
 
@@ -427,7 +428,8 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
                     conversion_costs_c = conversion_costs.at['Destination', c]
                     conversion_efficiency = conversion_losses.at['Destination', c]
 
-                conversion_costs_c = (min_value + conversion_costs_c) / conversion_efficiency
+                conversion_costs_c = calculate_conversion_costs(
+                    min_value, conversion_costs_c, conversion_efficiency)
 
                 if conversion_costs_c - fuel_costs < cheapest_conversion:
                     cheapest_conversion = conversion_costs_c
@@ -565,9 +567,11 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
 
         min_value_gas = pipeline_commodity.get_production_costs()
         min_value_liquid = shipping_commodity.get_production_costs()
-        distance_max_gas = \
-            (min_value_liquid + conversion_costs + min_value_gas * conversion_efficiency) \
-            / (transportation_costs_gas_road * conversion_efficiency - transportation_costs_liquid_road)
+        converted_liquid_costs = calculate_conversion_costs(
+            min_value_liquid, conversion_costs, conversion_efficiency)
+        converted_liquid_transport_costs = transportation_costs_liquid_road / conversion_efficiency
+        distance_max_gas = (converted_liquid_costs - min_value_gas) \
+            / (transportation_costs_gas_road - converted_liquid_transport_costs)
 
     if distance_to_start <= in_tolerance_distance_option:
         # if distance to start is 0 because it is in tolerance to pipeline, use gas and not transportation costs
@@ -622,8 +626,10 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
         # conversion to gas commodity for pipeline transportation
         if pipeline_commodity != shipping_commodity:
             min_value_before = min_value
-            min_value = (min_value + conversion_costs_liquid.at[closest_node_to_start, pipeline_commodity.get_name()]) \
-                / conversion_losses_liquid.at[closest_node_to_start, pipeline_commodity.get_name()]
+            min_value = calculate_conversion_costs(
+                min_value,
+                conversion_costs_liquid.at[closest_node_to_start, pipeline_commodity.get_name()],
+                conversion_losses_liquid.at[closest_node_to_start, pipeline_commodity.get_name()])
             costs.append(min_value - min_value_before)
             used_commodities.append(pipeline_commodity.get_name())
 
@@ -674,8 +680,10 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
         # will be shipped afterward therefore conversion necessary
         min_value_before = min_value
         if pipeline_commodity != shipping_commodity:
-            min_value = (min_value + conversion_costs_gas.at[closest_node_second_to_first, shipping_commodity.get_name()]) \
-                / conversion_losses_gas.at[closest_node_second_to_first, shipping_commodity.get_name()]
+            min_value = calculate_conversion_costs(
+                min_value,
+                conversion_costs_gas.at[closest_node_second_to_first, shipping_commodity.get_name()],
+                conversion_losses_gas.at[closest_node_second_to_first, shipping_commodity.get_name()])
             costs.append(min_value - min_value_before)
             used_commodities.append(shipping_commodity.get_name())
 
@@ -687,8 +695,10 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
         # needs road transportation --> conversion at pipeline to shipping commodity before road transport
         min_value_before = min_value
         if pipeline_commodity != shipping_commodity:
-            min_value = (min_value + conversion_costs_gas.at[closest_node_first_to_second, shipping_commodity.get_name()]) \
-                / conversion_losses_gas.at[closest_node_first_to_second, shipping_commodity.get_name()]
+            min_value = calculate_conversion_costs(
+                min_value,
+                conversion_costs_gas.at[closest_node_first_to_second, shipping_commodity.get_name()],
+                conversion_losses_gas.at[closest_node_first_to_second, shipping_commodity.get_name()])
             costs.append(min_value - min_value_before)
             used_commodities.append(shipping_commodity.get_name())
 
@@ -742,8 +752,10 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
         # conversion to pipeline commodity and transport in new pipeline
         min_value_before = min_value
         if pipeline_commodity != shipping_commodity:
-            value_conversion = (min_value + conversion_costs_liquid.at['Destination', pipeline_commodity.get_name()]) \
-                / conversion_losses_liquid.at['Destination', pipeline_commodity.get_name()]
+            value_conversion = calculate_conversion_costs(
+                min_value,
+                conversion_costs_liquid.at['Destination', pipeline_commodity.get_name()],
+                conversion_losses_liquid.at['Destination', pipeline_commodity.get_name()])
         else:
             value_conversion = min_value
 
@@ -792,7 +804,8 @@ def find_pipeline_shipping_solution(data, configuration, complete_infrastructure
                 conversion_costs = commodity_object.get_conversion_costs_specific_commodity('Destination', c)
                 conversion_efficiency = commodity_object.get_conversion_efficiency_specific_commodity('Destination', c)
 
-                conversion_costs = (min_value + conversion_costs) / conversion_efficiency
+                conversion_costs = calculate_conversion_costs(
+                    min_value, conversion_costs, conversion_efficiency)
 
                 if conversion_costs - fuel_price < cheapest_conversion:
                     cheapest_conversion = conversion_costs
@@ -1024,8 +1037,10 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
         # conversion to commodity for pipeline transportation
         min_value_before = min_value
         if road_commodity != pipeline_commodity:
-            min_value = (min_value + conversion_costs_liquid.at[node_start_g_start, pipeline_commodity.get_name()]) \
-                / conversion_losses_liquid.at[node_start_g_start, pipeline_commodity.get_name()]
+            min_value = calculate_conversion_costs(
+                min_value,
+                conversion_costs_liquid.at[node_start_g_start, pipeline_commodity.get_name()],
+                conversion_losses_liquid.at[node_start_g_start, pipeline_commodity.get_name()])
             costs.append(min_value - min_value_before)
             used_commodities.append(pipeline_commodity.get_name())
 
@@ -1115,8 +1130,10 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
             # needs road transportation --> conversion to road commodity
             min_value_before = min_value
             if road_commodity != pipeline_commodity:
-                min_value = (min_value + conversion_costs_gas.at[node_end_g_start, road_commodity.get_name()]) \
-                    / conversion_losses_gas.at[node_end_g_start, road_commodity.get_name()]
+                min_value = calculate_conversion_costs(
+                    min_value,
+                    conversion_costs_gas.at[node_end_g_start, road_commodity.get_name()],
+                    conversion_losses_gas.at[node_end_g_start, road_commodity.get_name()])
                 costs.append(min_value - min_value_before)
                 used_commodities.append(road_commodity.get_name())
 
@@ -1131,8 +1148,10 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
             # conversion to pipeline commodity as afterwards pipeline transportation again
             min_value_before = min_value
             if road_commodity != pipeline_commodity:
-                min_value = (min_value + conversion_costs_liquid.at[node_end_g_start, pipeline_commodity.get_name()]) \
-                    / conversion_losses_liquid.at[node_end_g_start, pipeline_commodity.get_name()]
+                min_value = calculate_conversion_costs(
+                    min_value,
+                    conversion_costs_liquid.at[node_end_g_start, pipeline_commodity.get_name()],
+                    conversion_losses_liquid.at[node_end_g_start, pipeline_commodity.get_name()])
                 costs.append(min_value - min_value_before)
                 used_commodities.append(pipeline_commodity.get_name())
 
@@ -1184,8 +1203,10 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
         # needs road transportation --> conversion to road commodity
         min_value_before = min_value
         if road_commodity != pipeline_commodity:
-            min_value = (min_value + conversion_costs_gas.at['Destination', road_commodity.get_name()]) \
-                / conversion_losses_gas.at['Destination', road_commodity.get_name()]
+            min_value = calculate_conversion_costs(
+                min_value,
+                conversion_costs_gas.at['Destination', road_commodity.get_name()],
+                conversion_losses_gas.at['Destination', road_commodity.get_name()])
             costs.append(min_value - min_value_before)
             used_commodities.append(road_commodity.get_name())
 
@@ -1226,7 +1247,8 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
                 conversion_costs = commodity_object.get_conversion_costs_specific_commodity(nodes_at_destination, c)
                 conversion_efficiency = commodity_object.get_conversion_efficiency_specific_commodity(nodes_at_destination, c)
 
-                conversion_costs = (min_value + conversion_costs) / conversion_efficiency
+                conversion_costs = calculate_conversion_costs(
+                    min_value, conversion_costs, conversion_efficiency)
                 conversion_costs = conversion_costs.min()
 
                 if conversion_costs - fuel_price < cheapest_conversion:
@@ -1238,14 +1260,16 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
             #         conversion_costs = commodity_object.get_conversion_costs_specific_commodity('Destination', 'Hydrogen_Gas')
             #         conversion_efficiency = commodity_object.get_conversion_efficiency_specific_commodity('Destination', 'Hydrogen_Gas')
             #
-            #         conversion_costs_value = (min_value + conversion_costs) / conversion_efficiency
+            #         conversion_costs_value = calculate_conversion_costs(
+            #             min_value, conversion_costs, conversion_efficiency)
             #
             #         commodity_object = data['commodities']['commodity_objects']['Hydrogen_Gas']
             #
             #         conversion_costs = commodity_object.get_conversion_costs_specific_commodity('Destination', c)
             #         conversion_efficiency = commodity_object.get_conversion_efficiency_specific_commodity('Destination', c)
             #
-            #         conversion_costs = (conversion_costs_value + conversion_costs) / conversion_efficiency
+            #         conversion_costs = calculate_conversion_costs(
+            #             conversion_costs_value, conversion_costs, conversion_efficiency)
             #
             #         if conversion_costs - fuel_price < cheapest_conversion:
             #             cheapest_conversion = conversion_costs

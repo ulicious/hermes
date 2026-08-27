@@ -4,6 +4,8 @@ import time
 
 import gurobipy as gp
 import numpy as np
+
+from algorithm.methods_conversion import calculate_conversion_costs, conversion_cost_coefficients
 from gurobipy import GRB
 from scipy import sparse
 
@@ -128,7 +130,14 @@ class FastOptimizationGurobiModel:
             (self.node_index[edge[2]] for edge in edge_values), dtype=np.int64)
         self.edge_costs = np.fromiter((edge[3] for edge in edge_values), dtype=float)
         self.edge_losses = np.fromiter((edge[4] for edge in edge_values), dtype=float)
-        self.edge_scales = 1.0 / (1.0 - self.edge_losses)
+        coefficients = [
+            conversion_cost_coefficients(edge[3], 1.0 - edge[4])
+            if edge[0] == 'conversion'
+            else (1.0 / (1.0 - edge[4]), edge[3] / (1.0 - edge[4]))
+            for edge in edge_values
+        ]
+        self.edge_scales = np.fromiter((factor for factor, _ in coefficients), dtype=float)
+        self.edge_cost_offsets = np.fromiter((offset for _, offset in coefficients), dtype=float)
 
         self.origin_edge_indices = np.fromiter(
             (index for index, edge in enumerate(edge_values)
@@ -203,7 +212,8 @@ class FastOptimizationGurobiModel:
         finite_edge_mask = self.edge_losses < 1
         if finite_edge_mask.any():
             max_edge_requirement = np.max(
-                (max_production_costs + self.edge_costs[finite_edge_mask]) * self.edge_scales[finite_edge_mask])
+                max_production_costs * self.edge_scales[finite_edge_mask]
+                + self.edge_cost_offsets[finite_edge_mask])
         else:
             max_edge_requirement = 0
         self.big_m_cost_propagation = max(warm_start_objective, max_production_costs, max_edge_requirement)
@@ -336,7 +346,10 @@ class FastOptimizationGurobiModel:
             edge = self.edges[edge_key]
             edge_costs = edge[3]
             edge_loss = edge[4]
-            total_costs = (total_costs + edge_costs) / (1 - edge_loss)
+            if edge[0] == 'conversion':
+                total_costs = calculate_conversion_costs(total_costs, edge_costs, 1 - edge_loss)
+            else:
+                total_costs = (total_costs + edge_costs) / (1 - edge_loss)
             if edge[0] == 'transport':
                 route_parts.append(
                     f'{self._physical_node_name(edge[1])}->{self._physical_node_name(edge[2])} '
@@ -367,7 +380,10 @@ class FastOptimizationGurobiModel:
             edge = self.edges[edge_key]
             edge_costs = edge[3]
             edge_loss = edge[4]
-            total_costs = (total_costs + edge_costs) / (1 - edge_loss)
+            if edge[0] == 'conversion':
+                total_costs = calculate_conversion_costs(total_costs, edge_costs, 1 - edge_loss)
+            else:
+                total_costs = (total_costs + edge_costs) / (1 - edge_loss)
 
         return total_costs
 
@@ -385,7 +401,10 @@ class FastOptimizationGurobiModel:
             edge = self.edges[edge_key]
             edge_costs = edge[3]
             edge_loss = edge[4]
-            total_costs = (total_costs + edge_costs) / (1 - edge_loss)
+            if edge[0] == 'conversion':
+                total_costs = calculate_conversion_costs(total_costs, edge_costs, 1 - edge_loss)
+            else:
+                total_costs = (total_costs + edge_costs) / (1 - edge_loss)
             if edge[0] == 'transport':
                 route_parts.append(
                     f'{self._physical_node_name(edge[1])}->{self._physical_node_name(edge[2])} '
@@ -467,11 +486,19 @@ class FastOptimizationGurobiModel:
             end = edge[2]
             edge_costs = edge[3]
             edge_loss = edge[4]
-            recomputed_costs = (recomputed_costs + edge_costs) / (1 - edge_loss)
+            if edge[0] == 'conversion':
+                recomputed_costs = calculate_conversion_costs(
+                    recomputed_costs, edge_costs, 1 - edge_loss)
+            else:
+                recomputed_costs = (recomputed_costs + edge_costs) / (1 - edge_loss)
 
             solver_start_costs = cost_values[self.node_index[start]]
             solver_end_costs = cost_values[self.node_index[end]]
-            required_end_costs = (solver_start_costs + edge_costs) / (1 - edge_loss)
+            if edge[0] == 'conversion':
+                required_end_costs = calculate_conversion_costs(
+                    solver_start_costs, edge_costs, 1 - edge_loss)
+            else:
+                required_end_costs = (solver_start_costs + edge_costs) / (1 - edge_loss)
             propagation_violation = max(0.0, required_end_costs - solver_end_costs)
             largest_active_propagation_violation = max(
                 largest_active_propagation_violation, propagation_violation)
@@ -691,7 +718,7 @@ class FastOptimizationGurobiModel:
         propagation_lhs = (
             self.edge_scales * self.costs[self.start_indices] -
             self.costs[self.end_indices])
-        propagation_rhs = -self.edge_scales * self.edge_costs
+        propagation_rhs = -self.edge_cost_offsets
         if self.use_big_m_constraints:
             big_m = self.big_m_cost_propagation
             self.model.addConstr(

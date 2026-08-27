@@ -1,6 +1,7 @@
 Assumption / Setting;type;Unit;Explanation
 potential_conversions;list;-;Target commodities into which the initial commodity can be converted
 specific_investment;float;EUR/MW_output;Specific investment according to the current cost formula (source capacity basis should be verified)
+opex;float;EUR/MWh_output;Fixed operating costs added directly to output-based conversion costs
 fixed_maintenance;float;1/a;Yearly fixed maintenance as fraction of investment per year
 lifetime;integer;a;Lifetime of facility
 electricity_demand;float;MWh_el/MWh_output;Electricity demand

@@ -5,6 +5,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 
+from algorithm.methods_conversion import calculate_conversion_costs, calculate_conversion_costs_increase
 from algorithm.methods_algorithm import (drop_branch_comparison_columns,
                                           postprocessing_branches,
                                           remove_duplicate_branches,
@@ -613,7 +614,8 @@ def apply_export_conversion(branches, data, branch_number, local_benchmarks,
                     or not np.isfinite(efficiency)
                     or efficiency <= 0):
                 continue
-            total_costs = (branch['current_total_costs'] + conversion_costs) / efficiency
+            total_costs = calculate_conversion_costs(
+                branch['current_total_costs'], conversion_costs, efficiency)
             if not np.isfinite(total_costs):
                 continue
             row = branch.copy()
@@ -621,7 +623,8 @@ def apply_export_conversion(branches, data, branch_number, local_benchmarks,
             row['current_commodity'] = end_name
             row['current_commodity_object'] = end
             row['current_total_costs'] = total_costs
-            row['current_conversion_costs'] = total_costs - branch['current_total_costs']
+            row['current_conversion_costs'] = calculate_conversion_costs_increase(
+                branch['current_total_costs'], conversion_costs, efficiency)
             row['current_transportation_costs'] = 0
             row['current_distance'] = 0
             row['taken_route'] = (start_name, end_name, efficiency)

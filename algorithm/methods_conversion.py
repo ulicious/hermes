@@ -2,17 +2,63 @@ import time
 
 import pandas as pd
 
-from algorithm.methods_algorithm import create_new_branches_based_on_conversion, postprocessing_branches, assess_for_benchmark, \
-    drop_branch_comparison_columns, remove_duplicate_branches, update_branch_comparison_index
 from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list
-from algorithm.methods_cost_approximations import calculate_cheapest_option_to_final_destination
 from algorithm.tracking import branch_count, get_tracker, track_benchmark_removal
+
+
+def calculate_conversion_costs(current_costs, conversion_costs, conversion_efficiency):
+    """Apply an output-based conversion cost and an input-side efficiency.
+
+    ``conversion_costs`` are already expressed per unit of conversion output.
+    Consequently, only costs accumulated before the conversion are scaled by
+    the conversion efficiency.
+    """
+    if isinstance(current_costs, pd.Series) and isinstance(conversion_efficiency, pd.DataFrame):
+        return conversion_efficiency.rdiv(current_costs, axis=0) + conversion_costs
+    return current_costs / conversion_efficiency + conversion_costs
+
+
+def calculate_conversion_costs_increase(current_costs, conversion_costs, conversion_efficiency):
+    """Return the complete cost increase caused by a conversion.
+
+    This includes both the fixed output-based conversion costs and the
+    additional input costs caused by conversion losses.
+    """
+    return calculate_conversion_costs(
+        current_costs, conversion_costs, conversion_efficiency) - current_costs
+
+
+def calculate_maximum_pre_conversion_costs(maximum_post_conversion_costs, conversion_costs,
+                                           conversion_efficiency):
+    """Invert :func:`calculate_conversion_costs` for benchmark calculations."""
+    if isinstance(maximum_post_conversion_costs, pd.Series) and isinstance(conversion_costs, pd.DataFrame):
+        return conversion_costs.rsub(maximum_post_conversion_costs, axis=0) * conversion_efficiency
+    return (maximum_post_conversion_costs - conversion_costs) * conversion_efficiency
+
+
+def chain_conversion_costs(first_conversion_costs, first_conversion_efficiency,
+                           second_conversion_costs, second_conversion_efficiency):
+    """Combine two sequential conversions into one equivalent conversion.
+
+    The returned tuple is ``(conversion_costs, conversion_efficiency)`` and
+    produces the same result as applying the first and then the second
+    conversion separately.
+    """
+    combined_efficiency = first_conversion_efficiency * second_conversion_efficiency
+    combined_costs = first_conversion_costs / second_conversion_efficiency + second_conversion_costs
+    return combined_costs, combined_efficiency
+
+
+def conversion_cost_coefficients(conversion_costs, conversion_efficiency):
+    """Return ``factor, offset`` for ``post_costs = factor * pre_costs + offset``."""
+    return 1 / conversion_efficiency, conversion_costs
 
 
 def apply_conversion(branches, configuration, data, branch_number, benchmark, benchmarks, benchmark_locations,
                      local_benchmarks, iteration, complete_infrastructure):
 
     """
+
     Script for conversion of current branches
 
     @param pandas.DataFrame branches: dataframe with current branches
@@ -31,6 +77,18 @@ def apply_conversion(branches, configuration, data, branch_number, benchmark, be
     - updated benchmark
     - updated local benchmarks
     """
+
+    # Keep workflow imports local so the central conversion-cost formulas in
+    # this module can be imported by the algorithm without a circular import.
+    from algorithm.methods_algorithm import (
+        assess_for_benchmark,
+        create_new_branches_based_on_conversion,
+        drop_branch_comparison_columns,
+        postprocessing_branches,
+        remove_duplicate_branches,
+        update_branch_comparison_index,
+    )
+    from algorithm.methods_cost_approximations import calculate_cheapest_option_to_final_destination
 
     final_commodities = data['commodities']['final_commodities']
     final_solution = None

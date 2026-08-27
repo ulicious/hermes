@@ -1,5 +1,9 @@
 # general configuration
 project_folder_path: ''  # full path of folder
+# case-specific configuration files, relative to the project folder
+transportation_config: '2_techno_economic_data_transportation.yaml'
+conversion_config: '3_techno_economic_data_conversion.yaml'
+plotting_config: '4_plotting_configuration.yaml'
 # raw-data filenames inside PROJECT_FOLDER/raw_data
 country_data: 'country_data.csv'
 location_data: 'location_data.csv'

@@ -3,6 +3,10 @@ import os
 import time
 
 import pandas as pd
+
+from algorithm.methods_conversion import (calculate_conversion_costs,
+                                           calculate_conversion_costs_increase,
+                                           calculate_maximum_pre_conversion_costs)
 import numpy as np
 
 from shapely.geometry import Point
@@ -446,13 +450,15 @@ def create_new_branches_based_on_conversion(branches, data, branch_number, bench
                     conversion_efficiency.index = c_start_df.index
 
                     # calculate costs
-                    costs = (c_start_df['current_total_costs'] + conversion_costs) / conversion_efficiency
+                    costs = calculate_conversion_costs(
+                        c_start_df['current_total_costs'], conversion_costs, conversion_efficiency)
 
                     total_costs += costs.tolist()
                     previous_commodity += [c_end] * len_index
 
-                    costs = costs - c_start_df['current_total_costs']
-                    current_conversion_costs += costs.tolist()
+                    conversion_costs_increase = calculate_conversion_costs_increase(
+                        c_start_df['current_total_costs'], conversion_costs, conversion_efficiency)
+                    current_conversion_costs += conversion_costs_increase.tolist()
 
                     efficiencies += [conversion_efficiency.loc[i] * c_start_df.loc[i, 'total_efficiency'] for i in c_start_df.index]
 
@@ -768,7 +774,8 @@ def assess_for_benchmark(data, configuration, benchmark, benchmarks, benchmark_l
                         conversion_costs = pd.DataFrame(np.tile(row2, (len(com_df.index), 1)), index=com_df.index, columns=conversion_costs.index)
                         conversion_efficiency = pd.DataFrame(np.tile(row3, (len(com_df.index), 1)), index=com_df.index, columns=conversion_efficiency.index)
 
-                        costs = conversion_costs.add(com_df['current_total_costs'], axis=0).div(conversion_efficiency)
+                        costs = calculate_conversion_costs(
+                            com_df['current_total_costs'], conversion_costs, conversion_efficiency)
 
                         row_min = costs.min(axis=1) - data['commodities']['strike_prices'][commodity_target]
                         idx = row_min[row_min < benchmark].index
@@ -845,7 +852,8 @@ def assess_for_benchmark(data, configuration, benchmark, benchmarks, benchmark_l
                         conversion_costs = c_start_object.get_conversion_costs().loc[benchmark_locations[commodity_start], commodity_target]
                         conversion_efficiency = c_start_object.get_conversion_efficiencies().loc[benchmark_locations[commodity_start], commodity_target]
 
-                        costs = (benchmarks[commodity_start] + conversion_costs) / conversion_efficiency
+                        costs = calculate_conversion_costs(
+                            benchmarks[commodity_start], conversion_costs, conversion_efficiency)
 
                         if costs < benchmarks[commodity_target]:  # only replace if cheaper
                             benchmarks[commodity_target] = math.ceil(costs)
@@ -865,7 +873,8 @@ def assess_for_benchmark(data, configuration, benchmark, benchmarks, benchmark_l
 
                         conversion_efficiency = c_target_object.get_conversion_efficiencies().loc[conversion_costs.index, commodity_start]
 
-                        costs = benchmarks[commodity_start] * conversion_efficiency - conversion_costs
+                        costs = calculate_maximum_pre_conversion_costs(
+                            benchmarks[commodity_start], conversion_costs, conversion_efficiency)
                         costs = pd.to_numeric(costs, errors="coerce")
 
                         if costs.max() > commodity_benchmark:  # only replace if more expensive

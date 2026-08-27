@@ -6,6 +6,7 @@ import pandas as pd
 
 from collections import defaultdict
 
+from algorithm.methods_conversion import calculate_conversion_costs, calculate_maximum_pre_conversion_costs
 from algorithm.methods_benchmark import find_shipping_benchmark_solution, find_pipeline_shipping_solution, find_pipeline_solution
 
 
@@ -293,7 +294,8 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
     #             conversion_costs = hydrogen_gas.get_conversion_costs_specific_commodity('Destination', c)
     #             conversion_losses = hydrogen_gas.get_conversion_efficiency_specific_commodity('Destination', c)
     #
-    #             benchmarks[c] = (benchmarks['Hydrogen_Gas'] + conversion_costs) / conversion_losses
+    #             benchmarks[c] = calculate_conversion_costs(
+    #                 benchmarks['Hydrogen_Gas'], conversion_costs, conversion_losses)
 
     # # in case of two conversions necessary, run again over commodities
     # for c in data['commodities']['all_commodities']:
@@ -307,7 +309,8 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
     #         if c_start_object.get_conversion_options()[c]:
     #             conversion_costs = c_start_object.get_conversion_costs_specific_commodity('Destination', c)
     #             conversion_losses = c_start_object.get_conversion_efficiency_specific_commodity('Destination', c)
-    #             costs = (benchmarks[c_start] + conversion_costs) / conversion_losses
+    #             costs = calculate_conversion_costs(
+    #                 benchmarks[c_start], conversion_costs, conversion_losses)
     #
     #             if costs < lowest_costs:
     #                 benchmarks[c] = costs
@@ -339,7 +342,8 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
                         conversion_costs = c_start_object.get_conversion_costs().loc[benchmark_locations[commodity_start], commodity_target]
                         conversion_efficiency = c_start_object.get_conversion_efficiencies().loc[benchmark_locations[commodity_start], commodity_target]
 
-                        costs = (benchmarks[commodity_start] + conversion_costs) / conversion_efficiency
+                        costs = calculate_conversion_costs(
+                            benchmarks[commodity_start], conversion_costs, conversion_efficiency)
 
                         # if new and old benchmark is infinite then overwrite with most expensive costs
                         if math.isinf(costs) & math.isinf(benchmarks[commodity_target]):
@@ -347,7 +351,8 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
                             conversion_costs = c_start_object.get_conversion_costs().loc[:, commodity_target]
                             conversion_efficiency = c_start_object.get_conversion_efficiencies().loc[:, commodity_target]
 
-                            costs = (benchmarks[commodity_start] + conversion_costs) / conversion_efficiency
+                            costs = calculate_conversion_costs(
+                                benchmarks[commodity_start], conversion_costs, conversion_efficiency)
                             costs.replace([math.inf, -math.inf], np.nan, inplace=True)
                             costs.dropna(inplace=True)
 
@@ -374,7 +379,8 @@ def calculate_benchmark(data, configuration, complete_infrastructure):
 
                         conversion_efficiency = c_target_object.get_conversion_efficiencies().loc[conversion_costs.index, commodity_start]
 
-                        costs = benchmarks[commodity_start] * conversion_efficiency - conversion_costs
+                        costs = calculate_maximum_pre_conversion_costs(
+                            benchmarks[commodity_start], conversion_costs, conversion_efficiency)
                         costs = pd.to_numeric(costs, errors="coerce")
 
                         if costs.max() > commodity_benchmark:  # only replace if more expensive

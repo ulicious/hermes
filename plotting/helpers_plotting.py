@@ -22,7 +22,7 @@ from statistics import mean
 
 from plotting.get_figures import get_number_figure, get_routes_figure, get_energy_carrier_figure, get_weighted_routes, \
     get_supply_curves, safe_output_path, resolve_plot_boundaries, get_plot_color_config
-from data_processing.configuration import CONVERSION_CONFIG, load_yaml
+from data_processing.configuration import load_yaml
 
 
 def _read_csv_or_empty(path, columns=None, index_col=0, dtype=None):
@@ -41,9 +41,14 @@ def _align_start_location_column(data, production_costs, column):
     return values
 
 
-def _load_strike_prices_from_result_path(path_files):
-    project_folder_path = os.path.abspath(os.path.join(path_files, os.pardir, os.pardir))
-    conversion_config = load_yaml(os.path.join(project_folder_path, CONVERSION_CONFIG))
+def _load_strike_prices_from_result_path(path_files, config_file_plotting):
+    conversion_config_path = config_file_plotting.get('_conversion_config_path')
+    if conversion_config_path is None:
+        raise KeyError(
+            "Plotting configuration is missing its resolved conversion-config reference. "
+            "Load it through load_plotting_configuration()."
+        )
+    conversion_config = load_yaml(conversion_config_path)
     return conversion_config.get('strike_prices', {})
 
 
@@ -786,7 +791,7 @@ def load_result(r, path_files, config_file_plotting, production_costs, with_rout
         data['geometry'] = data['geometry'].apply(
             lambda geometry: wkt.loads(geometry) if isinstance(geometry, str) and geometry else geometry
         )
-    strike_prices = _load_strike_prices_from_result_path(path_files)
+    strike_prices = _load_strike_prices_from_result_path(path_files, config_file_plotting)
 
     destination = load_destination(path_files, r)
 

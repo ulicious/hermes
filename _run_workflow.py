@@ -2,6 +2,8 @@ import os
 import subprocess
 import sys
 
+from data_processing.configuration import CONFIG_REFERENCE_KEYS, get_referenced_config_path, load_algorithm_configuration
+
 
 # Defaults to the folder from which the workflow is started.
 PROJECT_FOLDER = 'C:/Users/mt5285/Documents/Transportmodell/' # os.getcwd()
@@ -10,7 +12,7 @@ PROJECT_FOLDER = 'C:/Users/mt5285/Documents/Transportmodell/' # os.getcwd()
 RUN_SETUP_PROJECT_FOLDER = False
 RUN_PROCESS_RAW_DATA = False
 RUN_CREATE_START_LOCATIONS = False
-RUN_MAIN_ALGORITHM = False
+RUN_MAIN_ALGORITHM = True
 RUN_EXPORT_INFRASTRUCTURE = False
 RUN_MIP_OPTIMIZATION = False
 RUN_PROCESS_PLOT_DATA = False
@@ -77,6 +79,9 @@ def run_algorithm_config_batch():
     for config_path in config_files:
         print('')
         print('Run algorithm configuration: ' + os.path.basename(config_path))
+        case_config = load_algorithm_configuration(PROJECT_FOLDER, config_path)
+        for config_key in CONFIG_REFERENCE_KEYS:
+            print('  ' + config_key + ': ' + get_referenced_config_path(case_config, config_key))
         run_step('scripts._3_main', ['--algorithm-config', config_path])
 
 
