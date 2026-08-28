@@ -291,7 +291,8 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
 
         result = pd.Series(['no benchmark', starting_location.y, starting_location.x],
                            index=['status', 'latitude', 'longitude'])
-        result.to_csv(configuration['path_results'] + str(location_integer) + '_no_benchmark.csv')
+        result.to_csv(configuration['path_results'] + 'location_results/'
+                      + str(location_integer) + '_no_infrastructure.csv')
         continue_processing = False
 
     reachable_from_start = complete_infrastructure[complete_infrastructure['reachable_from_start']].index
@@ -302,7 +303,8 @@ def check_for_inaccessibility_and_at_destination(data, configuration, complete_i
 
         result = pd.Series(['no benchmark', starting_location.y, starting_location.x],
                            index=['status', 'latitude', 'longitude'])
-        result.to_csv(configuration['path_results'] + 'location_results/' + str(location_integer) + '_no_benchmark.csv')
+        result.to_csv(configuration['path_results'] + 'location_results/'
+                      + str(location_integer) + '_no_infrastructure.csv')
         continue_processing = False
 
     # if location is already at destination --> return cheapest branch if right commodity

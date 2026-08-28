@@ -383,6 +383,10 @@ def run_algorithm(args):
                   details={'benchmark': benchmark})
     if math.isinf(benchmark):
         print(str(data['k']) + ': Not able to calculate benchmark')
+        result = pd.Series(['no benchmark', starting_location.y, starting_location.x],
+                           index=['status', 'latitude', 'longitude'])
+        result.to_csv(configuration['path_results'] + 'location_results/'
+                      + str(location_index) + '_inf_benchmark.csv')
         tracker.event(phase='location', method='run_algorithm', event='stop_no_benchmark',
                       runtime_s=time.time() - start_time)
         return None
