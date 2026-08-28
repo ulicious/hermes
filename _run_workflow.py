@@ -2,7 +2,8 @@ import os
 import subprocess
 import sys
 
-from data_processing.configuration import CONFIG_REFERENCE_KEYS, get_referenced_config_path, load_algorithm_configuration
+from data_processing.configuration import (CONFIG_REFERENCE_KEYS, get_referenced_config_path,
+                                           load_algorithm_configuration, validate_commodity_configuration)
 
 
 # Defaults to the folder from which the workflow is started.
@@ -80,6 +81,7 @@ def run_algorithm_config_batch():
         print('')
         print('Run algorithm configuration: ' + os.path.basename(config_path))
         case_config = load_algorithm_configuration(PROJECT_FOLDER, config_path)
+        validate_commodity_configuration(case_config)
         for config_key in CONFIG_REFERENCE_KEYS:
             print('  ' + config_key + ': ' + get_referenced_config_path(case_config, config_key))
         run_step('scripts._3_main', ['--algorithm-config', config_path])
@@ -88,6 +90,11 @@ def run_algorithm_config_batch():
 def main():
     if not PROJECT_FOLDER:
         raise ValueError('Set PROJECT_FOLDER in _run_workflow.py before running the workflow.')
+
+    # Fail before starting subprocesses if commodity names or capabilities are
+    # inconsistent. The main algorithm repeats this check for direct invocations.
+    if RUN_MAIN_ALGORITHM:
+        validate_commodity_configuration(load_algorithm_configuration(PROJECT_FOLDER))
 
     selected_steps = [module_name for enabled, module_name in WORKFLOW_STEPS if enabled]
     if not selected_steps and not RUN_ALGORITHM_CONFIG_BATCH:

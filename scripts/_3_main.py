@@ -3,12 +3,14 @@ import time
 import multiprocessing
 import itertools
 import sys
+import traceback
 
 import numpy as np
 
 from algorithm.script_algorithm import run_algorithm
 from algorithm.methods_main import prepare_data_and_configuration_dictionary
-from data_processing.configuration import load_algorithm_configuration, load_technology_data
+from data_processing.configuration import (load_algorithm_configuration, load_technology_data,
+                                           validate_commodity_configuration)
 from algorithm.tracking import is_enabled
 
 # sys.path.append(os.path.dirname(os.getcwd()))
@@ -75,6 +77,29 @@ def _pool_has_live_workers(pool):
     return any(worker.is_alive() for worker in pool._pool)
 
 
+def _run_algorithm_with_error_context(args):
+    """Run one location and make worker failures attributable in shared output."""
+    location_index, location_data, _, _, _ = args
+    try:
+        return run_algorithm(args)
+    except BaseException as error:
+        location_details = ''
+        try:
+            row = location_data.loc[location_index]
+            location_details = (' (latitude=' + str(row.get('latitude', 'unknown'))
+                                + ', longitude=' + str(row.get('longitude', 'unknown')) + ')')
+        except Exception:
+            # Reporting the original failure must not be hidden by incomplete location data.
+            pass
+
+        print('\nERROR while processing location ' + str(location_index)
+              + location_details + ': ' + type(error).__name__ + ': ' + str(error),
+              file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        raise
+
+
 def _run_parallel_algorithm(location_data, data, config_file, configuration):
     num_cores = _get_num_cores(config_file)
     restarts = 0
@@ -96,7 +121,7 @@ def _run_parallel_algorithm(location_data, data, config_file, configuration):
                         itertools.repeat(configuration))
 
         pool = multiprocessing.Pool(processes=num_cores, maxtasksperchild=1)
-        results = pool.imap_unordered(run_algorithm, task_args)
+        results = pool.imap_unordered(_run_algorithm_with_error_context, task_args)
         dead_pool_since = None
         pool_finished = False
 
@@ -159,6 +184,7 @@ if __name__ == '__main__':
 
     # load configuration file
     config_file = load_algorithm_configuration()
+    validate_commodity_configuration(config_file)
 
     data, configuration, location_data = prepare_data_and_configuration_dictionary(config_file)
     _prepare_result_folders(config_file, configuration)
@@ -222,7 +248,7 @@ if __name__ == '__main__':
     else:
         for i in location_data.index:
             args = [i, location_data, data, config_file, configuration]
-            run_algorithm(args)
+            _run_algorithm_with_error_context(args)
 
     if time.time() - time_start < 60:
         print('total time [s]: ' + str(time.time() - time_start))

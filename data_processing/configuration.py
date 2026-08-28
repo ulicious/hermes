@@ -509,3 +509,77 @@ def load_technology_data(config_file):
     conversion_data = _load_project_yaml(config_file, CONVERSION_CONFIG_KEY)
     transportation_data = _load_project_yaml(config_file, TRANSPORTATION_CONFIG_KEY)
     return conversion_data, transportation_data
+
+
+def validate_commodity_configuration(config_file):
+    """Validate all commodity references against ``available_commodity``.
+
+    Available commodities are the source of truth. A configured commodity must
+    either have at least one transport option or participate in a conversion in
+    either direction.
+    """
+    available = config_file.get('available_commodity')
+    targets = config_file.get('target_commodity')
+    if not isinstance(available, list) or not available:
+        raise ValueError("'available_commodity' must be a non-empty YAML list.")
+    if not isinstance(targets, list) or not targets:
+        raise ValueError("'target_commodity' must be a non-empty YAML list.")
+
+    duplicate_available = sorted({c for c in available if available.count(c) > 1})
+    if duplicate_available:
+        raise ValueError('Duplicate available commodities: ' + ', '.join(duplicate_available))
+
+    available_set = set(available)
+    unknown_targets = [c for c in targets if c not in available_set]
+    if unknown_targets:
+        raise ValueError(
+            'Target commodities are not listed in available_commodity: '
+            + ', '.join(unknown_targets))
+
+    conversion_data, transportation_data = load_technology_data(config_file)
+    errors = []
+    outgoing = {commodity: set() for commodity in available}
+    incoming = {commodity: set() for commodity in available}
+
+    for commodity in available:
+        conversion_entry = conversion_data.get(commodity)
+        if not isinstance(conversion_entry, dict):
+            errors.append("Missing conversion configuration for '" + commodity + "'.")
+        else:
+            potential_conversions = conversion_entry.get('potential_conversions', [])
+            if not isinstance(potential_conversions, list):
+                errors.append("potential_conversions for '" + commodity + "' must be a YAML list.")
+            else:
+                unknown_conversions = [
+                    target for target in potential_conversions if target not in available_set]
+                if unknown_conversions:
+                    errors.append(
+                        "Conversions from '" + commodity
+                        + "' reference commodities not listed in available_commodity: "
+                        + ', '.join(unknown_conversions))
+                for target in potential_conversions:
+                    if target in available_set and target != commodity:
+                        outgoing[commodity].add(target)
+                        incoming[target].add(commodity)
+
+        transportation_entry = transportation_data.get(commodity)
+        if not isinstance(transportation_entry, dict):
+            errors.append("Missing transportation configuration for '" + commodity + "'.")
+
+    for commodity in available:
+        transportation_entry = transportation_data.get(commodity, {})
+        transport_options = transportation_entry.get('potential_transportation', [])
+        if not isinstance(transport_options, list):
+            errors.append(
+                "potential_transportation for '" + commodity + "' must be a YAML list.")
+            transport_options = []
+
+        if not transport_options and not outgoing[commodity] and not incoming[commodity]:
+            errors.append(
+                "Available commodity '" + commodity
+                + "' is neither transportable nor convertible in either direction.")
+
+    if errors:
+        raise ValueError('Commodity configuration is inconsistent:\n- ' + '\n- '.join(errors))
+
+    return True
