@@ -141,7 +141,7 @@ def attach_feedstock_costs_and_interest_rate(i, locations, techno_economic_data_
 
             else:
 
-                if (key != 'Hydrogen_Gas') | (not config_file['use_voronoi_cells']):
+                if (key not in {'Hydrogen_Gas', 'Electricity'}) | (not config_file['use_voronoi_cells']):
                     # apply small grid search to get the closest location
                     sub_locations = levelized_costs_location[
                         (levelized_costs_location['latitude'] <= adjusted_latitude + 0.5) &
@@ -156,17 +156,20 @@ def attach_feedstock_costs_and_interest_rate(i, locations, techno_economic_data_
 
                         idxmin = distances.idxmin().values[0]
                         locations.loc[i, key] = levelized_costs_location.loc[idxmin, key]
-                else:
+                elif key == 'Hydrogen_Gas':
                     if not config_file['weight_hydrogen_costs_by_quantity']:
                         locations = attach_unweighted_costs(i, locations, levelized_costs_location, spatial_index,
                                                             config_file)
                     else:
                         locations = attach_weighted_costs(i, locations, levelized_costs_location, spatial_index,
                                                           config_file)
+                else:
+                    locations = attach_area_weighted_costs(
+                        i, locations, levelized_costs_location, spatial_index, key)
 
         else:  # search costs for location
 
-            if (key != 'Hydrogen_Gas') | (not config_file['use_voronoi_cells']):
+            if (key not in {'Hydrogen_Gas', 'Electricity'}) | (not config_file['use_voronoi_cells']):
                 # apply small grid search to get the closest location
                 sub_locations = levelized_costs_location[
                     (levelized_costs_location['latitude'] <= adjusted_latitude + 0.5) &
@@ -181,14 +184,54 @@ def attach_feedstock_costs_and_interest_rate(i, locations, techno_economic_data_
 
                     idxmin = distances.idxmin().values[0]
                     locations.loc[i, key] = levelized_costs_location.loc[idxmin, key]
-            else:
+            elif key == 'Hydrogen_Gas':
                 if not config_file['weight_hydrogen_costs_by_quantity']:
                     locations = attach_unweighted_costs(i, locations, levelized_costs_location, spatial_index,
                                                         config_file)
                 else:
                     locations = attach_weighted_costs(i, locations, levelized_costs_location, spatial_index,
                                                       config_file)
+            else:
+                locations = attach_area_weighted_costs(
+                    i, locations, levelized_costs_location, spatial_index, key)
 
+    return locations
+
+
+def attach_area_weighted_costs(i, locations, levelized_costs_location, spatial_index, cost_column):
+    """Attach a cost averaged over ERA cells intersecting a Voronoi cell.
+
+    Each ERA-cell cost is weighted by the fraction of that ERA cell covered by
+    the Voronoi cell. Unlike hydrogen costs, no production quantity is used.
+    """
+    poly = locations.at[i, 'geometry']
+    if not hasattr(poly, 'is_valid'):
+        locations.at[i, cost_column] = math.inf
+        return locations
+    if not poly.is_valid:
+        poly = shapely.make_valid(poly)
+
+    weighted_costs = 0.0
+    total_overlap = 0.0
+    for index in spatial_index.intersection(poly.bounds):
+        era_cell = levelized_costs_location.at[index, 'polygon']
+        if era_cell is None or era_cell.is_empty or not era_cell.intersects(poly):
+            continue
+
+        intersection = poly.intersection(era_cell)
+        if intersection.is_empty or intersection.area == 0 or era_cell.area == 0:
+            continue
+
+        cost = levelized_costs_location.at[index, cost_column]
+        if pd.isna(cost) or not np.isfinite(cost):
+            continue
+
+        overlap_fraction = intersection.area / era_cell.area
+        weighted_costs += float(cost) * overlap_fraction
+        total_overlap += overlap_fraction
+
+    locations.at[i, cost_column] = (
+        weighted_costs / total_overlap if total_overlap > 0 else math.inf)
     return locations
 
 
