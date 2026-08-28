@@ -132,7 +132,12 @@ def prepare_data_and_configuration_dictionary(config_file):
 
     final_commodities = config_file['target_commodity']
     strike_prices_commodity = {}
-    for c in config_file['available_commodity']:
+    # Benchmark code also compares conversion targets. Ensure that every final
+    # commodity has an entry even if it is not repeated in available_commodity.
+    # With commodity prices disabled, all of these entries deliberately equal 0.
+    commodities_requiring_strike_price = list(dict.fromkeys(
+        config_file['available_commodity'] + final_commodities))
+    for c in commodities_requiring_strike_price:
         if c in final_commodities:
             if is_enabled(config_file['consider_commodity_prices']):
                 strike_prices_commodity[c] = techno_economic_data_conversion['strike_prices'][c]
