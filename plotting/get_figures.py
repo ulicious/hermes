@@ -145,7 +145,7 @@ def _set_compact_world_map_size(fig, ax, extra_height_cm=0.0):
     longitude_span = abs(np.diff(ax.get_xlim())[0])
     latitude_span = abs(np.diff(ax.get_ylim())[0])
     map_ratio = latitude_span / longitude_span if longitude_span else 0.5
-    map_width_fraction = 0.87
+    map_width_fraction = 0.89
     map_height_cm = min(7.5, max(3.5, width_cm * map_width_fraction * map_ratio))
     bottom_cm = 0.3 + extra_height_cm
     top_cm = 0.3
@@ -163,7 +163,7 @@ def _set_compact_world_map_size(fig, ax, extra_height_cm=0.0):
 def _reserve_compact_colorbar_space(fig, ax):
     """Reserve the same right-hand column used by compact maps with a colorbar."""
     map_position = ax.get_position()
-    placeholder = fig.add_axes([0.892, map_position.y0, 0.004, map_position.height])
+    placeholder = fig.add_axes([0.912, map_position.y0, 0.005, map_position.height])
     placeholder.set_facecolor('white')
     placeholder.set_axis_off()
 
@@ -175,9 +175,9 @@ def _align_compact_colorbar_to_map(fig, ax, colorbar_ax):
         fig.transFigure.inverted()
     )
     colorbar_ax.set_position([
-        0.892,
+        0.912,
         rendered_map_position.y0,
-        0.004,
+        0.005,
         rendered_map_position.height,
     ])
 
@@ -1658,7 +1658,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
             if 'cbar' in locals():
                 map_position = ax.get_position()
                 compact_cax = fig.add_axes([
-                    0.892, map_position.y0, 0.004, map_position.height
+                    0.912, map_position.y0, 0.005, map_position.height
                 ])
                 compact_cbar = fig.colorbar(
                     sm, cax=compact_cax, orientation='vertical'
@@ -1851,14 +1851,13 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
             if cbar is not None:
                 map_position = ax.get_position()
                 compact_cax = fig.add_axes([
-                    0.892, map_position.y0, 0.004, map_position.height
+                    0.912, map_position.y0, 0.005, map_position.height
                 ])
                 compact_cbar = fig.colorbar(
                     sm,
                     cax=compact_cax,
                     orientation='vertical',
                     extend='max' if limit_scale else 'neither',
-                    extendrect=True,
                 )
                 compact_cbar.set_label(unit, rotation=90, labelpad=8)
                 if len(ticks) > 0:
