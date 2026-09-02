@@ -139,18 +139,20 @@ def configure_plot_output(plotting_config):
 
 def _set_compact_world_map_size(fig, ax, extra_height_cm=0.0):
     """Use a close-fitting aspect ratio for an additional standalone map export."""
+    if hasattr(fig, 'set_layout_engine'):
+        fig.set_layout_engine(None)
     width_cm = _PLOT_OUTPUT_SETTINGS['width_cm']
     longitude_span = abs(np.diff(ax.get_xlim())[0])
     latitude_span = abs(np.diff(ax.get_ylim())[0])
     map_ratio = latitude_span / longitude_span if longitude_span else 0.5
-    map_width_fraction = 0.80
+    map_width_fraction = 0.87
     map_height_cm = min(7.5, max(3.5, width_cm * map_width_fraction * map_ratio))
     bottom_cm = 0.3 + extra_height_cm
     top_cm = 0.3
     height_cm = map_height_cm + bottom_cm + top_cm
     fig.set_size_inches(width_cm / 2.54, height_cm / 2.54, forward=True)
     ax.set_position([
-        0.015,
+        0.008,
         bottom_cm / height_cm,
         map_width_fraction,
         map_height_cm / height_cm,
@@ -161,9 +163,23 @@ def _set_compact_world_map_size(fig, ax, extra_height_cm=0.0):
 def _reserve_compact_colorbar_space(fig, ax):
     """Reserve the same right-hand column used by compact maps with a colorbar."""
     map_position = ax.get_position()
-    placeholder = fig.add_axes([0.835, map_position.y0, 0.012, map_position.height])
+    placeholder = fig.add_axes([0.892, map_position.y0, 0.004, map_position.height])
     placeholder.set_facecolor('white')
     placeholder.set_axis_off()
+
+
+def _align_compact_colorbar_to_map(fig, ax, colorbar_ax):
+    """Match the colorbar to the map's final rendered top and bottom edges."""
+    fig.canvas.draw()
+    rendered_map_position = ax.get_window_extent().transformed(
+        fig.transFigure.inverted()
+    )
+    colorbar_ax.set_position([
+        0.892,
+        rendered_map_position.y0,
+        0.004,
+        rendered_map_position.height,
+    ])
 
 
 def _save_map_formats(fig, directory, filename, tight=True):
@@ -1638,12 +1654,21 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
 
             if 'cbar' in locals():
                 cbar.remove()
+            _set_compact_world_map_size(fig, ax, extra_height_cm=1.8 if add_legend else 0)
+            if 'cbar' in locals():
+                map_position = ax.get_position()
+                compact_cax = fig.add_axes([
+                    0.892, map_position.y0, 0.004, map_position.height
+                ])
                 compact_cbar = fig.colorbar(
-                    sm, ax=ax, orientation='vertical', fraction=0.035, pad=0.025
+                    sm, cax=compact_cax, orientation='vertical'
                 )
                 compact_cbar.set_label('Quantity [TWh]', rotation=90, labelpad=8)
                 compact_cbar.set_ticks(ticks)
                 compact_cbar.ax.tick_params(axis='y', labelrotation=90)
+                ax.set_position(map_position)
+                ax.set_aspect('auto')
+                _align_compact_colorbar_to_map(fig, ax, compact_cax)
 
             if add_legend:
                 fig.legends.clear()
@@ -1656,10 +1681,6 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                         labelspacing=0.2, handletextpad=0.2, columnspacing=0.4,
                         handlelength=1.2, frameon=False,
                     )
-            _set_compact_world_map_size(fig, ax, extra_height_cm=1.8 if add_legend else 0)
-            if 'compact_cbar' in locals():
-                map_position = ax.get_position()
-                compact_cbar.ax.set_position([0.835, map_position.y0, 0.012, map_position.height])
             _save_map_formats(fig, path_saving, filename + '_compact', tight=False)
 
             plt.close(fig)
@@ -1826,13 +1847,18 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
 
             if cbar is not None:
                 cbar.remove()
+            _set_compact_world_map_size(fig, ax)
+            if cbar is not None:
+                map_position = ax.get_position()
+                compact_cax = fig.add_axes([
+                    0.892, map_position.y0, 0.004, map_position.height
+                ])
                 compact_cbar = fig.colorbar(
                     sm,
-                    ax=ax,
+                    cax=compact_cax,
                     orientation='vertical',
                     extend='max' if limit_scale else 'neither',
-                    fraction=0.035,
-                    pad=0.025,
+                    extendrect=True,
                 )
                 compact_cbar.set_label(unit, rotation=90, labelpad=8)
                 if len(ticks) > 0:
@@ -1840,13 +1866,12 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
                     compact_cbar.ax.yaxis.set_major_locator(FixedLocator(ticks))
                     compact_cbar.set_ticklabels([_format_colorbar_tick(tick) for tick in ticks])
                 compact_cbar.ax.tick_params(axis='y', labelrotation=90)
+                ax.set_position(map_position)
+                ax.set_aspect('auto')
+                _align_compact_colorbar_to_map(fig, ax, compact_cax)
             else:
                 _reserve_compact_colorbar_space(fig, ax)
 
-            _set_compact_world_map_size(fig, ax)
-            if cbar is not None:
-                map_position = ax.get_position()
-                compact_cbar.ax.set_position([0.835, map_position.y0, 0.012, map_position.height])
             _save_map_formats(fig, save_path, fig_title + '_compact', tight=False)
 
             plt.close(fig)
