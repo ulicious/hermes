@@ -143,14 +143,14 @@ def _set_compact_world_map_size(fig, ax, extra_height_cm=0.0):
     longitude_span = abs(np.diff(ax.get_xlim())[0])
     latitude_span = abs(np.diff(ax.get_ylim())[0])
     map_ratio = latitude_span / longitude_span if longitude_span else 0.5
-    map_width_fraction = 0.78
+    map_width_fraction = 0.80
     map_height_cm = min(7.5, max(3.5, width_cm * map_width_fraction * map_ratio))
     bottom_cm = 0.3 + extra_height_cm
     top_cm = 0.3
     height_cm = map_height_cm + bottom_cm + top_cm
     fig.set_size_inches(width_cm / 2.54, height_cm / 2.54, forward=True)
     ax.set_position([
-        0.04,
+        0.015,
         bottom_cm / height_cm,
         map_width_fraction,
         map_height_cm / height_cm,
@@ -161,7 +161,7 @@ def _set_compact_world_map_size(fig, ax, extra_height_cm=0.0):
 def _reserve_compact_colorbar_space(fig, ax):
     """Reserve the same right-hand column used by compact maps with a colorbar."""
     map_position = ax.get_position()
-    placeholder = fig.add_axes([0.86, map_position.y0, 0.025, map_position.height])
+    placeholder = fig.add_axes([0.835, map_position.y0, 0.012, map_position.height])
     placeholder.set_facecolor('white')
     placeholder.set_axis_off()
 
@@ -1291,13 +1291,13 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
                 fig.legends.clear()
                 combined_handles = new_commodities + new_transport_means
                 fig.legend(
-                    handles=combined_handles, loc='lower center', ncols=5,
-                    bbox_to_anchor=(0.5, 0.01),
+                    handles=combined_handles, loc='lower center', ncols=6,
+                    bbox_to_anchor=(0.47, 0.01),
                     title='Commodities and transport means',
-                    labelspacing=0.2, handletextpad=0.25, columnspacing=0.75,
-                    handlelength=2.0, frameon=False,
+                    labelspacing=0.2, handletextpad=0.2, columnspacing=0.4,
+                    handlelength=1.2, frameon=False,
                 )
-            _set_compact_world_map_size(fig, ax, extra_height_cm=1.2 if add_legend else 0)
+            _set_compact_world_map_size(fig, ax, extra_height_cm=1.8 if add_legend else 0)
             _reserve_compact_colorbar_space(fig, ax)
             _save_map_formats(fig, path_saving, fig_title + '_compact', tight=False)
 
@@ -1650,16 +1650,16 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                 combined_handles = ([] if ignore_commodity else new_commodities) + new_transport_means
                 if combined_handles:
                     fig.legend(
-                        handles=combined_handles, loc='lower center', ncols=5,
-                        bbox_to_anchor=(0.5, 0.01),
+                        handles=combined_handles, loc='lower center', ncols=6,
+                        bbox_to_anchor=(0.47, 0.01),
                         title='Commodities and transport means',
-                        labelspacing=0.2, handletextpad=0.25, columnspacing=0.75,
-                        handlelength=1.5, frameon=False,
+                        labelspacing=0.2, handletextpad=0.2, columnspacing=0.4,
+                        handlelength=1.2, frameon=False,
                     )
-            _set_compact_world_map_size(fig, ax, extra_height_cm=1.2 if add_legend else 0)
+            _set_compact_world_map_size(fig, ax, extra_height_cm=1.8 if add_legend else 0)
             if 'compact_cbar' in locals():
                 map_position = ax.get_position()
-                compact_cbar.ax.set_position([0.86, map_position.y0, 0.025, map_position.height])
+                compact_cbar.ax.set_position([0.835, map_position.y0, 0.012, map_position.height])
             _save_map_formats(fig, path_saving, filename + '_compact', tight=False)
 
             plt.close(fig)
@@ -1846,7 +1846,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
             _set_compact_world_map_size(fig, ax)
             if cbar is not None:
                 map_position = ax.get_position()
-                compact_cbar.ax.set_position([0.86, map_position.y0, 0.025, map_position.height])
+                compact_cbar.ax.set_position([0.835, map_position.y0, 0.012, map_position.height])
             _save_map_formats(fig, save_path, fig_title + '_compact', tight=False)
 
             plt.close(fig)
