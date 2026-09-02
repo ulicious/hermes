@@ -17,7 +17,7 @@ from plotting.get_figures import get_number_figure, get_energy_carrier_figure, g
     get_start_locations_infrastructure_destination_figure, \
     get_tight_boundaries_for_start_locations_infrastructure_destination, get_water_availability_figure, \
     safe_output_path, resolve_plot_boundaries, get_configured_colormap, get_plot_color_config, \
-    get_hydrogen_potential_plot_scale
+    get_hydrogen_potential_plot_scale, configure_plot_output
 from plotting.helpers_plotting import load_infrastructure_data, load_first_available_destination, \
     get_complete_infrastructure, load_result, plot_comparison_plot, match_routing_results
 from data_processing.configuration import load_algorithm_configuration, load_plotting_configuration, get_raw_data_path
@@ -109,6 +109,7 @@ path_files = os.path.join(project_folder_path, 'results', 'processed_results')
 path_saving = os.path.join(project_folder_path, 'results', 'plots')
 
 config_file_plotting = load_plotting_configuration(config_file_general)
+configure_plot_output(config_file_plotting)
 
 start_destination_combinations_file = os.path.join(config_file_general['project_folder_path'],
                                                    'start_destination_combinations.csv')
@@ -769,6 +770,8 @@ for r in compare_costs_and_quantities_results:
     mpl.rcParams['agg.path.chunksize'] = 20000
 
     fig.savefig(output_path, bbox_inches='tight', dpi=600)
+    output_stem, _ = os.path.splitext(output_path)
+    fig.savefig(output_stem + '.svg', bbox_inches='tight')
 
     plt.close(fig)
 

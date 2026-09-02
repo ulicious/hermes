@@ -1,4 +1,9 @@
 Assumption / Setting;Values;Explanation
+plot_width;positive float;Sets the width of every exported plot in centimetres while retaining its aspect ratio
+font_family;installed font family;Sets the font family for every text element
+font_size;positive float;Sets the font size in points for titles axes ticks legends and colorbars
+raster_filetype;png jpg jpeg tif tiff or webp;Sets the raster-graphics export format (default png)
+vector_filetype;svg eps pdf or ps;Sets the vector-graphics export format (default svg)
 plot_extent;'default', 'results' or 'custom';Sets the map extent mode for plots
 custom_plot_extent;dictionary with min/max latitude/longitude;Defines plot bounds when plot_extent is custom
 colormap;matplotlib colormap name;Sets the colormap for cost/efficiency map plots

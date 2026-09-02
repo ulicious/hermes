@@ -13,6 +13,8 @@ import matplotlib as mlp
 import matplotlib.gridspec as gridspec
 import seaborn as sns
 import matplotlib as mpl
+from matplotlib.figure import Figure
+from matplotlib.text import Text
 
 from math import sqrt
 from tqdm import tqdm
@@ -41,6 +43,99 @@ DEFAULT_PLOT_BOUNDARIES = {
     'min_longitude': -180.0,
     'max_longitude': 180.0,
 }
+
+_ORIGINAL_FIGURE_SAVEFIG = Figure.savefig
+_PLOT_OUTPUT_SETTINGS = {
+    'width_cm': 15.69,
+    'font_family': 'Times New Roman',
+    'font_size': 9.0,
+    'raster_filetype': 'png',
+    'vector_filetype': 'svg',
+}
+
+
+def _normalise_filetype(value, allowed, setting_name):
+    filetype = str(value).strip().lower().lstrip('.')
+    if filetype not in allowed:
+        raise ValueError(
+            f"Unsupported {setting_name} {value!r}. Choose one of: {', '.join(sorted(allowed))}."
+        )
+    return filetype
+
+
+def _configured_figure_savefig(figure, filename, *args, **kwargs):
+    """Apply the global plotting configuration to every Matplotlib export."""
+    filename = os.fspath(filename)
+    stem, requested_extension = os.path.splitext(filename)
+    requested_extension = requested_extension.lower().lstrip('.')
+    if requested_extension in {'png', 'jpg', 'jpeg', 'tif', 'tiff', 'webp'}:
+        extension = _PLOT_OUTPUT_SETTINGS['raster_filetype']
+    elif requested_extension in {'svg', 'eps', 'pdf', 'ps'}:
+        extension = _PLOT_OUTPUT_SETTINGS['vector_filetype']
+    else:
+        extension = requested_extension
+
+    width_inch = _PLOT_OUTPUT_SETTINGS['width_cm'] / 2.54
+    old_width, old_height = figure.get_size_inches()
+    if old_width > 0:
+        figure.set_size_inches(width_inch, old_height * width_inch / old_width, forward=True)
+
+    for text_element in figure.findobj(match=Text):
+        text_element.set_fontfamily(_PLOT_OUTPUT_SETTINGS['font_family'])
+        text_element.set_fontsize(_PLOT_OUTPUT_SETTINGS['font_size'])
+
+    # Re-apply the family at draw time so mathematical text follows the same
+    # global setting even if an individual plotting function changed rcParams.
+    family = _PLOT_OUTPUT_SETTINGS['font_family']
+    mpl.rcParams.update({
+        'mathtext.fontset': 'custom',
+        'mathtext.rm': family,
+        'mathtext.it': family + ':italic',
+        'mathtext.bf': family + ':bold',
+    })
+
+    kwargs['format'] = extension
+    return _ORIGINAL_FIGURE_SAVEFIG(figure, stem + '.' + extension, *args, **kwargs)
+
+
+def configure_plot_output(plotting_config):
+    """Configure dimensions, typography and export formats for all plots."""
+    width_cm = float(plotting_config.get('plot_width', 15.69))
+    font_size = float(plotting_config.get('font_size', 9))
+    if width_cm <= 0:
+        raise ValueError("'plot_width' must be greater than zero.")
+    if font_size <= 0:
+        raise ValueError("'font_size' must be greater than zero.")
+
+    _PLOT_OUTPUT_SETTINGS.update({
+        'width_cm': width_cm,
+        'font_family': str(plotting_config.get('font_family', 'Times New Roman')),
+        'font_size': font_size,
+        'raster_filetype': _normalise_filetype(
+            plotting_config.get('raster_filetype', 'png'),
+            {'png', 'jpg', 'jpeg', 'tif', 'tiff', 'webp'},
+            'raster_filetype',
+        ),
+        'vector_filetype': _normalise_filetype(
+            plotting_config.get('vector_filetype', 'svg'),
+            {'svg', 'eps', 'pdf', 'ps'},
+            'vector_filetype',
+        ),
+    })
+    mpl.rcParams.update({
+        'font.family': _PLOT_OUTPUT_SETTINGS['font_family'],
+        'font.size': font_size,
+        'axes.titlesize': font_size,
+        'axes.labelsize': font_size,
+        'xtick.labelsize': font_size,
+        'ytick.labelsize': font_size,
+        'legend.fontsize': font_size,
+        'legend.title_fontsize': font_size,
+        'figure.titlesize': font_size,
+    })
+    Figure.savefig = _configured_figure_savefig
+    return _PLOT_OUTPUT_SETTINGS.copy()
+
 
 SHIPPING_UNARY_UNION_EXTENSION_LENGTH = 0.05
 SHIPPING_ROUTE_MATCH_TOLERANCE = 1e-5
@@ -3161,6 +3256,7 @@ def get_calculation_time(result_files, results, path_saving, fig_title, nice_nam
     plot.set_xlim([0, all_runtimes['solving_time'].max() * 1.05])
 
     fig.savefig(safe_output_path(path_saving, fig_title + '.png'), bbox_inches='tight', dpi=600)
+    fig.savefig(safe_output_path(path_saving, fig_title + '.svg'), bbox_inches='tight')
 
 
 import plotly.graph_objects as go
@@ -3173,7 +3269,7 @@ from matplotlib.colors import to_rgba
 
 def get_sankey_diagram(ranked_routes, commodity_colors, nice_name_dictionary, path_saving, fig_title):
 
-    PLOT_WIDTH_CM = 15.69
+    PLOT_WIDTH_CM = _PLOT_OUTPUT_SETTINGS['width_cm']
     PLOT_HEIGHT_CM = 25.0
     TOP_MARGIN_CM = 0.7
     LEGEND_HEIGHT_CM = 1.0
@@ -3562,12 +3658,22 @@ def get_sankey_diagram(ranked_routes, commodity_colors, nice_name_dictionary, pa
                 }
             )
 
+    for annotation in annotations:
+        annotation['font'] = {
+            **annotation.get('font', {}),
+            'family': _PLOT_OUTPUT_SETTINGS['font_family'],
+            'size': _PLOT_OUTPUT_SETTINGS['font_size'],
+        }
+
     fig = go.Figure(data=traces)
     fig.update_layout(
         height=plot_height_px,
         width=plot_width_px,
         margin={"l": 12, "r": 28, "t": 10, "b": 70},
-        font={"size": 11},
+        font={
+            "family": _PLOT_OUTPUT_SETTINGS['font_family'],
+            "size": _PLOT_OUTPUT_SETTINGS['font_size'],
+        },
         annotations=annotations,
         shapes=shapes,
     )
