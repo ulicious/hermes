@@ -1311,17 +1311,23 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
 
             _save_map_formats(fig, path_saving, fig_title)
 
+            combined_handles = []
+            legend_extra_height = 0
             if add_legend:
                 fig.legends.clear()
                 combined_handles = new_commodities + new_transport_means
+                legend_rows = max(1, math.ceil(len(combined_handles) / 6))
+                legend_extra_height = 0.55 + 0.5 * legend_rows
+            _set_compact_world_map_size(fig, ax, extra_height_cm=legend_extra_height)
+            if combined_handles:
+                map_position = ax.get_position()
                 fig.legend(
-                    handles=combined_handles, loc='lower center', ncols=6,
-                    bbox_to_anchor=(0.47, 0.01),
+                    handles=combined_handles, loc='upper center', ncols=6,
+                    bbox_to_anchor=(0.47, map_position.y0 - 0.012),
                     title='Commodities and transport means',
-                    labelspacing=0.2, handletextpad=0.2, columnspacing=0.4,
-                    handlelength=1.2, frameon=False,
+                    labelspacing=0.22, handletextpad=0.23, columnspacing=0.6,
+                    handlelength=1.38, frameon=False,
                 )
-            _set_compact_world_map_size(fig, ax, extra_height_cm=1.8 if add_legend else 0)
             _reserve_compact_colorbar_space(fig, ax)
             _save_map_formats(fig, path_saving, fig_title + '_compact', tight=False)
 
@@ -1662,7 +1668,14 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
 
             if 'cbar' in locals():
                 cbar.remove()
-            _set_compact_world_map_size(fig, ax, extra_height_cm=1.8 if add_legend else 0)
+            combined_handles = []
+            legend_extra_height = 0
+            if add_legend:
+                fig.legends.clear()
+                combined_handles = ([] if ignore_commodity else new_commodities) + new_transport_means
+                legend_rows = max(1, math.ceil(len(combined_handles) / 6))
+                legend_extra_height = 0.55 + 0.5 * legend_rows
+            _set_compact_world_map_size(fig, ax, extra_height_cm=legend_extra_height)
             if 'cbar' in locals():
                 map_position = ax.get_position()
                 compact_cax = fig.add_axes([
@@ -1680,22 +1693,20 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                 compact_cbar.ax.tick_params(axis='y', labelrotation=90)
                 compact_tick_labels = compact_cbar.ax.get_yticklabels()
                 if compact_tick_labels:
-                    compact_tick_labels[0].set_horizontalalignment('left')
+                    compact_tick_labels[0].set_horizontalalignment('right')
                 ax.set_position(map_position)
                 ax.set_aspect('auto')
                 _align_compact_colorbar_to_map(fig, ax, compact_cax)
 
-            if add_legend:
-                fig.legends.clear()
-                combined_handles = ([] if ignore_commodity else new_commodities) + new_transport_means
-                if combined_handles:
-                    fig.legend(
-                        handles=combined_handles, loc='lower center', ncols=6,
-                        bbox_to_anchor=(0.47, 0.01),
-                        title='Commodities and transport means',
-                        labelspacing=0.2, handletextpad=0.2, columnspacing=0.4,
-                        handlelength=1.2, frameon=False,
-                    )
+            if combined_handles:
+                map_position = ax.get_position()
+                fig.legend(
+                    handles=combined_handles, loc='upper center', ncols=6,
+                    bbox_to_anchor=(0.47, map_position.y0 - 0.012),
+                    title='Commodities and transport means',
+                    labelspacing=0.22, handletextpad=0.23, columnspacing=0.6,
+                    handlelength=1.38, frameon=False,
+                )
             _save_map_formats(fig, path_saving, filename + '_compact', tight=False)
 
             plt.close(fig)
@@ -1885,7 +1896,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
                 compact_cbar.ax.tick_params(axis='y', labelrotation=90)
                 compact_tick_labels = compact_cbar.ax.get_yticklabels()
                 if compact_tick_labels:
-                    compact_tick_labels[0].set_horizontalalignment('left')
+                    compact_tick_labels[0].set_horizontalalignment('right')
                 ax.set_position(map_position)
                 ax.set_aspect('auto')
                 _align_compact_colorbar_to_map(fig, ax, compact_cax)
