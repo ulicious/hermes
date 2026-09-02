@@ -137,6 +137,43 @@ def configure_plot_output(plotting_config):
     return _PLOT_OUTPUT_SETTINGS.copy()
 
 
+def _set_compact_world_map_size(fig, ax, extra_height_cm=0.0):
+    """Use a close-fitting aspect ratio for an additional standalone map export."""
+    width_cm = _PLOT_OUTPUT_SETTINGS['width_cm']
+    longitude_span = abs(np.diff(ax.get_xlim())[0])
+    latitude_span = abs(np.diff(ax.get_ylim())[0])
+    map_ratio = latitude_span / longitude_span if longitude_span else 0.5
+    map_width_fraction = 0.78
+    map_height_cm = min(7.5, max(3.5, width_cm * map_width_fraction * map_ratio))
+    bottom_cm = 0.3 + extra_height_cm
+    top_cm = 0.3
+    height_cm = map_height_cm + bottom_cm + top_cm
+    fig.set_size_inches(width_cm / 2.54, height_cm / 2.54, forward=True)
+    ax.set_position([
+        0.04,
+        bottom_cm / height_cm,
+        map_width_fraction,
+        map_height_cm / height_cm,
+    ])
+    ax.set_aspect('auto')
+
+
+def _reserve_compact_colorbar_space(fig, ax):
+    """Reserve the same right-hand column used by compact maps with a colorbar."""
+    map_position = ax.get_position()
+    placeholder = fig.add_axes([0.86, map_position.y0, 0.025, map_position.height])
+    placeholder.set_facecolor('white')
+    placeholder.set_axis_off()
+
+
+def _save_map_formats(fig, directory, filename, tight=True):
+    """Save both configured Matplotlib output types for one map layout."""
+    stem = safe_output_path(directory, filename)
+    bbox_inches = 'tight' if tight else None
+    fig.savefig(stem + '.png', bbox_inches=bbox_inches, dpi=600)
+    fig.savefig(stem + '.svg', bbox_inches=bbox_inches)
+
+
 SHIPPING_UNARY_UNION_EXTENSION_LENGTH = 0.05
 SHIPPING_ROUTE_MATCH_TOLERANCE = 1e-5
 MIN_ROUTE_SEGMENT_LENGTH = 1e-9
@@ -1248,8 +1285,21 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
             fig.tight_layout()
             plt.subplots_adjust(bottom=0.3)
 
-            fig.savefig(safe_output_path(path_saving, fig_title + '.png'), bbox_inches='tight', dpi=600)
-            fig.savefig(safe_output_path(path_saving, fig_title + '.svg'), bbox_inches='tight')
+            _save_map_formats(fig, path_saving, fig_title)
+
+            if add_legend:
+                fig.legends.clear()
+                combined_handles = new_commodities + new_transport_means
+                fig.legend(
+                    handles=combined_handles, loc='lower center', ncols=5,
+                    bbox_to_anchor=(0.5, 0.01),
+                    title='Commodities and transport means',
+                    labelspacing=0.2, handletextpad=0.25, columnspacing=0.75,
+                    handlelength=2.0, frameon=False,
+                )
+            _set_compact_world_map_size(fig, ax, extra_height_cm=1.2 if add_legend else 0)
+            _reserve_compact_colorbar_space(fig, ax)
+            _save_map_formats(fig, path_saving, fig_title + '_compact', tight=False)
 
             plt.close(fig)
 
@@ -1584,9 +1634,33 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
             else:
                 filename = fig_title
 
-            name = safe_output_path(path_saving, filename)
-            fig.savefig(name + '.png', bbox_inches='tight', dpi=600)
-            fig.savefig(name + '.svg', bbox_inches='tight')
+            _save_map_formats(fig, path_saving, filename)
+
+            if 'cbar' in locals():
+                cbar.remove()
+                compact_cbar = fig.colorbar(
+                    sm, ax=ax, orientation='vertical', fraction=0.035, pad=0.025
+                )
+                compact_cbar.set_label('Quantity [TWh]', rotation=90, labelpad=8)
+                compact_cbar.set_ticks(ticks)
+                compact_cbar.ax.tick_params(axis='y', labelrotation=90)
+
+            if add_legend:
+                fig.legends.clear()
+                combined_handles = ([] if ignore_commodity else new_commodities) + new_transport_means
+                if combined_handles:
+                    fig.legend(
+                        handles=combined_handles, loc='lower center', ncols=5,
+                        bbox_to_anchor=(0.5, 0.01),
+                        title='Commodities and transport means',
+                        labelspacing=0.2, handletextpad=0.25, columnspacing=0.75,
+                        handlelength=1.5, frameon=False,
+                    )
+            _set_compact_world_map_size(fig, ax, extra_height_cm=1.2 if add_legend else 0)
+            if 'compact_cbar' in locals():
+                map_position = ax.get_position()
+                compact_cbar.ax.set_position([0.86, map_position.y0, 0.025, map_position.height])
+            _save_map_formats(fig, path_saving, filename + '_compact', tight=False)
 
             plt.close(fig)
 
@@ -1602,6 +1676,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
     plot_colors = _merged_color_config(plot_colors)
     mlp.rcParams.update({'font.size': 9,
                          'font.family': 'Times New Roman'})
+    cbar = None
 
     if ax is None:
         fig, ax = plt.subplots(figsize=(width * centimeter_to_inch, height * centimeter_to_inch))
@@ -1747,8 +1822,32 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
             fig.tight_layout()
             # plt.subplots_adjust(bottom=0.2)
 
-            fig.savefig(safe_output_path(save_path, fig_title + '.png'), bbox_inches='tight', dpi=600)
-            fig.savefig(safe_output_path(save_path, fig_title + '.svg'), bbox_inches='tight')
+            _save_map_formats(fig, save_path, fig_title)
+
+            if cbar is not None:
+                cbar.remove()
+                compact_cbar = fig.colorbar(
+                    sm,
+                    ax=ax,
+                    orientation='vertical',
+                    extend='max' if limit_scale else 'neither',
+                    fraction=0.035,
+                    pad=0.025,
+                )
+                compact_cbar.set_label(unit, rotation=90, labelpad=8)
+                if len(ticks) > 0:
+                    compact_cbar.set_ticks(ticks)
+                    compact_cbar.ax.yaxis.set_major_locator(FixedLocator(ticks))
+                    compact_cbar.set_ticklabels([_format_colorbar_tick(tick) for tick in ticks])
+                compact_cbar.ax.tick_params(axis='y', labelrotation=90)
+            else:
+                _reserve_compact_colorbar_space(fig, ax)
+
+            _set_compact_world_map_size(fig, ax)
+            if cbar is not None:
+                map_position = ax.get_position()
+                compact_cbar.ax.set_position([0.86, map_position.y0, 0.025, map_position.height])
+            _save_map_formats(fig, save_path, fig_title + '_compact', tight=False)
 
             plt.close(fig)
 
@@ -1852,8 +1951,11 @@ def get_used_locations_figure(data, boundaries, destination_location, quantity, 
 
     if save:
         if fig is not None:
-            fig.savefig(safe_output_path(save_path, fig_title + '.png'), bbox_inches='tight', dpi=600)
-            fig.savefig(safe_output_path(save_path, fig_title + '.svg'), bbox_inches='tight')
+            _save_map_formats(fig, save_path, fig_title)
+
+            _set_compact_world_map_size(fig, ax, extra_height_cm=0.8 if add_legend else 0)
+            _reserve_compact_colorbar_space(fig, ax)
+            _save_map_formats(fig, save_path, fig_title + '_compact', tight=False)
 
             plt.close(fig)
 
@@ -2663,8 +2765,11 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
     if save:
         if fig is not None:
             fig.tight_layout()
-            fig.savefig(safe_output_path(path_saving, fig_title + '.png'), bbox_inches='tight', dpi=600)
-            fig.savefig(safe_output_path(path_saving, fig_title + '.svg'), bbox_inches='tight')
+            _save_map_formats(fig, path_saving, fig_title)
+
+            _set_compact_world_map_size(fig, ax, extra_height_cm=0.8 if add_legend else 0)
+            _reserve_compact_colorbar_space(fig, ax)
+            _save_map_formats(fig, path_saving, fig_title + '_compact', tight=False)
 
             data[['latitude', 'longitude', 'start_commodity']].to_excel(
                 safe_output_path(path_saving, fig_title + '.xlsx'))
@@ -2785,8 +2890,11 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
             fig.tight_layout()
             plt.subplots_adjust(bottom=0.1)
 
-            fig.savefig(safe_output_path(path_saving, 'infrastructure.png'), bbox_inches='tight', dpi=600)
-            fig.savefig(safe_output_path(path_saving, 'infrastructure.svg'), bbox_inches='tight')
+            _save_map_formats(fig, path_saving, 'infrastructure')
+
+            _set_compact_world_map_size(fig, ax, extra_height_cm=0.8 if plot_legend else 0)
+            _reserve_compact_colorbar_space(fig, ax)
+            _save_map_formats(fig, path_saving, 'infrastructure_compact', tight=False)
 
             plt.close(fig)
 
@@ -2879,8 +2987,11 @@ def get_water_availability_figure(boundaries, path_data, ax=None, fig=None, fig_
         fig.tight_layout()
         plt.subplots_adjust(bottom=0.14)
 
-        fig.savefig(safe_output_path(path_saving, fig_title + '.png'), bbox_inches='tight', dpi=600)
-        fig.savefig(safe_output_path(path_saving, fig_title + '.svg'), bbox_inches='tight')
+        _save_map_formats(fig, path_saving, fig_title)
+
+        _set_compact_world_map_size(fig, ax, extra_height_cm=0.8 if plot_legend else 0)
+        _reserve_compact_colorbar_space(fig, ax)
+        _save_map_formats(fig, path_saving, fig_title + '_compact', tight=False)
 
         plt.close(fig)
 
@@ -2999,8 +3110,11 @@ def get_start_locations_infrastructure_destination_figure(start_locations, bound
         fig.tight_layout()
         plt.subplots_adjust(bottom=0.1)
 
-        fig.savefig(safe_output_path(path_saving, fig_title + '.png'), bbox_inches='tight', dpi=600)
-        fig.savefig(safe_output_path(path_saving, fig_title + '.svg'), bbox_inches='tight')
+        _save_map_formats(fig, path_saving, fig_title)
+
+        _set_compact_world_map_size(fig, ax, extra_height_cm=0.8 if plot_legend else 0)
+        _reserve_compact_colorbar_space(fig, ax)
+        _save_map_formats(fig, path_saving, fig_title + '_compact', tight=False)
 
         plt.close(fig)
 
