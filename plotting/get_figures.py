@@ -901,6 +901,14 @@ def _get_even_colorbar_ticks(vmin, vmax, tick_count):
     return np.linspace(vmin, vmax, tick_count)
 
 
+def _get_compact_colorbar_ticks(ticks, maximum_tick_count=4):
+    """Limit compact vertical colorbars while retaining both endpoints."""
+    ticks = np.asarray(ticks, dtype=float)
+    if len(ticks) <= maximum_tick_count:
+        return ticks
+    return np.linspace(ticks[0], ticks[-1], maximum_tick_count)
+
+
 def get_hydrogen_potential_plot_scale(max_quantity_mwh):
     """Return the divisor and colorbar label for H2 potential stored in MWh."""
     max_quantity_mwh = float(max_quantity_mwh)
@@ -1664,7 +1672,11 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                     sm, cax=compact_cax, orientation='vertical'
                 )
                 compact_cbar.set_label('Quantity [TWh]', rotation=90, labelpad=8)
-                compact_cbar.set_ticks(ticks)
+                compact_ticks = _get_compact_colorbar_ticks(ticks)
+                compact_cbar.set_ticks(compact_ticks)
+                compact_cbar.set_ticklabels([
+                    _format_colorbar_tick(tick) for tick in compact_ticks
+                ])
                 compact_cbar.ax.tick_params(axis='y', labelrotation=90)
                 compact_tick_labels = compact_cbar.ax.get_yticklabels()
                 if compact_tick_labels:
@@ -1864,9 +1876,12 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
                 )
                 compact_cbar.set_label(unit, rotation=90, labelpad=8)
                 if len(ticks) > 0:
-                    compact_cbar.set_ticks(ticks)
-                    compact_cbar.ax.yaxis.set_major_locator(FixedLocator(ticks))
-                    compact_cbar.set_ticklabels([_format_colorbar_tick(tick) for tick in ticks])
+                    compact_ticks = _get_compact_colorbar_ticks(ticks)
+                    compact_cbar.set_ticks(compact_ticks)
+                    compact_cbar.ax.yaxis.set_major_locator(FixedLocator(compact_ticks))
+                    compact_cbar.set_ticklabels([
+                        _format_colorbar_tick(tick) for tick in compact_ticks
+                    ])
                 compact_cbar.ax.tick_params(axis='y', labelrotation=90)
                 compact_tick_labels = compact_cbar.ax.get_yticklabels()
                 if compact_tick_labels:
