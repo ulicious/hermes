@@ -1666,6 +1666,9 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                 compact_cbar.set_label('Quantity [TWh]', rotation=90, labelpad=8)
                 compact_cbar.set_ticks(ticks)
                 compact_cbar.ax.tick_params(axis='y', labelrotation=90)
+                compact_tick_labels = compact_cbar.ax.get_yticklabels()
+                if compact_tick_labels:
+                    compact_tick_labels[0].set_horizontalalignment('left')
                 ax.set_position(map_position)
                 ax.set_aspect('auto')
                 _align_compact_colorbar_to_map(fig, ax, compact_cax)
@@ -1865,6 +1868,9 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
                     compact_cbar.ax.yaxis.set_major_locator(FixedLocator(ticks))
                     compact_cbar.set_ticklabels([_format_colorbar_tick(tick) for tick in ticks])
                 compact_cbar.ax.tick_params(axis='y', labelrotation=90)
+                compact_tick_labels = compact_cbar.ax.get_yticklabels()
+                if compact_tick_labels:
+                    compact_tick_labels[0].set_horizontalalignment('left')
                 ax.set_position(map_position)
                 ax.set_aspect('auto')
                 _align_compact_colorbar_to_map(fig, ax, compact_cax)
