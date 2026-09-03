@@ -581,7 +581,10 @@ def attach_voronoi_cells_to_locations(locations, config_file):
 
     world_gdf = gpd.GeoDataFrame(geometry=locations['geometry'])
     locations_gdf = gpd.GeoDataFrame(geometry=location_points)
-    fig, ax = plt.subplots(figsize=(15, 10))
+    from data_processing.configuration import load_plotting_configuration
+    plotting_config = load_plotting_configuration(config_file)
+    plot_width = float(plotting_config['plot_width'])
+    fig, ax = plt.subplots(figsize=(plot_width / 2.54, plot_width * 2 / 3 / 2.54))
     world_gdf.plot(ax=ax, color=colors)
     locations_gdf.plot(ax=ax, color=colors, edgecolor='white', markersize=0.1)
 

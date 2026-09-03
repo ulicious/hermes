@@ -13,8 +13,6 @@ import matplotlib as mlp
 import matplotlib.gridspec as gridspec
 import seaborn as sns
 import matplotlib as mpl
-from matplotlib.figure import Figure
-from matplotlib.text import Text
 from matplotlib.transforms import ScaledTranslation, blended_transform_factory
 
 from math import sqrt
@@ -45,7 +43,6 @@ DEFAULT_PLOT_BOUNDARIES = {
     'max_longitude': 180.0,
 }
 
-_ORIGINAL_FIGURE_SAVEFIG = Figure.savefig
 _PLOT_OUTPUT_SETTINGS = {
     'width_cm': 15.69,
     'font_family': 'Times New Roman',
@@ -70,50 +67,6 @@ def _normalise_filetypes(value, allowed, setting_name):
         if filetype not in filetypes:
             filetypes.append(filetype)
     return tuple(filetypes)
-
-
-def _configured_figure_savefig(figure, filename, *args, **kwargs):
-    """Apply the global plotting configuration to every Matplotlib export."""
-    filename = os.fspath(filename)
-    stem, requested_extension = os.path.splitext(filename)
-    requested_extension = requested_extension.lower().lstrip('.')
-    if requested_extension in {'png', 'jpg', 'jpeg', 'tif', 'tiff', 'webp'}:
-        extensions = _PLOT_OUTPUT_SETTINGS['raster_filetype']
-    elif requested_extension in {'svg', 'eps', 'pdf', 'ps'}:
-        extensions = _PLOT_OUTPUT_SETTINGS['vector_filetype']
-    else:
-        extensions = (requested_extension,)
-
-    width_inch = _PLOT_OUTPUT_SETTINGS['width_cm'] / 2.54
-    old_width, old_height = figure.get_size_inches()
-    if old_width > 0:
-        figure.set_size_inches(width_inch, old_height * width_inch / old_width, forward=True)
-
-    for text_element in figure.findobj(match=Text):
-        text_element.set_fontfamily(_PLOT_OUTPUT_SETTINGS['font_family'])
-        text_element.set_fontsize(_PLOT_OUTPUT_SETTINGS['font_size'])
-
-    # Re-apply the family at draw time so mathematical text follows the same
-    # global setting even if an individual plotting function changed rcParams.
-    family = _PLOT_OUTPUT_SETTINGS['font_family']
-    mpl.rcParams.update({
-        'mathtext.fontset': 'custom',
-        'mathtext.rm': family,
-        'mathtext.it': family + ':italic',
-        'mathtext.bf': family + ':bold',
-    })
-
-    result = None
-    for extension in extensions:
-        format_kwargs = kwargs.copy()
-        format_kwargs['format'] = extension
-        result = _ORIGINAL_FIGURE_SAVEFIG(
-            figure,
-            stem + '.' + extension,
-            *args,
-            **format_kwargs,
-        )
-    return result
 
 
 def configure_plot_output(plotting_config):
@@ -143,6 +96,10 @@ def configure_plot_output(plotting_config):
     mpl.rcParams.update({
         'font.family': _PLOT_OUTPUT_SETTINGS['font_family'],
         'font.size': font_size,
+        'mathtext.fontset': 'custom',
+        'mathtext.rm': _PLOT_OUTPUT_SETTINGS['font_family'],
+        'mathtext.it': _PLOT_OUTPUT_SETTINGS['font_family'] + ':italic',
+        'mathtext.bf': _PLOT_OUTPUT_SETTINGS['font_family'] + ':bold',
         'axes.titlesize': font_size,
         'axes.labelsize': font_size,
         'xtick.labelsize': font_size,
@@ -151,8 +108,25 @@ def configure_plot_output(plotting_config):
         'legend.title_fontsize': font_size,
         'figure.titlesize': font_size,
     })
-    Figure.savefig = _configured_figure_savefig
     return _PLOT_OUTPUT_SETTINGS.copy()
+
+
+def save_configured_figure(figure, stem, bbox_inches='tight', dpi=600):
+    """Save a figure directly in every format selected in the plotting configuration."""
+    stem = os.fspath(stem)
+    for extension in _PLOT_OUTPUT_SETTINGS['raster_filetype']:
+        figure.savefig(
+            stem + '.' + extension,
+            format=extension,
+            bbox_inches=bbox_inches,
+            dpi=dpi,
+        )
+    for extension in _PLOT_OUTPUT_SETTINGS['vector_filetype']:
+        figure.savefig(
+            stem + '.' + extension,
+            format=extension,
+            bbox_inches=bbox_inches,
+        )
 
 
 def _set_compact_world_map_size(fig, ax, extra_height_cm=0.0):
@@ -250,11 +224,10 @@ def _order_legend_handles_row_wise(handles, columns):
 
 
 def _save_map_formats(fig, directory, filename, tight=True):
-    """Save both configured Matplotlib output types for one map layout."""
+    """Save every configured Matplotlib output type for one map layout."""
     stem = safe_output_path(directory, filename)
     bbox_inches = 'tight' if tight else None
-    fig.savefig(stem + '.png', bbox_inches=bbox_inches, dpi=600)
-    fig.savefig(stem + '.svg', bbox_inches=bbox_inches)
+    save_configured_figure(fig, stem, bbox_inches=bbox_inches)
 
 
 SHIPPING_UNARY_UNION_EXTENSION_LENGTH = 0.05
@@ -1003,14 +976,13 @@ def get_hydrogen_potential_plot_scale(max_quantity_mwh):
 def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_name_dictionary,
                       infrastructure_data, complete_infrastructure, boundaries, destination_location, fig_title='',
                       add_legend=True,
-                      ax=None, width=15.69, height=9, return_fig=False, save=False, path_saving='',
+                      ax=None, height=9, return_fig=False, save=False, path_saving='',
                       return_handles=False, existing_commodities=None, existing_transport_means=None,
                       add_fig_title=False, fig=None, plot_colors=None):
 
-    plt.rcParams.update({'font.size': 9,
-                         'font.family': 'Times New Roman'})
     plot_colors = _merged_color_config(plot_colors)
     centimeter_to_inch = 1 / 2.54
+    width = _PLOT_OUTPUT_SETTINGS['width_cm']
 
     if existing_commodities is None:
         existing_commodities = []
@@ -1343,12 +1315,12 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
             ax.legend(handles=new_transport_means, loc='upper center', ncols=3,
                       bbox_to_anchor=(0.5, 0.2), title='Transport mean',
                       labelspacing=0.1, handletextpad=0.1, columnspacing=0.75, handlelength=2.5,
-                      fontsize=9, title_fontsize=9, frameon=False)
+                      fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], title_fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], frameon=False)
 
             ax.legend(handles=new_commodities, loc='upper center', ncol=2,
                       bbox_to_anchor=(0.5, 0.), title='Commodity',
                       labelspacing=0.1, handletextpad=0.1, columnspacing=0.25,
-                      fontsize=9, title_fontsize=9, frameon=False)
+                      fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], title_fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], frameon=False)
 
         if return_handles:
             return ax, existing_commodities, existing_transport_means
@@ -1359,7 +1331,7 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
         fig.legend(handles=new_transport_means, loc='upper center', ncols=3,
                    bbox_to_anchor=(0.5, 0.3), title='Transport mean',
                    labelspacing=0.1, handletextpad=0.1, columnspacing=0.75, handlelength=2.5,
-                   fontsize=9, title_fontsize=9, frameon=False)
+                   fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], title_fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], frameon=False)
 
         if len(commodities) <= 4:
             ncols = len(commodities)
@@ -1369,7 +1341,7 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
         fig.legend(handles=new_commodities, loc='upper center', ncol=ncols,
                    bbox_to_anchor=(0.5, 0.175), title='Commodity',
                    labelspacing=0.1, handletextpad=0.1, columnspacing=0.25,
-                   fontsize=9, title_fontsize=9, frameon=False)
+                   fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], title_fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], frameon=False)
 
     if save:
         if fig is not None:
@@ -1413,16 +1385,14 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
 
 def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionary,
                         nice_name_dictionary, destination_location=None, fig_title='', add_legend=True, fig=None,
-                        ax=None, width=15.69, height=9, return_fig=False, save=False, path_saving='',
+                        ax=None, height=9, return_fig=False, save=False, path_saving='',
                         return_handles=False, existing_commodities=None, existing_transport_means=None,
                         add_fig_title=False, ignore_commodity=False, country_comparison=False, color=None,
                         column='commodity', max_quantity=None, min_quantity=None, plot_colors=None):
 
-    plt.rcParams.update({'font.size': 9,
-                         'legend.title_fontsize': 9,
-                         'font.family': 'Times New Roman'})
     commodity_data = commodity_data.copy()
     plot_colors = _merged_color_config(plot_colors)
+    width = _PLOT_OUTPUT_SETTINGS['width_cm']
 
     if ignore_commodity:
         replacement_dict = {}
@@ -1670,12 +1640,12 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
             fig.legend(handles=new_transport_means, loc='upper left', ncols=3,
                        bbox_to_anchor=(0.1, 0.395), title='Transport mean',
                        labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
-                       fontsize=9, frameon=False)
+                       fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], frameon=False)
 
             fig.legend(handles=sizes, loc='upper right', ncols=3,
                        bbox_to_anchor=(0.9, 0.395), title='Quantity [TWh]',
                        labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
-                       fontsize=9, frameon=False)
+                       fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], frameon=False)
 
         else:
             shrink = 0.5
@@ -1686,8 +1656,9 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
             cbar = fig.colorbar(sm, ax=ax,  orientation='horizontal', anchor=(0.5, 0), shrink=shrink, aspect=30, pad=0)
             keep_colorbar_vector(cbar)
 
-            cbar.ax.tick_params(labelsize=9)
-            cbar.set_label('Quantity [TWh]', rotation=0, labelpad=5, fontsize=9)
+            cbar.ax.tick_params(labelsize=_PLOT_OUTPUT_SETTINGS['font_size'])
+            cbar.set_label('Quantity [TWh]', rotation=0, labelpad=5,
+                           fontsize=_PLOT_OUTPUT_SETTINGS['font_size'])
 
             ticks = np.asarray(cbar.get_ticks(), dtype=float)
             vmin, vmax = norm.vmin, norm.vmax
@@ -1726,7 +1697,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
             fig.legend(handles=new_commodities, loc='upper center', ncol=ncols,
                        bbox_to_anchor=(0.5, 0.27), title=legend_label,
                        labelspacing=0.1, handletextpad=0.1, columnspacing=0.25,
-                       fontsize=9, frameon=False)
+                       fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], frameon=False)
 
     if save:
         if fig is not None:
@@ -1790,16 +1761,15 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
 
 
 def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location, ax=None,
-                      width=15.69, height=9,
+                      height=9,
                       fig_title='', add_fig_title=False, column='costs', limit_scale=False, add_colorbar=True,
                       plot_era=False, use_voronoi=False, s=0.5, production_costs=None,
                       return_fig=False, save=False, save_path='', fig=None, plot_colors=None,
                       unit=None, colorbar_ticks=None, export_column=None):
 
     centimeter_to_inch = 1 / 2.54
+    width = _PLOT_OUTPUT_SETTINGS['width_cm']
     plot_colors = _merged_color_config(plot_colors)
-    mlp.rcParams.update({'font.size': 9,
-                         'font.family': 'Times New Roman'})
     cbar = None
 
     if ax is None:
@@ -1917,8 +1887,9 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
                                 pad=0)
             keep_colorbar_vector(cbar)
 
-        cbar.ax.tick_params(labelsize=9)
-        cbar.set_label(unit, rotation=0, labelpad=5, fontsize=9)
+        cbar.ax.tick_params(labelsize=_PLOT_OUTPUT_SETTINGS['font_size'])
+        cbar.set_label(unit, rotation=0, labelpad=5,
+                       fontsize=_PLOT_OUTPUT_SETTINGS['font_size'])
 
         if colorbar_ticks is None:
             ticks = np.asarray(cbar.get_ticks(), dtype=float)
@@ -1989,14 +1960,13 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
 
 
 def get_used_locations_figure(data, boundaries, destination_location, quantity, ax=None,
-                              width=15.69, height=8, production_costs=None, add_legend=True,
+                              height=8, production_costs=None, add_legend=True,
                               fig_title='', add_fig_title=False, use_voronoi=False, s=0.5,
                               return_fig=False, save=False, save_path='', fig=None, plot_colors=None):
 
     centimeter_to_inch = 1 / 2.54
+    width = _PLOT_OUTPUT_SETTINGS['width_cm']
     plot_colors = _merged_color_config(plot_colors)
-    mlp.rcParams.update({'font.size': 9,
-                         'font.family': 'Times New Roman'})
 
     if ax is None:
         fig, ax = plt.subplots(figsize=(width * centimeter_to_inch, height * centimeter_to_inch))
@@ -2075,7 +2045,7 @@ def get_used_locations_figure(data, boundaries, destination_location, quantity, 
         fig.legend(handles=quantity_handles, loc='upper center', ncol=len(quantity_handles),
                    bbox_to_anchor=(0.5, 0.27), title='TWh',
                    labelspacing=0.1, handletextpad=0.1, columnspacing=0.25,
-                   fontsize=9, frameon=False)
+                   fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], frameon=False)
 
     if return_fig:
         return ax
@@ -2097,11 +2067,10 @@ def get_cost_and_quantity_figure(sub_axes, data, norm, cmap_chosen, boundaries, 
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     plot_colors = _merged_color_config(plot_colors)
 
-    fig = plt.figure(figsize=(8, 6))
+    width = _PLOT_OUTPUT_SETTINGS['width_cm']
+    fig = plt.figure(figsize=(width / 2.54, width * 0.75 / 2.54))
     ax = fig.add_subplot(111, projection='3d')
 
-    plt.rcParams.update({'font.size': 11,
-                         'font.family': 'Times New Roman'})
 
     countries = _load_plot_world()
     antarctica = countries[countries['continent'] == 'Antarctica'].index[0]
@@ -2251,22 +2220,12 @@ def get_cost_and_quantity_figure(sub_axes, data, norm, cmap_chosen, boundaries, 
 
 def get_supply_curves(data, color_dictionary, nice_name_dictionary,
                       add_legend=True, return_fig=False, save=False, fig_title='', add_fig_title=False,
-                      path_saving='', width=15.69, height=12, country=None, production_costs=None, ax=None, fig=None,
+                      path_saving='', height=12, country=None, production_costs=None, ax=None, fig=None,
                       ylim=None, current_ax=None, plot_colors=None):
 
     plot_colors = _merged_color_config(plot_colors)
+    width = _PLOT_OUTPUT_SETTINGS['width_cm']
     supply_curve_colors = plot_colors['supply_curve_colors']
-    mlp.rcParams.update({
-        'font.size': 9,
-        'font.family': 'Times New Roman'
-    })
-
-    mpl.rcParams['font.family'] = 'Times New Roman'
-
-    mpl.rcParams['mathtext.fontset'] = 'custom'
-    mpl.rcParams['mathtext.rm'] = 'Times New Roman'
-    mpl.rcParams['mathtext.it'] = 'Times New Roman:italic'
-    mpl.rcParams['mathtext.bf'] = 'Times New Roman:bold'
 
     # ------------------------------------------------------------
     # Create figure with two vertically stacked subplots
@@ -2365,7 +2324,7 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
             transform=ax.transAxes,
             va='center',
             ha='center',
-            fontsize=9
+            fontsize=_PLOT_OUTPUT_SETTINGS['font_size']
         )
 
         ax_band.set_xlim([0, 1])
@@ -2384,7 +2343,7 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
                 va='center',
                 ha='center',
                 color='white',
-                fontsize=9,
+                fontsize=_PLOT_OUTPUT_SETTINGS['font_size'],
                 fontweight='bold',
                 zorder=10
             )
@@ -2406,15 +2365,9 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
                 fig.tight_layout()
                 plt.subplots_adjust(bottom=0.28)
 
-                fig.savefig(
-                    safe_output_path(path_saving, fig_title + '.png'),
-                    bbox_inches='tight',
-                    dpi=600
-                )
-
-                fig.savefig(
-                    safe_output_path(path_saving, fig_title + '.svg'),
-                    bbox_inches='tight'
+                save_configured_figure(
+                    fig,
+                    safe_output_path(path_saving, fig_title),
                 )
 
             export_data.to_excel(safe_output_path(path_saving, fig_title + '.xlsx'), index=False)
@@ -2488,8 +2441,7 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
 
     ax.xaxis.set_ticks_position('bottom')
     ax.tick_params(axis='x', which='both', labelbottom=True)
-    ax.set_xlabel(rf'Potential quantity at destination [10$^{{{exponent}}}$ TWh]',
-                  fontdict={'fontsize': 9}, fontname='Times New Roman')
+    ax.set_xlabel(rf'Potential quantity at destination [10$^{{{exponent}}}$ TWh]')
 
     # ------------------------------------------------------------
     # Plot commodity band in separate subplot
@@ -2614,7 +2566,7 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
             va='center',
             ha='center',
             color='white',
-            fontsize=9,
+            fontsize=_PLOT_OUTPUT_SETTINGS['font_size'],
             fontweight='bold',
             zorder=10
         )
@@ -2642,7 +2594,7 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
 
         ax.legend(
             handles=cost_handles,
-            fontsize=9,
+            fontsize=_PLOT_OUTPUT_SETTINGS['font_size'],
             bbox_to_anchor=(0.5, -0.2),
             ncols=3,
             loc='upper center',
@@ -2684,8 +2636,8 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
                 labelspacing=0.1,
                 handletextpad=0.1,
                 columnspacing=0.25,
-                fontsize=9,
-                title_fontsize=9,
+                fontsize=_PLOT_OUTPUT_SETTINGS['font_size'],
+                title_fontsize=_PLOT_OUTPUT_SETTINGS['font_size'],
                 frameon=False,
             )
 
@@ -2710,15 +2662,9 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
             fig.tight_layout()
             plt.subplots_adjust(bottom=0.28)
 
-            fig.savefig(
-                safe_output_path(path_saving, fig_title + '.png'),
-                bbox_inches='tight',
-                dpi=600
-            )
-
-            fig.savefig(
-                safe_output_path(path_saving, fig_title + '.svg'),
-                bbox_inches='tight'
+            save_configured_figure(
+                fig,
+                safe_output_path(path_saving, fig_title),
             )
 
         export_data.to_excel(safe_output_path(path_saving, fig_title + '.xlsx'), index=False)
@@ -2784,7 +2730,7 @@ def get_production_costs_figure(sub_axes, data, norm, cmap_chosen, boundaries, d
 
 
 def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dictionary, destination_location, ax=None,
-                              fig=None, width=15.69, height=8, add_fig_title=False, add_legend=True,
+                              fig=None, height=8, add_fig_title=False, add_legend=True,
                               fig_title='', plot_era=False, use_voronoi=False, s=0.5, production_costs=None,
                               return_fig=False, save=False, path_saving='', return_handles=True,
                               existing_commodities=None, plot_colors=None):
@@ -2792,9 +2738,8 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
     if existing_commodities is None:
         existing_commodities = []
     plot_colors = _merged_color_config(plot_colors)
+    width = _PLOT_OUTPUT_SETTINGS['width_cm']
 
-    plt.rcParams.update({'font.size': 11,
-                         'font.family': 'Times New Roman'})
     centimeter_to_inch = 1 / 2.54
 
     if ax is None:
@@ -2885,7 +2830,7 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
         # commodity legend
         ax.legend(handles=existing_commodities, loc='upper center', ncols=2, bbox_to_anchor=bbox_to_anchor,
                   labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5,
-                  fontsize=9, frameon=False)
+                  fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], frameon=False)
 
     if return_fig:
         if return_handles:
@@ -2906,14 +2851,13 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
                 safe_output_path(path_saving, fig_title + '.xlsx'))
 
 
-def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_title='', width=15.69, height=9,
+def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_title='', height=9,
                                return_fig=False, save=False, plot_legend=True, path_saving='',
                                country_edgecolor=None, country_linewidth=0.2, high_resolution_map=False,
                                plot_colors=None):
     plot_colors = _merged_color_config(plot_colors)
+    width = _PLOT_OUTPUT_SETTINGS['width_cm']
     infrastructure_colors = plot_colors['infrastructure_colors']
-    plt.rcParams.update({'font.size': 11,
-                         'font.family': 'Times New Roman'})
     centimeter_to_inch = 1 / 2.54
 
     if ax is None:
@@ -3010,7 +2954,7 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
         if handles_list_infrastructure:
             ax.legend(handles=handles_list_infrastructure, loc='upper center', ncol=3, bbox_to_anchor=(0.5, 0),
                       labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5,
-                      fontsize=9, frameon=False)
+                      fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], frameon=False)
 
     if return_fig:
         return ax
@@ -3031,12 +2975,10 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
 
 
 def get_water_availability_figure(boundaries, path_data, ax=None, fig=None, fig_title='water_availability',
-                                  width=15.69, height=9, return_fig=False, save=False, path_saving='',
+                                  height=9, return_fig=False, save=False, path_saving='',
                                   plot_legend=True, high_resolution_map=True, plot_colors=None):
     plot_colors = _merged_color_config(plot_colors)
-    plt.rcParams.update({'font.size': 13,
-                         'legend.fontsize': 13,
-                         'font.family': 'Times New Roman'})
+    width = _PLOT_OUTPUT_SETTINGS['width_cm']
     centimeter_to_inch = 1 / 2.54
 
     if ax is None:
@@ -3109,7 +3051,7 @@ def get_water_availability_figure(boundaries, path_data, ax=None, fig=None, fig_
         ]
         ax.legend(handles=handles, loc='upper center', ncol=2, bbox_to_anchor=(0.5, -0.02),
                   frameon=False, labelspacing=0.25, handletextpad=0.35, columnspacing=0.8,
-                  handlelength=1.6, fontsize=13)
+                  handlelength=1.6, fontsize=_PLOT_OUTPUT_SETTINGS['font_size'])
 
     if return_fig:
         return ax
@@ -3169,13 +3111,12 @@ def get_tight_boundaries_for_start_locations_infrastructure_destination(start_lo
 
 def get_start_locations_infrastructure_destination_figure(start_locations, boundaries, path_data, destination_location,
                                                           ax=None, fig=None, fig_title='start_locations_infrastructure_destination',
-                                                          width=15.69, height=9, return_fig=False, save=False,
+                                                          height=9, return_fig=False, save=False,
                                                           path_saving='', plot_legend=True, plot_colors=None):
     """Plot Voronoi start cells, infrastructure and destination without requiring optimization results."""
     plot_colors = _merged_color_config(plot_colors)
+    width = _PLOT_OUTPUT_SETTINGS['width_cm']
     infrastructure_colors = plot_colors['infrastructure_colors']
-    plt.rcParams.update({'font.size': 11,
-                         'font.family': 'Times New Roman'})
     centimeter_to_inch = 1 / 2.54
 
     if ax is None:
@@ -3232,7 +3173,7 @@ def get_start_locations_infrastructure_destination_figure(start_locations, bound
                                       label='Destination')]
         ax.legend(handles=handles_list, loc='upper center', ncol=2, bbox_to_anchor=(0.5, 0),
                   labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5,
-                  fontsize=9, frameon=False)
+                  fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], frameon=False)
 
     if return_fig:
         return ax
@@ -3253,8 +3194,6 @@ def get_start_locations_infrastructure_destination_figure(start_locations, bound
 def get_commodity_transport_mean_histogram(data, color_dictionary, nice_names, path_saving, scenario_name):
     centimeter_to_inch = 1 / 2.54
     plot_width = _PLOT_OUTPUT_SETTINGS['width_cm']
-    plt.rcParams.update({'font.size': 9,
-                         'font.family': 'Times New Roman'})
     sorted_means = ['Road', 'Shipping', 'Pipeline_Gas', 'New_Pipeline_Gas', 'Pipeline_Liquid', 'New_Pipeline_Liquid']
 
     routes = data['routes'].tolist()
@@ -3414,33 +3353,30 @@ def get_commodity_transport_mean_histogram(data, color_dictionary, nice_names, p
                 plot_new.set_ylabel('')
                 ax_gs.set_ylabel('')
 
-            ax_gs.set_title(nice_names[k2], fontsize=9)
+            ax_gs.set_title(nice_names[k2], fontsize=_PLOT_OUTPUT_SETTINGS['font_size'])
             ax_gs.yaxis.set_major_locator(plt.MaxNLocator(4, integer=True))
-            ax_gs.tick_params(axis='both', which='major', labelsize=7)
+            ax_gs.tick_params(axis='both', which='major', labelsize=_PLOT_OUTPUT_SETTINGS['font_size'])
 
             i += 1
             col += length
 
         n += 1
 
-        # Save the plot as PNG and SVG
-        if True:
-            fig.savefig(
-                safe_output_path(path_saving, scenario_name + '_' + k1 + '_distances_histogram.png'),
-                bbox_inches='tight', dpi=600)
-            fig.savefig(
-                safe_output_path(path_saving, scenario_name + '_' + k1 + '_distances_histogram.svg'),
-                bbox_inches='tight')
+        save_configured_figure(
+            fig,
+            safe_output_path(path_saving, scenario_name + '_' + k1 + '_distances_histogram'),
+        )
 
         plt.close(fig)
     fig_total.align_ylabels()
 
-    plt.figtext(0.5, 0.05, 'Distance [km]', wrap=True, horizontalalignment='center', fontsize=9)
+    plt.figtext(0.5, 0.05, 'Distance [km]', wrap=True, horizontalalignment='center',
+                fontsize=_PLOT_OUTPUT_SETTINGS['font_size'])
 
-    fig_total.savefig(safe_output_path(path_saving, scenario_name + '_distances_histogram.png'),
-                      bbox_inches='tight', dpi=600)
-    fig_total.savefig(safe_output_path(path_saving, scenario_name + '_distances_histogram.svg'),
-                      bbox_inches='tight')
+    save_configured_figure(
+        fig_total,
+        safe_output_path(path_saving, scenario_name + '_distances_histogram'),
+    )
 
     plt.close(fig_total)
 
@@ -3461,11 +3397,10 @@ def get_commodity_transport_mean_histogram(data, color_dictionary, nice_names, p
             df.to_excel(writer, sheet_name=sheet_name)
 
 
-def get_calculation_time(result_files, results, path_saving, fig_title, nice_name_dictionary=None, width=15.69):
+def get_calculation_time(result_files, results, path_saving, fig_title, nice_name_dictionary=None):
 
     centimeter_to_inch = 1 / 2.54
-    plt.rcParams.update({'font.size': 9,
-                         'font.family': 'Times New Roman'})
+    width = _PLOT_OUTPUT_SETTINGS['width_cm']
     if nice_name_dictionary is None:
         nice_name_dictionary = {}
 
@@ -3501,8 +3436,7 @@ def get_calculation_time(result_files, results, path_saving, fig_title, nice_nam
 
     plot.set_xlim([0, all_runtimes['solving_time'].max() * 1.05])
 
-    fig.savefig(safe_output_path(path_saving, fig_title + '.png'), bbox_inches='tight', dpi=600)
-    fig.savefig(safe_output_path(path_saving, fig_title + '.svg'), bbox_inches='tight')
+    save_configured_figure(fig, safe_output_path(path_saving, fig_title))
 
 
 import plotly.graph_objects as go
@@ -3898,7 +3832,6 @@ def get_sankey_diagram(ranked_routes, commodity_colors, nice_name_dictionary, pa
                     "text": nice_name_dictionary[commodity],
                     "showarrow": False,
                     "align": "left",
-                    "font": {"size": 11},
                     "xanchor": "left",
                     "yanchor": "middle",
                 }

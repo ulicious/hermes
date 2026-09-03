@@ -17,7 +17,7 @@ from plotting.get_figures import get_number_figure, get_energy_carrier_figure, g
     get_start_locations_infrastructure_destination_figure, \
     get_tight_boundaries_for_start_locations_infrastructure_destination, get_water_availability_figure, \
     safe_output_path, resolve_plot_boundaries, get_configured_colormap, get_plot_color_config, \
-    get_hydrogen_potential_plot_scale, configure_plot_output, keep_colorbar_vector
+    get_hydrogen_potential_plot_scale, configure_plot_output, keep_colorbar_vector, save_configured_figure
 from plotting.helpers_plotting import load_infrastructure_data, load_first_available_destination, \
     get_complete_infrastructure, load_result, plot_comparison_plot, match_routing_results
 from data_processing.configuration import load_algorithm_configuration, load_plotting_configuration, get_raw_data_path
@@ -428,8 +428,7 @@ for r in all_results:
                                 limit_scale=config_file_plotting['limit_scale'], return_fig=True, fig=fig,
                                 fig_title='Total supply costs', add_fig_title=True, plot_colors=plot_colors)
 
-        fig.savefig(safe_output_path(path_saving, r + '_all_costs.png'), bbox_inches='tight', dpi=600)
-        fig.savefig(safe_output_path(path_saving, r + '_all_costs.svg'), bbox_inches='tight')
+        save_configured_figure(fig, safe_output_path(path_saving, r + '_all_costs'))
 
     if r in full_plot_results:
         diff_lat = scenario_boundaries['max_latitude'] - scenario_boundaries['min_latitude']
@@ -486,8 +485,7 @@ for r in all_results:
             scenario_boundaries, path_data, ax=ax4, return_fig=True, fig=fig,
             plot_colors=plot_colors)
 
-        fig.savefig(safe_output_path(path_saving, r + '_mixed_overview.png'), bbox_inches='tight', dpi=600)
-        fig.savefig(safe_output_path(path_saving, r + '_mixed_overview.svg'), bbox_inches='tight')
+        save_configured_figure(fig, safe_output_path(path_saving, r + '_mixed_overview'))
 
 plot_comparison_plot('costs', config_file_plotting['conversion_costs_comparison_plot'],
                      path_files, path_saving,
@@ -567,7 +565,7 @@ for r in compare_costs_and_quantities_results:
               "scripts._5_process_plot_data."
         )
 
-    output_path = safe_output_path(path_saving, r + '_distribution_cost_and_quantities.png')
+    output_stem = safe_output_path(path_saving, r + '_distribution_cost_and_quantities')
 
     # mpl.use('TkAgg')
 
@@ -730,8 +728,9 @@ for r in compare_costs_and_quantities_results:
         shrink = 0.5
         cbar = fig.colorbar(sm, cax=cbar_ax, orientation='horizontal', anchor=(0.5, 0), shrink=shrink, aspect=30, pad=0)
         keep_colorbar_vector(cbar)
-        cbar.ax.tick_params(labelsize=9)
-        cbar.set_label('Quantity [TWh]', rotation=0, labelpad=5, fontsize=9)
+        cbar.ax.tick_params(labelsize=config_file_plotting['font_size'])
+        cbar.set_label('Quantity [TWh]', rotation=0, labelpad=5,
+                       fontsize=config_file_plotting['font_size'])
 
         ticks = np.asarray(cbar.get_ticks(), dtype=float)
         vmin, vmax = norm.vmin, norm.vmax
@@ -770,9 +769,7 @@ for r in compare_costs_and_quantities_results:
     # mpl.rcParams['path.simplify_threshold'] = 0.1
     mpl.rcParams['agg.path.chunksize'] = 20000
 
-    fig.savefig(output_path, bbox_inches='tight', dpi=600)
-    output_stem, _ = os.path.splitext(output_path)
-    fig.savefig(output_stem + '.svg', bbox_inches='tight')
+    save_configured_figure(fig, output_stem)
 
     plt.close(fig)
 

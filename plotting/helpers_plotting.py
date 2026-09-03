@@ -21,7 +21,8 @@ from collections import defaultdict
 from statistics import mean
 
 from plotting.get_figures import get_number_figure, get_routes_figure, get_energy_carrier_figure, get_weighted_routes, \
-    get_supply_curves, safe_output_path, resolve_plot_boundaries, get_plot_color_config, keep_colorbar_vector
+    get_supply_curves, safe_output_path, resolve_plot_boundaries, get_plot_color_config, keep_colorbar_vector, \
+    save_configured_figure
 from data_processing.configuration import load_yaml
 
 
@@ -911,14 +912,12 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                          boundaries, color_dictionary=None, nice_name_dictionary=None,
                          cost_type=None, transport_mean_line_styles=None, line_widths=None,
                          infrastructure_data=None, complete_infrastructure=None, country=None,
-                         plot_width=None, subplot_height=None, distance_between=0.25, distance_left=0):
+                         subplot_height=None, distance_between=0.25, distance_left=0):
 
-    mpl.rcParams.update({'font.size': 9,
-                         'font.family': 'Times New Roman'})
     plot_colors = get_plot_color_config(config_file_plotting)
     supply_curve_colors = plot_colors['supply_curve_colors']
-    if plot_width is None:
-        plot_width = float(config_file_plotting['plot_width'])
+    plot_width = float(config_file_plotting['plot_width'])
+    font_size = float(config_file_plotting['font_size'])
 
     diff_lat = boundaries['max_latitude'] - boundaries['min_latitude']
     ratio_lat_lon = diff_lat / (boundaries['max_longitude'] - boundaries['min_longitude'])
@@ -1219,7 +1218,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
 
             fig.legend(handles=commodities, ncols=ncols, bbox_to_anchor=(0.5, legend_height_relative * 1.25), loc='upper center',
                        labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=0.5,
-                       fontsize=9, frameon=False)
+                       fontsize=font_size, frameon=False)
 
         if plot_type == 'routes':
 
@@ -1232,12 +1231,12 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
             fig.legend(handles=transport_means, loc='upper center', ncols=3,
                        bbox_to_anchor=(0.5, legend_height_relative * 1.075), title='Transport mean',
                        labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
-                       fontsize=9, title_fontsize=9, frameon=False)
+                       fontsize=font_size, title_fontsize=font_size, frameon=False)
 
             fig.legend(handles=commodities, loc='upper center', ncol=ncols,
                        bbox_to_anchor=(0.5, legend_height_relative * 1.075 - 0.19), title='Commodity',
                        labelspacing=0.1, handletextpad=0.1, columnspacing=0.25,
-                       fontsize=9, title_fontsize=9, frameon=False)
+                       fontsize=font_size, title_fontsize=font_size, frameon=False)
 
         if plot_type == 'supply_curves':
             # Add labels, legend, and titles
@@ -1274,7 +1273,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
             if len_comp == 2:
                 fig.text(-0.01, 0.725, 'Costs [€ MWh$^{-1}$]', va='center', ha='left', fontdict={'fontsize': 9}, rotation=90)  # 46
 
-                fig.legend(handles=cost_handles, fontsize=9, bbox_to_anchor=(0.475, 0.365), ncols=3,
+                fig.legend(handles=cost_handles, fontsize=font_size, bbox_to_anchor=(0.475, 0.365), ncols=3,
                            loc='upper center', frameon=False)
 
                 fig.legend(
@@ -1286,8 +1285,8 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                     labelspacing=0.1,
                     handletextpad=0.1,
                     columnspacing=0.25,
-                    fontsize=9,
-                    title_fontsize=9,
+                    fontsize=font_size,
+                    title_fontsize=font_size,
                     frameon=False
                 )
             else:
@@ -1295,7 +1294,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                 fig.text(-0.01, 0.455, 'Costs [€ MWh$^{-1}$]', va='center', ha='left', fontdict={'fontsize': 9}, rotation=90) # 46
                 fig.text(-0.01, 0.82, 'Costs [€ MWh$^{-1}$]', va='center', ha='left', fontdict={'fontsize': 9}, rotation=90) # oben 815
 
-                fig.legend(handles=cost_handles, fontsize=9, bbox_to_anchor=(0.475, 0.2), ncols=3,
+                fig.legend(handles=cost_handles, fontsize=font_size, bbox_to_anchor=(0.475, 0.2), ncols=3,
                            loc='upper center', frameon=False)
 
                 fig.legend(
@@ -1307,8 +1306,8 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                     labelspacing=0.1,
                     handletextpad=0.1,
                     columnspacing=0.25,
-                    fontsize=9,
-                    title_fontsize=9,
+                    fontsize=font_size,
+                    title_fontsize=font_size,
                     frameon=False
                 )
 
@@ -1320,10 +1319,10 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
             # fig.set_xlabel('TWh', fontdict={'fontsize': 9})
 
         comparison_filename = str(n) + '_' + saving_name + '_comparison'
-        fig.savefig(safe_output_path(path_saving, comparison_filename + '.png'),
-                    bbox_inches='tight', dpi=600)
-        fig.savefig(safe_output_path(path_saving, comparison_filename + '.svg'),
-                    bbox_inches='tight')
+        save_configured_figure(
+            fig,
+            safe_output_path(path_saving, comparison_filename),
+        )
 
         plt.close(fig)
 
