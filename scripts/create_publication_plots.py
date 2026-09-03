@@ -75,10 +75,10 @@ def main():
                 raise TypeError(
                     'Every entry in SUPPLY_CURVE_COMPARISON_CASE_STUDIES must be a list.'
                 )
-            if len(comparison_case_studies) != 4:
+            if len(comparison_case_studies) not in {2, 4}:
                 raise ValueError(
                     'Every comparison in SUPPLY_CURVE_COMPARISON_CASE_STUDIES '
-                    'must contain exactly four case-study names.'
+                    'must contain two or four case-study names.'
                 )
             for case_study in comparison_case_studies:
                 if not isinstance(case_study, str) or not case_study.strip():
@@ -90,6 +90,7 @@ def main():
                 comparison_id,
                 country.strip(),
                 plots_directory,
+                case_study_count=len(comparison_case_studies),
             )
             print(output_path)
 
@@ -107,9 +108,9 @@ def main():
     for comparison_id, comparison_case_studies in enumerate(COMPARISON_CASE_STUDIES):
         if not isinstance(comparison_case_studies, list):
             raise TypeError('Every entry in COMPARISON_CASE_STUDIES must be a list.')
-        if len(comparison_case_studies) != 4:
+        if len(comparison_case_studies) not in {2, 4}:
             raise ValueError(
-                'Every comparison in COMPARISON_CASE_STUDIES must contain exactly '
+                'Every comparison in COMPARISON_CASE_STUDIES must contain two or '
                 'four case-study names.'
             )
         for case_study in comparison_case_studies:
@@ -120,6 +121,7 @@ def main():
         output_path = create_publication_plot_2(
             comparison_id,
             plots_directory,
+            case_study_count=len(comparison_case_studies),
         )
         print(output_path)
 

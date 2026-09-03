@@ -11,6 +11,9 @@ MAXIMUM_HEIGHT_MM = 185.0
 PANEL_GAP_MM = 1.5
 PANEL_CROP_TOP_MM = 3.0
 PANEL_CROP_BOTTOM_MM = 3.0
+FIGURE_1_FIRST_TOP_CROP_MM = 1.0
+FIGURE_1_LAST_BOTTOM_CROP_MM = 6.0
+FIGURE_1_PANEL_GAPS_MM = (-3.5, -8.5)
 POINTS_PER_MM = 72.0 / 25.4
 
 ET.register_namespace('', SVG_NAMESPACE)
@@ -203,11 +206,22 @@ def create_publication_plot_1(case_study, plots_directory, output_path=None):
         )
 
     panels = []
-    for source_path in source_paths:
+    last_panel_index = len(source_paths) - 1
+    for panel_index, source_path in enumerate(source_paths):
         root, view_box, width_points, height_points = _read_svg(source_path)
         axes_bottom = _primary_axes_bottom(root, view_box)
-        crop_top_points = PANEL_CROP_TOP_MM * POINTS_PER_MM
-        crop_bottom_points = PANEL_CROP_BOTTOM_MM * POINTS_PER_MM
+        crop_top_mm = (
+            FIGURE_1_FIRST_TOP_CROP_MM
+            if panel_index == 0
+            else PANEL_CROP_TOP_MM
+        )
+        crop_bottom_mm = (
+            FIGURE_1_LAST_BOTTOM_CROP_MM
+            if panel_index == last_panel_index
+            else PANEL_CROP_BOTTOM_MM
+        )
+        crop_top_points = crop_top_mm * POINTS_PER_MM
+        crop_bottom_points = crop_bottom_mm * POINTS_PER_MM
         cropped_height_points = height_points - crop_top_points - crop_bottom_points
         if cropped_height_points <= 0:
             raise ValueError('SVG is too short for publication cropping: ' + source_path)
@@ -234,11 +248,11 @@ def create_publication_plot_1(case_study, plots_directory, output_path=None):
         panel['height'] * common_width / panel['width']
         for panel in panels
     ]
-    panel_gap = PANEL_GAP_MM * POINTS_PER_MM
+    panel_gaps = [gap * POINTS_PER_MM for gap in FIGURE_1_PANEL_GAPS_MM]
     maximum_height = MAXIMUM_HEIGHT_MM * POINTS_PER_MM
     output_width = common_width
     panel_heights = natural_heights
-    output_height = sum(panel_heights) + panel_gap * (len(panels) - 1)
+    output_height = sum(panel_heights) + sum(panel_gaps)
     if output_height > maximum_height + 1e-9:
         warnings.warn(
             'Publication plot 1 is '
@@ -258,6 +272,7 @@ def create_publication_plot_1(case_study, plots_directory, output_path=None):
     })
 
     panel_y = 0.0
+    pending_labels = []
     for index, (panel, panel_height) in enumerate(zip(panels, panel_heights)):
         source_root = copy.deepcopy(panel['root'])
         _prefix_svg_ids(source_root, 'publication_panel_' + str(index + 1) + '_')
@@ -272,14 +287,25 @@ def create_publication_plot_1(case_study, plots_directory, output_path=None):
         })
         for child in list(source_root):
             nested_svg.append(child)
+        pending_labels.append(
+            (
+                chr(ord('a') + index),
+                panel_y,
+                panel_height,
+                panel['map_bottom_fraction'],
+            )
+        )
+        if index < len(panel_gaps):
+            panel_y += panel_height + panel_gaps[index]
+
+    for label, label_panel_y, panel_height, map_bottom_fraction in pending_labels:
         _add_panel_label(
             output_root,
-            chr(ord('a') + index),
-            panel_y,
+            label,
+            label_panel_y,
             panel_height,
-            panel['map_bottom_fraction'],
+            map_bottom_fraction,
         )
-        panel_y += panel_height + panel_gap
 
     if output_path is None:
         output_path = os.path.join(
@@ -296,10 +322,17 @@ def create_publication_plot_1(case_study, plots_directory, output_path=None):
     return output_path
 
 
-def create_publication_plot_2(comparison_id, plots_directory, output_path=None):
+def create_publication_plot_2(
+    comparison_id,
+    plots_directory,
+    case_study_count=4,
+    output_path=None,
+):
     comparison_id = str(comparison_id).strip()
     if not comparison_id:
         raise ValueError('comparison_id must not be empty.')
+    if case_study_count not in {2, 4}:
+        raise ValueError('case_study_count must be 2 or 4.')
     source_paths = [
         os.path.join(
             plots_directory,
@@ -324,7 +357,7 @@ def create_publication_plot_2(comparison_id, plots_directory, output_path=None):
             'view_box': view_box,
             'width': width_points,
             'height': height_points,
-            'axes_bounds': _map_axes_bounds(root),
+            'axes_bounds': _map_axes_bounds(root, count=case_study_count),
         })
 
     common_width = max(panel['width'] for panel in panels)
@@ -453,13 +486,21 @@ def create_publication_plot_3(case_study, plots_directory, output_path=None):
     return output_path
 
 
-def create_publication_plot_4(comparison_id, country, plots_directory, output_path=None):
+def create_publication_plot_4(
+    comparison_id,
+    country,
+    plots_directory,
+    case_study_count=4,
+    output_path=None,
+):
     comparison_id = str(comparison_id).strip()
     country = str(country).strip()
     if not comparison_id:
         raise ValueError('comparison_id must not be empty.')
     if not country:
         raise ValueError('country must not be empty.')
+    if case_study_count not in {2, 4}:
+        raise ValueError('case_study_count must be 2 or 4.')
     source_path = os.path.join(
         plots_directory,
         comparison_id + '_' + country + '_supply_curves_comparison.svg',
@@ -468,28 +509,28 @@ def create_publication_plot_4(comparison_id, country, plots_directory, output_pa
         raise FileNotFoundError('Missing supply-curve SVG source plot:\n' + source_path)
 
     root, view_box, width_points, height_points = _read_svg(source_path)
-    axes_bounds = _map_axes_bounds(root, count=4)
+    axes_bounds = _map_axes_bounds(root, count=case_study_count)
     output_root = copy.deepcopy(root)
     _, _, view_box_width, view_box_height = view_box
     x_units_per_point = view_box_width / width_points
     y_units_per_point = view_box_height / height_points
 
     for index, axes_rectangle in enumerate(axes_bounds):
-        _, axes_top, axes_right, _ = axes_rectangle
+        axes_left, axes_top, _, _ = axes_rectangle
         text = ET.SubElement(output_root, '{' + SVG_NAMESPACE + '}text')
         text.set(
             'x',
-            str(axes_right - 1.5 * POINTS_PER_MM * x_units_per_point),
+            str(axes_left + 1.5 * POINTS_PER_MM * x_units_per_point),
         )
         text.set(
             'y',
-            str(axes_top + 1.5 * POINTS_PER_MM * y_units_per_point),
+            str(axes_top + 3.5 * POINTS_PER_MM * y_units_per_point),
         )
         text.set('font-family', 'Arial')
         text.set('font-size', '7pt')
         text.set('font-weight', 'bold')
         text.set('fill', '#000000')
-        text.set('text-anchor', 'end')
+        text.set('text-anchor', 'start')
         text.set('dominant-baseline', 'hanging')
         text.text = '(' + chr(ord('a') + index) + ')'
 
