@@ -3252,6 +3252,7 @@ def get_start_locations_infrastructure_destination_figure(start_locations, bound
 
 def get_commodity_transport_mean_histogram(data, color_dictionary, nice_names, path_saving, scenario_name):
     centimeter_to_inch = 1 / 2.54
+    plot_width = _PLOT_OUTPUT_SETTINGS['width_cm']
     plt.rcParams.update({'font.size': 9,
                          'font.family': 'Times New Roman'})
     sorted_means = ['Road', 'Shipping', 'Pipeline_Gas', 'New_Pipeline_Gas', 'Pipeline_Liquid', 'New_Pipeline_Liquid']
@@ -3295,7 +3296,7 @@ def get_commodity_transport_mean_histogram(data, color_dictionary, nice_names, p
         if len(commodity_data[k1].keys()) > num_columns_total:
             num_columns_total = len(commodity_data[k1].keys())
 
-    fig_total, ax_total = plt.subplots(figsize=(15.69 * centimeter_to_inch, num_commodities * 3.553 * centimeter_to_inch))
+    fig_total, ax_total = plt.subplots(figsize=(plot_width * centimeter_to_inch, num_commodities * 3.553 * centimeter_to_inch))
     spec = gridspec.GridSpec(num_commodities, 14, figure=fig_total, wspace=8, hspace=0.75)
     plt.setp(ax_total.spines.values(), visible=False)
     ax_total.set_yticks([])
@@ -3319,7 +3320,7 @@ def get_commodity_transport_mean_histogram(data, color_dictionary, nice_names, p
 
         length = int(12 / number_columns)
 
-        fig, ax = plt.subplots(nrows=1, ncols=number_columns, sharex='col', figsize=(15.69 * centimeter_to_inch,
+        fig, ax = plt.subplots(nrows=1, ncols=number_columns, sharex='col', figsize=(plot_width * centimeter_to_inch,
                                                                                      4 * centimeter_to_inch))
 
         fig.tight_layout()

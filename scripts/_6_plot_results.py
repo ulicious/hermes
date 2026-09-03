@@ -379,7 +379,7 @@ for r in all_results:
         ratio_lat_lon = diff_lat / (
             scenario_boundaries['max_longitude'] - scenario_boundaries['min_longitude'])
 
-        plot_width = 15.69  # todo: sollte auch als parameter im plot configuration sein
+        plot_width = float(config_file_plotting['plot_width'])
         distance_between = 0.25  # todo: sollte auch als parameter im plot configuration sein
         subplot_width = (plot_width - 3 * distance_between) / 2
         subplot_height = subplot_width * ratio_lat_lon + 1.5
@@ -436,7 +436,7 @@ for r in all_results:
         ratio_lat_lon = diff_lat / (
             scenario_boundaries['max_longitude'] - scenario_boundaries['min_longitude'])
 
-        plot_width = 15.69  # todo: sollte auch als parameter im plot configuration sein
+        plot_width = float(config_file_plotting['plot_width'])
         distance_between = 0.25  # todo: sollte auch als parameter im plot configuration sein
         subplot_width = (plot_width - 3 * distance_between) / 2
         subplot_height = subplot_width * ratio_lat_lon + 1.5
@@ -609,7 +609,7 @@ for r in compare_costs_and_quantities_results:
     ratio_lat_lon = diff_lat / (
         scenario_boundaries['max_longitude'] - scenario_boundaries['min_longitude'])
 
-    plot_width = 15.69
+    plot_width = float(config_file_plotting['plot_width'])
     distance_between = 0.25
     subplot_width = (plot_width - 3 * distance_between) / 2
     individual_legend_height = 0

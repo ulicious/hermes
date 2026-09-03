@@ -911,12 +911,14 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                          boundaries, color_dictionary=None, nice_name_dictionary=None,
                          cost_type=None, transport_mean_line_styles=None, line_widths=None,
                          infrastructure_data=None, complete_infrastructure=None, country=None,
-                         plot_width=15.69, subplot_height=None, distance_between=0.25, distance_left=0):
+                         plot_width=None, subplot_height=None, distance_between=0.25, distance_left=0):
 
     mpl.rcParams.update({'font.size': 9,
                          'font.family': 'Times New Roman'})
     plot_colors = get_plot_color_config(config_file_plotting)
     supply_curve_colors = plot_colors['supply_curve_colors']
+    if plot_width is None:
+        plot_width = float(config_file_plotting['plot_width'])
 
     diff_lat = boundaries['max_latitude'] - boundaries['min_latitude']
     ratio_lat_lon = diff_lat / (boundaries['max_longitude'] - boundaries['min_longitude'])
