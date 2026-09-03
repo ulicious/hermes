@@ -1810,7 +1810,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
 
         voronois = gpd.GeoDataFrame(data[[column]].copy(),
                                     geometry=voronoi_geometry)
-        voronois.plot(ax=ax, color=col, ec='black', linewidth=0.01)
+        voronois.plot(ax=ax, color=col, ec='none', linewidth=0)
         if column == 'adjusted_costs':
             profitable_locations = voronois[voronois[column] <= 0].copy()
             if not profitable_locations.empty:
@@ -2005,7 +2005,7 @@ def get_used_locations_figure(data, boundaries, destination_location, quantity, 
                             raise ValueError("Voronoi plots require a 'geometry' column in either data or production_costs.")
                         voronois = production_costs.loc[used_locations, 'geometry'].tolist()
                     voronois = gpd.GeoDataFrame(geometry=voronois)
-                    voronois.plot(ax=ax, color=col, ec='black', linewidth=0.05)
+                    voronois.plot(ax=ax, color=col, ec='none', linewidth=0)
 
                 else:
                     data.loc[used_locations, :].plot(x="longitude", y="latitude", kind="scatter", c=col,
@@ -2691,7 +2691,7 @@ def get_production_costs_figure(sub_axes, data, norm, cmap_chosen, boundaries, d
                     raise ValueError("Voronoi plots require a 'geometry' column in either data or production_costs.")
                 voronois = production_costs.loc[affected_locations, 'geometry'].tolist()
             voronois = gpd.GeoDataFrame(geometry=voronois)
-            voronois.plot(ax=sub_axes, color=color, ec='black', linewidth=0.1)
+            voronois.plot(ax=sub_axes, color=color, ec='none', linewidth=0)
     elif not plot_era:
         data.plot(x="longitude", y="latitude", kind="scatter", c=col, ax=sub_axes, s=s, linewidths=0)
     else:
