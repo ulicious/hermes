@@ -22,6 +22,76 @@ from plotting.get_figures_publication import (
 )
 
 
+def _create_supply_curve_comparison_sources(
+    comparison_case_studies,
+    countries,
+    plots_directory,
+):
+    import pandas as pd
+    import shapely
+
+    from data_processing.configuration import (
+        load_algorithm_configuration,
+        load_plotting_configuration,
+    )
+    from plotting.get_figures import (
+        DEFAULT_PLOT_BOUNDARIES,
+        configure_plot_output,
+        get_configured_colormap,
+        get_plot_color_config,
+    )
+    from plotting.helpers_plotting import plot_comparison_plot
+
+    general_config = load_algorithm_configuration()
+    general_config['project_folder_path'] = PROJECT_FOLDER
+    plotting_config = load_plotting_configuration(general_config)
+    plotting_config = dict(plotting_config)
+    vector_filetypes = plotting_config.get('vector_filetype', ['svg'])
+    if isinstance(vector_filetypes, str):
+        vector_filetypes = [vector_filetypes]
+    vector_filetypes = list(vector_filetypes)
+    if 'svg' not in [str(filetype).lower().lstrip('.') for filetype in vector_filetypes]:
+        vector_filetypes.append('svg')
+    plotting_config['vector_filetype'] = vector_filetypes
+    configure_plot_output(plotting_config)
+
+    processed_results_directory = os.path.join(
+        PROJECT_FOLDER,
+        'results',
+        'processed_results',
+    )
+    production_costs_path = os.path.join(
+        PROJECT_FOLDER,
+        'start_destination_combinations.csv',
+    )
+    if os.path.isfile(production_costs_path):
+        production_costs = pd.read_csv(production_costs_path, index_col=0)
+        if 'geometry' in production_costs.columns:
+            production_costs['geometry'] = production_costs['geometry'].apply(
+                shapely.wkt.loads
+            )
+    else:
+        production_costs = pd.DataFrame()
+
+    plot_colors = get_plot_color_config(plotting_config)
+    for country in countries:
+        plot_comparison_plot(
+            'supply_curves',
+            comparison_case_studies,
+            processed_results_directory,
+            plots_directory,
+            plotting_config,
+            production_costs,
+            get_configured_colormap(plotting_config),
+            DEFAULT_PLOT_BOUNDARIES,
+            color_dictionary=plot_colors['commodity_colors'],
+            nice_name_dictionary=dict(plotting_config['nice_name_dictionary']),
+            country=country,
+            distance_between=1,
+            subplot_height=4,
+        )
+
+
 def main():
     if not isinstance(CASE_STUDIES, list):
         raise TypeError('CASE_STUDIES must be a list.')
@@ -63,32 +133,42 @@ def main():
         raise ValueError(
             'Set at least one country in SUPPLY_CURVE_COMPARISON_COUNTRIES.'
         )
+    supply_curve_countries = []
     for country in SUPPLY_CURVE_COMPARISON_COUNTRIES:
         if not isinstance(country, str) or not country.strip():
             raise ValueError(
                 'Every entry in SUPPLY_CURVE_COMPARISON_COUNTRIES must be a non-empty string.'
             )
+        supply_curve_countries.append(country.strip())
+    for comparison_case_studies in SUPPLY_CURVE_COMPARISON_CASE_STUDIES:
+        if not isinstance(comparison_case_studies, list):
+            raise TypeError(
+                'Every entry in SUPPLY_CURVE_COMPARISON_CASE_STUDIES must be a list.'
+            )
+        if len(comparison_case_studies) not in {2, 4}:
+            raise ValueError(
+                'Every comparison in SUPPLY_CURVE_COMPARISON_CASE_STUDIES '
+                'must contain two or four case-study names.'
+            )
+        for case_study in comparison_case_studies:
+            if not isinstance(case_study, str) or not case_study.strip():
+                raise ValueError(
+                    'Every case study in SUPPLY_CURVE_COMPARISON_CASE_STUDIES '
+                    'must be a non-empty string.'
+                )
+    if SUPPLY_CURVE_COMPARISON_CASE_STUDIES:
+        _create_supply_curve_comparison_sources(
+            SUPPLY_CURVE_COMPARISON_CASE_STUDIES,
+            supply_curve_countries,
+            plots_directory,
+        )
+    for country in supply_curve_countries:
         for comparison_id, comparison_case_studies in enumerate(
             SUPPLY_CURVE_COMPARISON_CASE_STUDIES
         ):
-            if not isinstance(comparison_case_studies, list):
-                raise TypeError(
-                    'Every entry in SUPPLY_CURVE_COMPARISON_CASE_STUDIES must be a list.'
-                )
-            if len(comparison_case_studies) not in {2, 4}:
-                raise ValueError(
-                    'Every comparison in SUPPLY_CURVE_COMPARISON_CASE_STUDIES '
-                    'must contain two or four case-study names.'
-                )
-            for case_study in comparison_case_studies:
-                if not isinstance(case_study, str) or not case_study.strip():
-                    raise ValueError(
-                        'Every case study in SUPPLY_CURVE_COMPARISON_CASE_STUDIES '
-                        'must be a non-empty string.'
-                    )
             output_path = create_publication_plot_4(
                 comparison_id,
-                country.strip(),
+                country,
                 plots_directory,
                 case_study_count=len(comparison_case_studies),
             )
