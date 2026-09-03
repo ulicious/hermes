@@ -13,9 +13,9 @@ PANEL_CROP_TOP_MM = 3.0
 PANEL_CROP_BOTTOM_MM = 3.0
 FIGURE_1_FIRST_TOP_CROP_MM = 2.0
 FIGURE_1_SECOND_TOP_CROP_MM = 2.0
-FIGURE_1_THIRD_TOP_CROP_MM = 3.0
+FIGURE_1_THIRD_TOP_CROP_MM = 2.0
 FIGURE_1_LAST_BOTTOM_CROP_MM = 5.0
-FIGURE_1_PANEL_GAPS_MM = (-3.0, -3.72)
+FIGURE_1_PANEL_GAPS_MM = (-2.5, -5.25)
 POINTS_PER_MM = 72.0 / 25.4
 
 ET.register_namespace('', SVG_NAMESPACE)
@@ -192,7 +192,7 @@ def _map_axes_bounds(root, count=4):
 
 def _add_panel_label(root, label, panel_y, panel_height, map_bottom_fraction):
     text = ET.SubElement(root, '{' + SVG_NAMESPACE + '}text')
-    text.set('x', str(1.5 * POINTS_PER_MM))
+    text.set('x', str(3 * POINTS_PER_MM))
     text.set(
         'y',
         str(panel_y + panel_height * map_bottom_fraction - 2.5 * POINTS_PER_MM),
@@ -206,7 +206,7 @@ def _add_panel_label(root, label, panel_y, panel_height, map_bottom_fraction):
 
 def _add_axes_label(root, label, x, y):
     text = ET.SubElement(root, '{' + SVG_NAMESPACE + '}text')
-    text.set('x', str(x + 0.5 * POINTS_PER_MM))
+    text.set('x', str(x + 1.5 * POINTS_PER_MM))
     text.set('y', str(y - 2.5 * POINTS_PER_MM))
     text.set('font-family', 'Arial')
     text.set('font-size', '7pt')
@@ -439,7 +439,7 @@ def create_publication_plot_2(
     if output_path is None:
         output_path = os.path.join(
             plots_directory,
-            'comparisons_publicaion_' + comparison_id + '.svg',
+            'comparisons_publication_' + comparison_id + '.svg',
         )
     return _write_publication_outputs(output_root, output_path)
 
@@ -467,7 +467,7 @@ def create_publication_plot_3(case_study, plots_directory, output_path=None):
         text = ET.SubElement(output_root, '{' + SVG_NAMESPACE + '}text')
         text.set(
             'x',
-            str(axes_left - 0.5 * POINTS_PER_MM * x_units_per_point),
+            str(axes_left + 0.5 * POINTS_PER_MM * x_units_per_point),
         )
         text.set(
             'y',

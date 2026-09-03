@@ -8,9 +8,9 @@ commodity_routes: []
 ## PLOTTING ##
 # Global output style. Width is specified in centimetres and applies to every plot.
 # The configured font family and size are enforced for all text elements.
-plot_width: 15.69
-font_family: 'Times New Roman'
-font_size: 9
+plot_width: 18
+font_family: 'Arial'
+font_size: 7
 raster_filetype: ['png']  # png, jpg, jpeg, tif, tiff or webp
 vector_filetype: ['pdf', 'svg']  # svg, eps, pdf or ps
 

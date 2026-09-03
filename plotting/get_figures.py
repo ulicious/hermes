@@ -3198,6 +3198,8 @@ def get_commodity_transport_mean_histogram(data, color_dictionary, nice_names, p
 
     routes = data['routes'].tolist()
 
+    histogram_height = 2.5
+
     commodity_data = {}
     for n, r in enumerate(routes):
         r = ast.literal_eval(r)
@@ -3235,8 +3237,8 @@ def get_commodity_transport_mean_histogram(data, color_dictionary, nice_names, p
         if len(commodity_data[k1].keys()) > num_columns_total:
             num_columns_total = len(commodity_data[k1].keys())
 
-    fig_total, ax_total = plt.subplots(figsize=(plot_width * centimeter_to_inch, num_commodities * 3.553 * centimeter_to_inch))
-    spec = gridspec.GridSpec(num_commodities, 14, figure=fig_total, wspace=8, hspace=0.75)
+    fig_total, ax_total = plt.subplots(figsize=(plot_width * centimeter_to_inch * 1.107, num_commodities * histogram_height * centimeter_to_inch))
+    spec = gridspec.GridSpec(num_commodities, 14, figure=fig_total, wspace=8, hspace=1, left=0.03, right=0.99)
     plt.setp(ax_total.spines.values(), visible=False)
     ax_total.set_yticks([])
     ax_total.set_xticks([])
