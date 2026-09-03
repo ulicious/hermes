@@ -15,7 +15,7 @@ import seaborn as sns
 import matplotlib as mpl
 from matplotlib.figure import Figure
 from matplotlib.text import Text
-from matplotlib.transforms import ScaledTranslation
+from matplotlib.transforms import ScaledTranslation, blended_transform_factory
 
 from math import sqrt
 from tqdm import tqdm
@@ -164,7 +164,7 @@ def _set_compact_world_map_size(fig, ax, extra_height_cm=0.0):
 def _reserve_compact_colorbar_space(fig, ax):
     """Reserve the same right-hand column used by compact maps with a colorbar."""
     map_position = ax.get_position()
-    placeholder = fig.add_axes([0.912, map_position.y0, 0.005, map_position.height])
+    placeholder = fig.add_axes([0.912, map_position.y0, 0.006, map_position.height])
     placeholder.set_facecolor('white')
     placeholder.set_axis_off()
 
@@ -178,28 +178,53 @@ def _align_compact_colorbar_to_map(fig, ax, colorbar_ax):
     colorbar_ax.set_position([
         0.912,
         rendered_map_position.y0,
-        0.005,
+        0.006,
         rendered_map_position.height,
     ])
 
 
-def _align_compact_tick_label_columns(fig, tick_labels):
-    """Align every rotated tick-label column with the lowest label."""
-    if len(tick_labels) < 2:
+def _set_compact_colorbar_tick_labels(fig, colorbar, ticks):
+    """Draw stable vertical labels in one column beside a compact colorbar."""
+    colorbar.ax.tick_params(axis='y', labelleft=False, labelright=False)
+    if len(ticks) == 0:
         return
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    reference_x = tick_labels[0].get_window_extent(renderer).x0
-    for tick_label in tick_labels[1:]:
-        label_x = tick_label.get_window_extent(renderer).x0
-        tick_label.set_transform(
-            tick_label.get_transform()
-            + ScaledTranslation(
-                (reference_x - label_x) / fig.dpi,
-                0,
-                fig.dpi_scale_trans,
-            )
+
+    label_transform = (
+        blended_transform_factory(colorbar.ax.transAxes, colorbar.ax.transData)
+        + ScaledTranslation(6 / 72, 0, fig.dpi_scale_trans)
+    )
+    last_index = len(ticks) - 1
+    for index, tick in enumerate(ticks):
+        if index == 0:
+            horizontal_alignment = 'left'
+        elif index == last_index:
+            horizontal_alignment = 'right'
+        else:
+            horizontal_alignment = 'center'
+        colorbar.ax.text(
+            1.0,
+            tick,
+            _format_colorbar_tick(tick),
+            transform=label_transform,
+            rotation=90,
+            rotation_mode='anchor',
+            horizontalalignment=horizontal_alignment,
+            verticalalignment='center',
+            clip_on=False,
         )
+
+
+def _order_legend_handles_row_wise(handles, columns):
+    """Reorder handles so Matplotlib's column-wise legend reads row-wise."""
+    if not handles or columns <= 1:
+        return handles
+    rows = math.ceil(len(handles) / columns)
+    return [
+        handles[row * columns + column]
+        for column in range(columns)
+        for row in range(rows)
+        if row * columns + column < len(handles)
+    ]
 
 
 def _save_map_formats(fig, directory, filename, tight=True):
@@ -1336,14 +1361,21 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
             if add_legend:
                 fig.legends.clear()
                 combined_handles = new_commodities + new_transport_means
-                legend_rows = max(1, math.ceil(len(combined_handles) / 6))
+                legend_columns = max(1, math.ceil(len(combined_handles) / 2))
+                legend_rows = max(1, math.ceil(len(combined_handles) / legend_columns))
                 legend_extra_height = 0.55 + 0.5 * legend_rows
             _set_compact_world_map_size(fig, ax, extra_height_cm=legend_extra_height)
             if combined_handles:
                 map_position = ax.get_position()
+                legend_upward_shift = 0.2 / (fig.get_figheight() * 2.54)
+                legend_handles = _order_legend_handles_row_wise(
+                    combined_handles, legend_columns
+                )
                 fig.legend(
-                    handles=combined_handles, loc='upper center', ncols=6,
-                    bbox_to_anchor=(0.47, map_position.y0 - 0.012),
+                    handles=legend_handles, loc='upper center', ncols=legend_columns,
+                    bbox_to_anchor=(
+                        0.47, map_position.y0 - 0.012 + legend_upward_shift
+                    ),
                     title='Commodities and transport means',
                     labelspacing=0.22, handletextpad=0.23, columnspacing=0.6,
                     handlelength=1.38, frameon=False,
@@ -1693,13 +1725,14 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
             if add_legend:
                 fig.legends.clear()
                 combined_handles = ([] if ignore_commodity else new_commodities) + new_transport_means
-                legend_rows = max(1, math.ceil(len(combined_handles) / 6))
+                legend_columns = max(1, math.ceil(len(combined_handles) / 2))
+                legend_rows = max(1, math.ceil(len(combined_handles) / legend_columns))
                 legend_extra_height = 0.55 + 0.5 * legend_rows
             _set_compact_world_map_size(fig, ax, extra_height_cm=legend_extra_height)
             if 'cbar' in locals():
                 map_position = ax.get_position()
                 compact_cax = fig.add_axes([
-                    0.912, map_position.y0, 0.005, map_position.height
+                    0.912, map_position.y0, 0.006, map_position.height
                 ])
                 compact_cbar = fig.colorbar(
                     sm, cax=compact_cax, orientation='vertical'
@@ -1707,27 +1740,22 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                 compact_cbar.set_label('Quantity [TWh]', rotation=90, labelpad=8)
                 compact_ticks = _get_compact_colorbar_ticks(ticks)
                 compact_cbar.set_ticks(compact_ticks)
-                compact_cbar.set_ticklabels([
-                    _format_colorbar_tick(tick) for tick in compact_ticks
-                ])
-                compact_cbar.ax.tick_params(axis='y', labelrotation=90)
-                compact_tick_labels = compact_cbar.ax.get_yticklabels()
-                if compact_tick_labels:
-                    for tick_label in compact_tick_labels:
-                        tick_label.set_horizontalalignment('center')
-                        tick_label.set_verticalalignment('center')
-                    compact_tick_labels[0].set_horizontalalignment('left')
-                    compact_tick_labels[-1].set_horizontalalignment('right')
                 ax.set_position(map_position)
                 ax.set_aspect('auto')
                 _align_compact_colorbar_to_map(fig, ax, compact_cax)
-                _align_compact_tick_label_columns(fig, compact_tick_labels)
+                _set_compact_colorbar_tick_labels(fig, compact_cbar, compact_ticks)
 
             if combined_handles:
                 map_position = ax.get_position()
+                legend_upward_shift = 0.2 / (fig.get_figheight() * 2.54)
+                legend_handles = _order_legend_handles_row_wise(
+                    combined_handles, legend_columns
+                )
                 fig.legend(
-                    handles=combined_handles, loc='upper center', ncols=6,
-                    bbox_to_anchor=(0.47, map_position.y0 - 0.012),
+                    handles=legend_handles, loc='upper center', ncols=legend_columns,
+                    bbox_to_anchor=(
+                        0.47, map_position.y0 - 0.012 + legend_upward_shift
+                    ),
                     title='Commodities and transport means',
                     labelspacing=0.22, handletextpad=0.23, columnspacing=0.6,
                     handlelength=1.38, frameon=False,
@@ -1902,7 +1930,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
             if cbar is not None:
                 map_position = ax.get_position()
                 compact_cax = fig.add_axes([
-                    0.912, map_position.y0, 0.005, map_position.height
+                    0.912, map_position.y0, 0.006, map_position.height
                 ])
                 compact_cbar = fig.colorbar(
                     sm,
@@ -1911,25 +1939,15 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
                     extend='max' if limit_scale else 'neither',
                 )
                 compact_cbar.set_label(unit, rotation=90, labelpad=8)
+                compact_ticks = []
                 if len(ticks) > 0:
                     compact_ticks = _get_compact_colorbar_ticks(ticks)
                     compact_cbar.set_ticks(compact_ticks)
                     compact_cbar.ax.yaxis.set_major_locator(FixedLocator(compact_ticks))
-                    compact_cbar.set_ticklabels([
-                        _format_colorbar_tick(tick) for tick in compact_ticks
-                    ])
-                compact_cbar.ax.tick_params(axis='y', labelrotation=90)
-                compact_tick_labels = compact_cbar.ax.get_yticklabels()
-                if compact_tick_labels:
-                    for tick_label in compact_tick_labels:
-                        tick_label.set_horizontalalignment('center')
-                        tick_label.set_verticalalignment('center')
-                    compact_tick_labels[0].set_horizontalalignment('left')
-                    compact_tick_labels[-1].set_horizontalalignment('right')
                 ax.set_position(map_position)
                 ax.set_aspect('auto')
                 _align_compact_colorbar_to_map(fig, ax, compact_cax)
-                _align_compact_tick_label_columns(fig, compact_tick_labels)
+                _set_compact_colorbar_tick_labels(fig, compact_cbar, compact_ticks)
             else:
                 _reserve_compact_colorbar_space(fig, ax)
 
