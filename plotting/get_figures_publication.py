@@ -285,7 +285,7 @@ def create_publication_plot_1(case_study, plots_directory, output_path=None):
             'height': str(panel_height),
             'viewBox': ' '.join(str(value) for value in panel['view_box']),
             'preserveAspectRatio': 'xMinYMin meet',
-            'overflow': 'visible',
+            'overflow': 'hidden',
         })
         for child in list(source_root):
             nested_svg.append(child)
