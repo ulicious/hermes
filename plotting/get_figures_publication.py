@@ -34,11 +34,14 @@ def _write_publication_outputs(output_root, output_path):
         import cairosvg
     except ImportError as error:
         raise RuntimeError(
-            'Creating publication PDFs requires CairoSVG. Install the project '
+            'Creating publication PDFs and PNGs requires CairoSVG. Install the project '
             'requirements before running create_publication_plots.py.'
         ) from error
-    pdf_path = os.path.splitext(output_path)[0] + '.pdf'
+    output_stem = os.path.splitext(output_path)[0]
+    pdf_path = output_stem + '.pdf'
+    png_path = output_stem + '.png'
     cairosvg.svg2pdf(url=output_path, write_to=pdf_path)
+    cairosvg.svg2png(url=output_path, write_to=png_path, dpi=600)
     return output_path
 
 
