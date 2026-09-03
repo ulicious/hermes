@@ -12,8 +12,9 @@ PANEL_GAP_MM = 1.5
 PANEL_CROP_TOP_MM = 3.0
 PANEL_CROP_BOTTOM_MM = 3.0
 FIGURE_1_FIRST_TOP_CROP_MM = 1.0
-FIGURE_1_LAST_BOTTOM_CROP_MM = 6.0
-FIGURE_1_PANEL_GAPS_MM = (-3.5, -8.5)
+FIGURE_1_LATER_TOP_CROP_MM = 5.0
+FIGURE_1_LAST_BOTTOM_CROP_MM = 5.0
+FIGURE_1_PANEL_GAPS_MM = (-3.5, -3.5)
 POINTS_PER_MM = 72.0 / 25.4
 
 ET.register_namespace('', SVG_NAMESPACE)
@@ -213,7 +214,7 @@ def create_publication_plot_1(case_study, plots_directory, output_path=None):
         crop_top_mm = (
             FIGURE_1_FIRST_TOP_CROP_MM
             if panel_index == 0
-            else PANEL_CROP_TOP_MM
+            else FIGURE_1_LATER_TOP_CROP_MM
         )
         crop_bottom_mm = (
             FIGURE_1_LAST_BOTTOM_CROP_MM
