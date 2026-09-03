@@ -191,14 +191,13 @@ def _set_compact_colorbar_tick_labels(fig, colorbar, ticks):
 
     label_transform = (
         blended_transform_factory(colorbar.ax.transAxes, colorbar.ax.transData)
-        + ScaledTranslation(6 / 72, 0, fig.dpi_scale_trans)
+        # Keep the labels clear of the now 20% wider compact colorbar and its
+        # outward ticks. The offset is scaled by the same factor (6 -> 7.2 pt).
+        + ScaledTranslation(7.2 / 72, 0, fig.dpi_scale_trans)
     )
-    last_index = len(ticks) - 1
     for index, tick in enumerate(ticks):
         if index == 0:
             horizontal_alignment = 'left'
-        elif index == last_index:
-            horizontal_alignment = 'right'
         else:
             horizontal_alignment = 'center'
         colorbar.ax.text(
@@ -1377,7 +1376,7 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
                         0.47, map_position.y0 - 0.012 + legend_upward_shift
                     ),
                     title='Commodities and transport means',
-                    labelspacing=0.22, handletextpad=0.23, columnspacing=0.6,
+                    labelspacing=0.242, handletextpad=0.23, columnspacing=0.6,
                     handlelength=1.38, frameon=False,
                 )
             _reserve_compact_colorbar_space(fig, ax)
@@ -1757,7 +1756,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                         0.47, map_position.y0 - 0.012 + legend_upward_shift
                     ),
                     title='Commodities and transport means',
-                    labelspacing=0.22, handletextpad=0.23, columnspacing=0.6,
+                    labelspacing=0.242, handletextpad=0.23, columnspacing=0.6,
                     handlelength=1.38, frameon=False,
                 )
             _save_map_formats(fig, path_saving, filename + '_compact', tight=False)
