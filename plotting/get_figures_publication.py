@@ -537,7 +537,7 @@ def create_publication_plot_3(case_study, plots_directory, output_path=None):
     if output_path is None:
         output_path = os.path.join(
             plots_directory,
-            'cost_distribution_publication.svg',
+            case_study + '_cost_distribution_publication.svg',
         )
     return _write_publication_outputs(output_root, output_path)
 
@@ -577,7 +577,7 @@ def create_publication_plot_4(
             output_root,
             chr(ord('a') + index),
             axes_left + 0.5 * POINTS_PER_MM * x_units_per_point,
-            axes_top + 3.5 * POINTS_PER_MM * y_units_per_point,
+            axes_top + 0.5 * POINTS_PER_MM * y_units_per_point,
             anchor='top',
         )
 

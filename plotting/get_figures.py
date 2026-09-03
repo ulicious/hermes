@@ -1339,8 +1339,8 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
             ncols = math.ceil(len(commodities) / 2)
 
         fig.legend(handles=new_commodities, loc='upper center', ncol=ncols,
-                   bbox_to_anchor=(0.5, 0.175), title='Commodity',
-                   labelspacing=0.1, handletextpad=0.1, columnspacing=0.25,
+                   bbox_to_anchor=(0.5, 0.225), title='Commodity',
+                   labelspacing=0.5, handletextpad=0.1, columnspacing=0.25,
                    fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], title_fontsize=_PLOT_OUTPUT_SETTINGS['font_size'], frameon=False)
 
     if save:
@@ -2767,7 +2767,7 @@ def get_energy_carrier_figure(data, boundaries, color_dictionary, nice_name_dict
             col = data.start_commodity.map(color_dictionary)
             voronois = production_costs.loc[data.index, 'geometry'].tolist()
         voronois = gpd.GeoDataFrame(geometry=voronois)
-        voronois.plot(ax=ax, color=col.values.tolist(), ec='black', linewidth=0.01)
+        voronois.plot(ax=ax, color=col.values.tolist(), ec='none', linewidth=0.)
         # for color in data['color'].unique():
         #     affected_locations = data[data['color'] == color].index
         #     voronois = production_costs.loc[affected_locations, 'geometry'].tolist()
