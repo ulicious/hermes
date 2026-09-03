@@ -1375,7 +1375,7 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
                         0.47, map_position.y0 - 0.012 + legend_upward_shift
                     ),
                     title='Commodities and transport means',
-                    labelspacing=0.242, handletextpad=0.23, columnspacing=0.6,
+                    labelspacing=0.3146, handletextpad=0.23, columnspacing=0.6,
                     handlelength=1.38, frameon=False,
                 )
             _reserve_compact_colorbar_space(fig, ax)
@@ -1735,7 +1735,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                 compact_cbar = fig.colorbar(
                     sm, cax=compact_cax, orientation='vertical'
                 )
-                compact_cbar.set_label('Quantity [TWh]', rotation=90, labelpad=12.48)
+                compact_cbar.set_label('Quantity [TWh]', rotation=90, labelpad=20.984)
                 compact_ticks = _get_compact_colorbar_ticks(ticks)
                 compact_cbar.set_ticks(compact_ticks)
                 ax.set_position(map_position)
@@ -1755,7 +1755,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                         0.47, map_position.y0 - 0.012 + legend_upward_shift
                     ),
                     title='Commodities and transport means',
-                    labelspacing=0.242, handletextpad=0.23, columnspacing=0.6,
+                    labelspacing=0.3146, handletextpad=0.23, columnspacing=0.6,
                     handlelength=1.38, frameon=False,
                 )
             _save_map_formats(fig, path_saving, filename + '_compact', tight=False)
@@ -1936,7 +1936,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
                     orientation='vertical',
                     extend='max' if limit_scale else 'neither',
                 )
-                compact_cbar.set_label(unit, rotation=90, labelpad=12.48)
+                compact_cbar.set_label(unit, rotation=90, labelpad=20.984)
                 compact_ticks = []
                 if len(ticks) > 0:
                     compact_ticks = _get_compact_colorbar_ticks(ticks)
