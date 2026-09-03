@@ -21,7 +21,7 @@ from collections import defaultdict
 from statistics import mean
 
 from plotting.get_figures import get_number_figure, get_routes_figure, get_energy_carrier_figure, get_weighted_routes, \
-    get_supply_curves, safe_output_path, resolve_plot_boundaries, get_plot_color_config
+    get_supply_curves, safe_output_path, resolve_plot_boundaries, get_plot_color_config, keep_colorbar_vector
 from data_processing.configuration import load_yaml
 
 
@@ -1178,6 +1178,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
 
             cbar_ax = fig.add_axes((0.05, legend_height_relative - height, 0.9, height))  # [left, bottom, width, height]
             cbar = fig.colorbar(sm, cax=cbar_ax, orientation='horizontal', extend='max')
+            keep_colorbar_vector(cbar)
             cbar.set_label('€ MWh$^{-1}$', rotation=0, labelpad=5)
 
             ticks = np.asarray(cbar.get_ticks(), dtype=float)

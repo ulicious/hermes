@@ -212,6 +212,13 @@ def _set_compact_colorbar_tick_labels(fig, colorbar, ticks):
         )
 
 
+def keep_colorbar_vector(colorbar):
+    """Prevent Matplotlib from embedding the colorbar gradient as a raster image."""
+    if colorbar.solids is not None:
+        colorbar.solids.set_rasterized(False)
+    return colorbar
+
+
 def _order_legend_handles_row_wise(handles, columns):
     """Reorder handles so Matplotlib's column-wise legend reads row-wise."""
     if not handles or columns <= 1:
@@ -1660,6 +1667,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
             sm.set_array([])
 
             cbar = fig.colorbar(sm, ax=ax,  orientation='horizontal', anchor=(0.5, 0), shrink=shrink, aspect=30, pad=0)
+            keep_colorbar_vector(cbar)
 
             cbar.ax.tick_params(labelsize=9)
             cbar.set_label('Quantity [TWh]', rotation=0, labelpad=5, fontsize=9)
@@ -1735,6 +1743,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                 compact_cbar = fig.colorbar(
                     sm, cax=compact_cax, orientation='vertical'
                 )
+                keep_colorbar_vector(compact_cbar)
                 compact_cbar.set_label('Quantity [TWh]', rotation=90, labelpad=26.654)
                 compact_ticks = _get_compact_colorbar_ticks(ticks)
                 compact_cbar.set_ticks(compact_ticks)
@@ -1885,9 +1894,11 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
         if limit_scale:
             cbar = fig.colorbar(sm, cax=cax, orientation='horizontal', extend='max', anchor=(0.5, 0), shrink=shrink,
                                 aspect=30, pad=0)
+            keep_colorbar_vector(cbar)
         else:
             cbar = fig.colorbar(sm, cax=cax, orientation='horizontal', anchor=(0.5, 0), shrink=shrink, aspect=30,
                                 pad=0)
+            keep_colorbar_vector(cbar)
 
         cbar.ax.tick_params(labelsize=9)
         cbar.set_label(unit, rotation=0, labelpad=5, fontsize=9)
@@ -1936,6 +1947,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
                     orientation='vertical',
                     extend='max' if limit_scale else 'neither',
                 )
+                keep_colorbar_vector(compact_cbar)
                 compact_cbar.set_label(unit, rotation=90, labelpad=26.654)
                 compact_ticks = []
                 if len(ticks) > 0:

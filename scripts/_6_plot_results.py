@@ -17,7 +17,7 @@ from plotting.get_figures import get_number_figure, get_energy_carrier_figure, g
     get_start_locations_infrastructure_destination_figure, \
     get_tight_boundaries_for_start_locations_infrastructure_destination, get_water_availability_figure, \
     safe_output_path, resolve_plot_boundaries, get_configured_colormap, get_plot_color_config, \
-    get_hydrogen_potential_plot_scale, configure_plot_output
+    get_hydrogen_potential_plot_scale, configure_plot_output, keep_colorbar_vector
 from plotting.helpers_plotting import load_infrastructure_data, load_first_available_destination, \
     get_complete_infrastructure, load_result, plot_comparison_plot, match_routing_results
 from data_processing.configuration import load_algorithm_configuration, load_plotting_configuration, get_raw_data_path
@@ -729,6 +729,7 @@ for r in compare_costs_and_quantities_results:
 
         shrink = 0.5
         cbar = fig.colorbar(sm, cax=cbar_ax, orientation='horizontal', anchor=(0.5, 0), shrink=shrink, aspect=30, pad=0)
+        keep_colorbar_vector(cbar)
         cbar.ax.tick_params(labelsize=9)
         cbar.set_label('Quantity [TWh]', rotation=0, labelpad=5, fontsize=9)
 
