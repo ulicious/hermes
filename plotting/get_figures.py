@@ -1735,7 +1735,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                 compact_cbar = fig.colorbar(
                     sm, cax=compact_cax, orientation='vertical'
                 )
-                compact_cbar.set_label('Quantity [TWh]', rotation=90, labelpad=32.323)
+                compact_cbar.set_label('Quantity [TWh]', rotation=90, labelpad=26.654)
                 compact_ticks = _get_compact_colorbar_ticks(ticks)
                 compact_cbar.set_ticks(compact_ticks)
                 ax.set_position(map_position)
@@ -1936,7 +1936,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
                     orientation='vertical',
                     extend='max' if limit_scale else 'neither',
                 )
-                compact_cbar.set_label(unit, rotation=90, labelpad=32.323)
+                compact_cbar.set_label(unit, rotation=90, labelpad=26.654)
                 compact_ticks = []
                 if len(ticks) > 0:
                     compact_ticks = _get_compact_colorbar_ticks(ticks)
