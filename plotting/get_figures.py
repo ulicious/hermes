@@ -50,18 +50,26 @@ _PLOT_OUTPUT_SETTINGS = {
     'width_cm': 15.69,
     'font_family': 'Times New Roman',
     'font_size': 9.0,
-    'raster_filetype': 'png',
-    'vector_filetype': 'svg',
+    'raster_filetype': ('png',),
+    'vector_filetype': ('pdf', 'svg'),
 }
 
 
-def _normalise_filetype(value, allowed, setting_name):
-    filetype = str(value).strip().lower().lstrip('.')
-    if filetype not in allowed:
-        raise ValueError(
-            f"Unsupported {setting_name} {value!r}. Choose one of: {', '.join(sorted(allowed))}."
-        )
-    return filetype
+def _normalise_filetypes(value, allowed, setting_name):
+    values = value if isinstance(value, (list, tuple)) else [value]
+    if not values:
+        raise ValueError(f"'{setting_name}' must contain at least one filetype.")
+    filetypes = []
+    for item in values:
+        filetype = str(item).strip().lower().lstrip('.')
+        if filetype not in allowed:
+            raise ValueError(
+                f"Unsupported {setting_name} {item!r}. Choose one of: "
+                f"{', '.join(sorted(allowed))}."
+            )
+        if filetype not in filetypes:
+            filetypes.append(filetype)
+    return tuple(filetypes)
 
 
 def _configured_figure_savefig(figure, filename, *args, **kwargs):
@@ -70,11 +78,11 @@ def _configured_figure_savefig(figure, filename, *args, **kwargs):
     stem, requested_extension = os.path.splitext(filename)
     requested_extension = requested_extension.lower().lstrip('.')
     if requested_extension in {'png', 'jpg', 'jpeg', 'tif', 'tiff', 'webp'}:
-        extension = _PLOT_OUTPUT_SETTINGS['raster_filetype']
+        extensions = _PLOT_OUTPUT_SETTINGS['raster_filetype']
     elif requested_extension in {'svg', 'eps', 'pdf', 'ps'}:
-        extension = _PLOT_OUTPUT_SETTINGS['vector_filetype']
+        extensions = _PLOT_OUTPUT_SETTINGS['vector_filetype']
     else:
-        extension = requested_extension
+        extensions = (requested_extension,)
 
     width_inch = _PLOT_OUTPUT_SETTINGS['width_cm'] / 2.54
     old_width, old_height = figure.get_size_inches()
@@ -95,8 +103,17 @@ def _configured_figure_savefig(figure, filename, *args, **kwargs):
         'mathtext.bf': family + ':bold',
     })
 
-    kwargs['format'] = extension
-    return _ORIGINAL_FIGURE_SAVEFIG(figure, stem + '.' + extension, *args, **kwargs)
+    result = None
+    for extension in extensions:
+        format_kwargs = kwargs.copy()
+        format_kwargs['format'] = extension
+        result = _ORIGINAL_FIGURE_SAVEFIG(
+            figure,
+            stem + '.' + extension,
+            *args,
+            **format_kwargs,
+        )
+    return result
 
 
 def configure_plot_output(plotting_config):
@@ -112,13 +129,13 @@ def configure_plot_output(plotting_config):
         'width_cm': width_cm,
         'font_family': str(plotting_config.get('font_family', 'Times New Roman')),
         'font_size': font_size,
-        'raster_filetype': _normalise_filetype(
-            plotting_config.get('raster_filetype', 'png'),
+        'raster_filetype': _normalise_filetypes(
+            plotting_config.get('raster_filetype', ['png']),
             {'png', 'jpg', 'jpeg', 'tif', 'tiff', 'webp'},
             'raster_filetype',
         ),
-        'vector_filetype': _normalise_filetype(
-            plotting_config.get('vector_filetype', 'svg'),
+        'vector_filetype': _normalise_filetypes(
+            plotting_config.get('vector_filetype', ['pdf', 'svg']),
             {'svg', 'eps', 'pdf', 'ps'},
             'vector_filetype',
         ),

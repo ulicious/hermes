@@ -11,11 +11,11 @@ MAXIMUM_HEIGHT_MM = 185.0
 PANEL_GAP_MM = 1.5
 PANEL_CROP_TOP_MM = 3.0
 PANEL_CROP_BOTTOM_MM = 3.0
-FIGURE_1_FIRST_TOP_CROP_MM = 1.0
-FIGURE_1_SECOND_TOP_CROP_MM = 6.0
-FIGURE_1_THIRD_TOP_CROP_MM = 5.0
+FIGURE_1_FIRST_TOP_CROP_MM = 2.0
+FIGURE_1_SECOND_TOP_CROP_MM = 2.0
+FIGURE_1_THIRD_TOP_CROP_MM = 3.0
 FIGURE_1_LAST_BOTTOM_CROP_MM = 5.0
-FIGURE_1_PANEL_GAPS_MM = (-3.5, 0.5)
+FIGURE_1_PANEL_GAPS_MM = (-3.0, -3.72)
 POINTS_PER_MM = 72.0 / 25.4
 
 ET.register_namespace('', SVG_NAMESPACE)
@@ -172,7 +172,7 @@ def _map_axes_bounds(root, count=4):
 
 def _add_panel_label(root, label, panel_y, panel_height, map_bottom_fraction):
     text = ET.SubElement(root, '{' + SVG_NAMESPACE + '}text')
-    text.set('x', str(1.5 * POINTS_PER_MM))
+    text.set('x', str(3.5 * POINTS_PER_MM))
     text.set(
         'y',
         str(panel_y + panel_height * map_bottom_fraction - 1.5 * POINTS_PER_MM),
@@ -186,8 +186,8 @@ def _add_panel_label(root, label, panel_y, panel_height, map_bottom_fraction):
 
 def _add_axes_label(root, label, x, y):
     text = ET.SubElement(root, '{' + SVG_NAMESPACE + '}text')
-    text.set('x', str(x + 1.5 * POINTS_PER_MM))
-    text.set('y', str(y - 1.5 * POINTS_PER_MM))
+    text.set('x', str(x + 0.5 * POINTS_PER_MM))
+    text.set('y', str(y - 2.5 * POINTS_PER_MM))
     text.set('font-family', 'Arial')
     text.set('font-size', '7pt')
     text.set('font-weight', 'bold')
@@ -312,7 +312,7 @@ def create_publication_plot_1(case_study, plots_directory, output_path=None):
     if output_path is None:
         output_path = os.path.join(
             plots_directory,
-            case_study + '_publication_plot_1.svg',
+            case_study + '_overview_costs_publication.svg',
         )
     output_path = os.path.abspath(output_path)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -426,7 +426,7 @@ def create_publication_plot_2(
     if output_path is None:
         output_path = os.path.join(
             plots_directory,
-            comparison_id + '_publication_plot_2.svg',
+            'comparisons_publicaion_' + comparison_id + '.svg',
         )
     output_path = os.path.abspath(output_path)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -476,7 +476,7 @@ def create_publication_plot_3(case_study, plots_directory, output_path=None):
     if output_path is None:
         output_path = os.path.join(
             plots_directory,
-            case_study + '_publication_plot_3.svg',
+            'cost_distribution_publication.svg',
         )
     output_path = os.path.abspath(output_path)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -522,7 +522,7 @@ def create_publication_plot_4(
         text = ET.SubElement(output_root, '{' + SVG_NAMESPACE + '}text')
         text.set(
             'x',
-            str(axes_left + 1.5 * POINTS_PER_MM * x_units_per_point),
+            str(axes_left + 0.5 * POINTS_PER_MM * x_units_per_point),
         )
         text.set(
             'y',
@@ -539,7 +539,7 @@ def create_publication_plot_4(
     if output_path is None:
         output_path = os.path.join(
             plots_directory,
-            comparison_id + '_' + country + '_publication_plot_4.svg',
+            'supply_curves_comparison_publication_' + country + '_' + comparison_id + '.svg',
         )
     output_path = os.path.abspath(output_path)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
