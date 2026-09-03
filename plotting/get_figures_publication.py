@@ -172,8 +172,8 @@ def _add_panel_label(root, label, panel_y, panel_height, map_bottom_fraction):
         str(panel_y + panel_height * map_bottom_fraction - 1.5 * POINTS_PER_MM),
     )
     text.set('font-family', 'Arial')
-    text.set('font-size', '10pt')
-    text.set('font-weight', 'normal')
+    text.set('font-size', '7pt')
+    text.set('font-weight', 'bold')
     text.set('fill', '#000000')
     text.text = '(' + label + ')'
 
@@ -183,15 +183,15 @@ def _add_axes_label(root, label, x, y):
     text.set('x', str(x + 1.5 * POINTS_PER_MM))
     text.set('y', str(y - 1.5 * POINTS_PER_MM))
     text.set('font-family', 'Arial')
-    text.set('font-size', '10pt')
-    text.set('font-weight', 'normal')
+    text.set('font-size', '7pt')
+    text.set('font-weight', 'bold')
     text.set('fill', '#000000')
     text.text = '(' + label + ')'
 
 
 def create_publication_plot_1(case_study, plots_directory, output_path=None):
     source_paths = [
-        os.path.join(plots_directory, case_study + '_production_costs_compact.svg'),
+        os.path.join(plots_directory, case_study + '_total_costs_compact.svg'),
         os.path.join(plots_directory, case_study + '_routes_compact.svg'),
         os.path.join(plots_directory, case_study + '_transport_costs_compact.svg'),
     ]
@@ -428,8 +428,8 @@ def create_publication_plot_3(case_study, plots_directory, output_path=None):
             str(axes_bottom - 1.5 * POINTS_PER_MM * y_units_per_point),
         )
         text.set('font-family', 'Arial')
-        text.set('font-size', '10pt')
-        text.set('font-weight', 'normal')
+        text.set('font-size', '7pt')
+        text.set('font-weight', 'bold')
         text.set('fill', '#000000')
         text.text = '(' + chr(ord('a') + index) + ')'
 
@@ -481,8 +481,8 @@ def create_publication_plot_4(comparison_id, country, plots_directory, output_pa
             str(axes_top + 1.5 * POINTS_PER_MM * y_units_per_point),
         )
         text.set('font-family', 'Arial')
-        text.set('font-size', '10pt')
-        text.set('font-weight', 'normal')
+        text.set('font-size', '7pt')
+        text.set('font-weight', 'bold')
         text.set('fill', '#000000')
         text.set('text-anchor', 'end')
         text.set('dominant-baseline', 'hanging')

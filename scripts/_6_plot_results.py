@@ -411,22 +411,22 @@ for r in all_results:
         ax1 = get_number_figure(data.copy(), norm_prod, cmap, scenario_boundaries, destination_location,
                                 use_voronoi=True, column='production_costs', production_costs=production_costs,
                                 limit_scale=config_file_plotting['limit_scale'], ax=ax1, return_fig=True, fig=fig,
-                                fig_title='H2 Production Costs', add_fig_title=True, plot_colors=plot_colors)
+                                fig_title='H2 production costs', add_fig_title=True, plot_colors=plot_colors)
 
         ax2 = get_number_figure(data.copy(), norm_conv, cmap, scenario_boundaries, destination_location,
                                 column='conversion_costs', use_voronoi=True, production_costs=production_costs,
-                                ax=ax2, return_fig=True, fig=fig, fig_title='Conversion Costs', add_fig_title=True,
+                                ax=ax2, return_fig=True, fig=fig, fig_title='Conversion costs', add_fig_title=True,
                                 plot_colors=plot_colors)
 
         ax3 = get_number_figure(data.copy(), norm_trans, cmap, scenario_boundaries, destination_location,
                                 column='transportation_costs', use_voronoi=True, production_costs=production_costs,
                                 ax=ax3, limit_scale=config_file_plotting['limit_scale'], return_fig=True, fig=fig,
-                                fig_title='Transport Costs', add_fig_title=True, plot_colors=plot_colors)
+                                fig_title='Transport costs', add_fig_title=True, plot_colors=plot_colors)
 
         ax4 = get_number_figure(data.copy(), norm_total, cmap, scenario_boundaries, destination_location, ax=ax4,
                                 use_voronoi=True, production_costs=production_costs,
                                 limit_scale=config_file_plotting['limit_scale'], return_fig=True, fig=fig,
-                                fig_title='Total Supply Costs', add_fig_title=True, plot_colors=plot_colors)
+                                fig_title='Total supply costs', add_fig_title=True, plot_colors=plot_colors)
 
         fig.savefig(safe_output_path(path_saving, r + '_all_costs.png'), bbox_inches='tight', dpi=600)
         fig.savefig(safe_output_path(path_saving, r + '_all_costs.svg'), bbox_inches='tight')
@@ -468,13 +468,13 @@ for r in all_results:
         ax1 = get_number_figure(data.copy(), norm_prod, cmap, scenario_boundaries, destination_location,
                                 column='production_costs', use_voronoi=True,
                                 production_costs=production_costs, limit_scale=config_file_plotting['limit_scale'],
-                                ax=ax1, return_fig=True, fig=fig, fig_title='H2 Production Costs',
+                                ax=ax1, return_fig=True, fig=fig, fig_title='H2 production costs',
                                 add_fig_title=True, plot_colors=plot_colors)
 
         ax2 = get_number_figure(data.copy(), norm_total, cmap, scenario_boundaries, destination_location,
                                 use_voronoi=True, production_costs=production_costs,
                                 limit_scale=config_file_plotting['limit_scale'],
-                                ax=ax2, return_fig=True, fig=fig, fig_title='Total Supply Costs',
+                                ax=ax2, return_fig=True, fig=fig, fig_title='Total supply costs',
                                 add_fig_title=True, plot_colors=plot_colors)
 
         ax3 = get_energy_carrier_figure(data.copy(), scenario_boundaries, color_dictionary, nice_name_dictionary,

@@ -1317,7 +1317,7 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
     if return_fig:
         if add_legend:
             ax.legend(handles=new_transport_means, loc='upper center', ncols=3,
-                      bbox_to_anchor=(0.5, 0.2), title='Transport Mean',
+                      bbox_to_anchor=(0.5, 0.2), title='Transport mean',
                       labelspacing=0.1, handletextpad=0.1, columnspacing=0.75, handlelength=2.5,
                       fontsize=9, title_fontsize=9, frameon=False)
 
@@ -1333,7 +1333,7 @@ def get_routes_figure(data, line_styles, line_widths, commodity_colors, nice_nam
 
     if add_legend:
         fig.legend(handles=new_transport_means, loc='upper center', ncols=3,
-                   bbox_to_anchor=(0.5, 0.3), title='Transport Mean',
+                   bbox_to_anchor=(0.5, 0.3), title='Transport mean',
                    labelspacing=0.1, handletextpad=0.1, columnspacing=0.75, handlelength=2.5,
                    fontsize=9, title_fontsize=9, frameon=False)
 
@@ -1615,7 +1615,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
     if return_fig:
         if add_legend:
             ax.legend(handles=new_transport_means, loc='upper center', ncols=3,
-                      bbox_to_anchor=(0.25, 0.2), title='Transport Mean',
+                      bbox_to_anchor=(0.25, 0.2), title='Transport mean',
                       labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
                       frameon=False)
 
@@ -1644,7 +1644,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
         if False:
 
             fig.legend(handles=new_transport_means, loc='upper left', ncols=3,
-                       bbox_to_anchor=(0.1, 0.395), title='Transport Mean',
+                       bbox_to_anchor=(0.1, 0.395), title='Transport mean',
                        labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
                        fontsize=9, frameon=False)
 
@@ -2430,13 +2430,13 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
 
             if cost_type == 'production':
                 color = supply_curve_colors['production']
-                label = 'Production Costs'
+                label = 'Production costs'
             elif cost_type == 'conversion':
                 color = supply_curve_colors['conversion']
-                label = 'Conversion Costs'
+                label = 'Conversion costs'
             else:
                 color = supply_curve_colors['transportation']
-                label = 'Transport Costs'
+                label = 'Transport costs'
 
             used_labels = set()
             if label not in used_labels:
@@ -2459,7 +2459,7 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
 
     ax.xaxis.set_ticks_position('bottom')
     ax.tick_params(axis='x', which='both', labelbottom=True)
-    ax.set_xlabel(rf'Potential Quantity at Destination [10$^{{{exponent}}}$ TWh]',
+    ax.set_xlabel(rf'Potential quantity at destination [10$^{{{exponent}}}$ TWh]',
                   fontdict={'fontsize': 9}, fontname='Times New Roman')
 
     # ------------------------------------------------------------
@@ -2600,15 +2600,15 @@ def get_supply_curves(data, color_dictionary, nice_name_dictionary,
         handles, labels = ax.get_legend_handles_labels()
 
         labels = [
-            'Production Costs',
-            'Conversion Costs',
-            'Transport Costs'
+            'Production costs',
+            'Conversion costs',
+            'Transport costs'
         ]
 
         cost_handles = [
-            mlines.Line2D([], [], color=supply_curve_colors['production'], linewidth=6, label='Production Costs'),
-            mlines.Line2D([], [], color=supply_curve_colors['conversion'], linewidth=6, label='Conversion Costs'),
-            mlines.Line2D([], [], color=supply_curve_colors['transportation'], linewidth=6, label='Transport Costs')
+            mlines.Line2D([], [], color=supply_curve_colors['production'], linewidth=6, label='Production costs'),
+            mlines.Line2D([], [], color=supply_curve_colors['conversion'], linewidth=6, label='Conversion costs'),
+            mlines.Line2D([], [], color=supply_curve_colors['transportation'], linewidth=6, label='Transport costs')
         ]
 
         ax.legend(
@@ -2943,9 +2943,9 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
     if not data_ports.empty:
         data_ports.plot(color=infrastructure_colors['Port'], ax=ax, markersize=1, label='Port')
     if not data_pipeline_gas.empty:
-        data_pipeline_gas.plot(color=infrastructure_colors['Pipeline_Gas'], ax=ax, linewidth=0.5, label='Gas Pipeline')
+        data_pipeline_gas.plot(color=infrastructure_colors['Pipeline_Gas'], ax=ax, linewidth=0.5, label='Gas pipeline')
     if not data_pipeline_oil.empty:
-        data_pipeline_oil.plot(color=infrastructure_colors['Pipeline_Oil'], ax=ax, linewidth=0.5, label='Oil Pipeline')
+        data_pipeline_oil.plot(color=infrastructure_colors['Pipeline_Oil'], ax=ax, linewidth=0.5, label='Oil pipeline')
 
     ax.grid(visible=True, alpha=0.5)
     ax.text(0.6, 0.05, fig_title, transform=ax.transAxes, va='bottom', ha='left')
@@ -2972,11 +2972,11 @@ def get_infrastructure_figure(boundaries, path_data, ax=None, fig=None, fig_titl
         if not data_pipeline_gas.empty:
             handles_list_infrastructure.append(mlines.Line2D([], [], color=infrastructure_colors['Pipeline_Gas'],
                                                              linestyle='-', markersize=5,
-                                                             label='Gas Pipeline'))
+                                                             label='Gas pipeline'))
         if not data_pipeline_oil.empty:
             handles_list_infrastructure.append(mlines.Line2D([], [], color=infrastructure_colors['Pipeline_Oil'],
                                                              linestyle='-', markersize=5,
-                                                             label='Oil Pipeline'))
+                                                             label='Oil pipeline'))
 
         if handles_list_infrastructure:
             ax.legend(handles=handles_list_infrastructure, loc='upper center', ncol=3, bbox_to_anchor=(0.5, 0),
@@ -3196,9 +3196,9 @@ def get_start_locations_infrastructure_destination_figure(start_locations, bound
         handles_list = [mlines.Line2D([], [], color=infrastructure_colors['Port'], marker='.', linestyle='None', markersize=5,
                                       label='Port'),
                         mlines.Line2D([], [], color=infrastructure_colors['Pipeline_Gas'], linestyle='-', markersize=5,
-                                      label='Gas Pipeline'),
+                                      label='Gas pipeline'),
                         mlines.Line2D([], [], color=infrastructure_colors['Pipeline_Oil'], linestyle='-', markersize=5,
-                                      label='Oil Pipeline'),
+                                      label='Oil pipeline'),
                         mlines.Line2D([], [], color=plot_colors['map_colors']['destination'], linestyle='-', markersize=5,
                                       label='Destination')]
         ax.legend(handles=handles_list, loc='upper center', ncol=2, bbox_to_anchor=(0.5, 0),

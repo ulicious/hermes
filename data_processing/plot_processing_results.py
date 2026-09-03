@@ -217,9 +217,9 @@ def get_infrastructure_figure(sub_axes, boundaries, link_to_data, fig_title=''):
     if not data_ports.empty:
         data_ports.plot(color="blue", ax=sub_axes, markersize=1, label='Port')
     if not data_pipeline_gas_lines.empty:
-        data_pipeline_gas_lines.plot(color="red", ax=sub_axes, linewidth=0.5, label='Gas Pipeline')
+        data_pipeline_gas_lines.plot(color="red", ax=sub_axes, linewidth=0.5, label='Gas pipeline')
     if not data_pipeline_oil_lines.empty:
-        data_pipeline_oil_lines.plot(color="black", ax=sub_axes, linewidth=0.5, label='Oil Pipeline')
+        data_pipeline_oil_lines.plot(color="black", ax=sub_axes, linewidth=0.5, label='Oil pipeline')
     if not data_pipeline_gas_nodes.empty:
         data_pipeline_gas_nodes.plot(color='orange', ax=sub_axes)
     if not data_pipeline_oil_nodes.empty:

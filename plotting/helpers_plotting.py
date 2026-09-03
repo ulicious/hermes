@@ -1227,7 +1227,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                 ncols = math.ceil(len(commodities) / 2)
 
             fig.legend(handles=transport_means, loc='upper center', ncols=3,
-                       bbox_to_anchor=(0.5, legend_height_relative * 1.075), title='Transport Mean',
+                       bbox_to_anchor=(0.5, legend_height_relative * 1.075), title='Transport mean',
                        labelspacing=0.1, handletextpad=0.1, columnspacing=0.25, handlelength=1,
                        fontsize=9, title_fontsize=9, frameon=False)
 
@@ -1240,11 +1240,11 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
             # Add labels, legend, and titles
             cost_handles = [
                 mlines.Line2D([], [], color=supply_curve_colors['production'], linewidth=6,
-                              label='Production Costs', markersize=5),
+                              label='Production costs', markersize=5),
                 mlines.Line2D([], [], color=supply_curve_colors['conversion'], linewidth=6,
-                              label='Conversion Costs', markersize=5),
+                              label='Conversion costs', markersize=5),
                 mlines.Line2D([], [], color=supply_curve_colors['transportation'], linewidth=6,
-                              label='Transport Costs', markersize=5)
+                              label='Transport costs', markersize=5)
             ]
 
             commodity_handles = []
@@ -1309,7 +1309,7 @@ def plot_comparison_plot(plot_type, comparisons, path_files, path_saving, config
                     frameon=False
                 )
 
-            # fig.text(0.5, 0.2, 'Potential Quantities [TWh]', va='bottom', ha='center', fontdict={'fontsize': 9})
+            # fig.text(0.5, 0.2, 'Potential quantities [TWh]', va='bottom', ha='center', fontdict={'fontsize': 9})
 
             plt.subplots_adjust(left=0.2)
 
