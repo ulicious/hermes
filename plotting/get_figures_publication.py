@@ -190,29 +190,89 @@ def _map_axes_bounds(root, count=4):
     return bounds
 
 
-def _add_panel_label(root, label, panel_y, panel_height, map_bottom_fraction):
-    text = ET.SubElement(root, '{' + SVG_NAMESPACE + '}text')
-    text.set('x', str(3 * POINTS_PER_MM))
-    text.set(
-        'y',
-        str(panel_y + panel_height * map_bottom_fraction - 2.5 * POINTS_PER_MM),
+def _matplotlib_path_to_svg_d(path, x, baseline_y):
+    """Convert a Matplotlib path to SVG coordinates with a fixed baseline."""
+    try:
+        from matplotlib.path import Path as MplPath
+    except ImportError as error:
+        raise RuntimeError(
+            'Creating vector panel labels requires Matplotlib. Install the project '
+            'requirements before running create_publication_plots.py.'
+        ) from error
+
+    commands = []
+    for vertices, code in path.iter_segments(curves=True, simplify=False):
+        if code == MplPath.MOVETO:
+            px, py = vertices
+            commands.append('M {:.6f} {:.6f}'.format(x + px, baseline_y - py))
+        elif code == MplPath.LINETO:
+            px, py = vertices
+            commands.append('L {:.6f} {:.6f}'.format(x + px, baseline_y - py))
+        elif code == MplPath.CURVE3:
+            cx, cy, px, py = vertices
+            commands.append(
+                'Q {:.6f} {:.6f} {:.6f} {:.6f}'.format(
+                    x + cx, baseline_y - cy, x + px, baseline_y - py
+                )
+            )
+        elif code == MplPath.CURVE4:
+            c1x, c1y, c2x, c2y, px, py = vertices
+            commands.append(
+                'C {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f}'.format(
+                    x + c1x, baseline_y - c1y,
+                    x + c2x, baseline_y - c2y,
+                    x + px, baseline_y - py,
+                )
+            )
+        elif code == MplPath.CLOSEPOLY:
+            commands.append('Z')
+    return ' '.join(commands)
+
+
+def _add_vector_label(root, label, x, y, anchor='baseline'):
+    """Add a panel label as outlines so SVG and PDF placement is identical."""
+    try:
+        from matplotlib.font_manager import FontProperties
+        from matplotlib.textpath import TextPath
+    except ImportError as error:
+        raise RuntimeError(
+            'Creating vector panel labels requires Matplotlib. Install the project '
+            'requirements before running create_publication_plots.py.'
+        ) from error
+
+    text_path = TextPath(
+        (0.0, 0.0),
+        '(' + label + ')',
+        size=7.0,
+        prop=FontProperties(family='DejaVu Sans', weight='bold'),
+        usetex=False,
     )
-    text.set('font-family', 'Arial')
-    text.set('font-size', '7pt')
-    text.set('font-weight', 'bold')
-    text.set('fill', '#000000')
-    text.text = '(' + label + ')'
+    bounds = text_path.get_extents()
+
+    # TextPath uses Cartesian coordinates (positive y is up); SVG uses positive y down.
+    # For the former dominant-baseline="hanging" case, keep y as the visual top.
+    baseline_y = y if anchor == 'baseline' else y + bounds.ymax
+    path = ET.SubElement(root, '{' + SVG_NAMESPACE + '}path')
+    path.set('d', _matplotlib_path_to_svg_d(text_path, x, baseline_y))
+    path.set('fill', '#000000')
+
+
+def _add_panel_label(root, label, panel_y, panel_height, map_bottom_fraction):
+    _add_vector_label(
+        root,
+        label,
+        3 * POINTS_PER_MM,
+        panel_y + panel_height * map_bottom_fraction - 2.5 * POINTS_PER_MM,
+    )
 
 
 def _add_axes_label(root, label, x, y):
-    text = ET.SubElement(root, '{' + SVG_NAMESPACE + '}text')
-    text.set('x', str(x + 1.5 * POINTS_PER_MM))
-    text.set('y', str(y - 2.5 * POINTS_PER_MM))
-    text.set('font-family', 'Arial')
-    text.set('font-size', '7pt')
-    text.set('font-weight', 'bold')
-    text.set('fill', '#000000')
-    text.text = '(' + label + ')'
+    _add_vector_label(
+        root,
+        label,
+        x + 1.5 * POINTS_PER_MM,
+        y - 2.5 * POINTS_PER_MM,
+    )
 
 
 def create_publication_plot_1(case_study, plots_directory, output_path=None):
@@ -464,20 +524,12 @@ def create_publication_plot_3(case_study, plots_directory, output_path=None):
 
     for index, axes_rectangle in enumerate(axes_bounds):
         axes_left, _, _, axes_bottom = axes_rectangle
-        text = ET.SubElement(output_root, '{' + SVG_NAMESPACE + '}text')
-        text.set(
-            'x',
-            str(axes_left + 0.5 * POINTS_PER_MM * x_units_per_point),
+        _add_vector_label(
+            output_root,
+            chr(ord('a') + index),
+            axes_left + 0.5 * POINTS_PER_MM * x_units_per_point,
+            axes_bottom - 1.5 * POINTS_PER_MM * y_units_per_point,
         )
-        text.set(
-            'y',
-            str(axes_bottom - 1.5 * POINTS_PER_MM * y_units_per_point),
-        )
-        text.set('font-family', 'Arial')
-        text.set('font-size', '7pt')
-        text.set('font-weight', 'bold')
-        text.set('fill', '#000000')
-        text.text = '(' + chr(ord('a') + index) + ')'
 
     if output_path is None:
         output_path = os.path.join(
@@ -518,22 +570,13 @@ def create_publication_plot_4(
 
     for index, axes_rectangle in enumerate(axes_bounds):
         axes_left, axes_top, _, _ = axes_rectangle
-        text = ET.SubElement(output_root, '{' + SVG_NAMESPACE + '}text')
-        text.set(
-            'x',
-            str(axes_left + 0.5 * POINTS_PER_MM * x_units_per_point),
+        _add_vector_label(
+            output_root,
+            chr(ord('a') + index),
+            axes_left + 0.5 * POINTS_PER_MM * x_units_per_point,
+            axes_top + 3.5 * POINTS_PER_MM * y_units_per_point,
+            anchor='top',
         )
-        text.set(
-            'y',
-            str(axes_top + 3.5 * POINTS_PER_MM * y_units_per_point),
-        )
-        text.set('font-family', 'Arial')
-        text.set('font-size', '7pt')
-        text.set('font-weight', 'bold')
-        text.set('fill', '#000000')
-        text.set('text-anchor', 'start')
-        text.set('dominant-baseline', 'hanging')
-        text.text = '(' + chr(ord('a') + index) + ')'
 
     if output_path is None:
         output_path = os.path.join(
