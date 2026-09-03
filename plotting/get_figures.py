@@ -15,6 +15,7 @@ import seaborn as sns
 import matplotlib as mpl
 from matplotlib.figure import Figure
 from matplotlib.text import Text
+from matplotlib.transforms import ScaledTranslation
 
 from math import sqrt
 from tqdm import tqdm
@@ -180,6 +181,25 @@ def _align_compact_colorbar_to_map(fig, ax, colorbar_ax):
         0.005,
         rendered_map_position.height,
     ])
+
+
+def _align_compact_tick_label_columns(fig, tick_labels):
+    """Align every rotated tick-label column with the lowest label."""
+    if len(tick_labels) < 2:
+        return
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    reference_x = tick_labels[0].get_window_extent(renderer).x0
+    for tick_label in tick_labels[1:]:
+        label_x = tick_label.get_window_extent(renderer).x0
+        tick_label.set_transform(
+            tick_label.get_transform()
+            + ScaledTranslation(
+                (reference_x - label_x) / fig.dpi,
+                0,
+                fig.dpi_scale_trans,
+            )
+        )
 
 
 def _save_map_formats(fig, directory, filename, tight=True):
@@ -1701,6 +1721,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                 ax.set_position(map_position)
                 ax.set_aspect('auto')
                 _align_compact_colorbar_to_map(fig, ax, compact_cax)
+                _align_compact_tick_label_columns(fig, compact_tick_labels)
 
             if combined_handles:
                 map_position = ax.get_position()
@@ -1908,6 +1929,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
                 ax.set_position(map_position)
                 ax.set_aspect('auto')
                 _align_compact_colorbar_to_map(fig, ax, compact_cax)
+                _align_compact_tick_label_columns(fig, compact_tick_labels)
             else:
                 _reserve_compact_colorbar_space(fig, ax)
 
