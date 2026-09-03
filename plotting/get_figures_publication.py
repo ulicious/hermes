@@ -172,10 +172,10 @@ def _map_axes_bounds(root, count=4):
 
 def _add_panel_label(root, label, panel_y, panel_height, map_bottom_fraction):
     text = ET.SubElement(root, '{' + SVG_NAMESPACE + '}text')
-    text.set('x', str(3.5 * POINTS_PER_MM))
+    text.set('x', str(1.5 * POINTS_PER_MM))
     text.set(
         'y',
-        str(panel_y + panel_height * map_bottom_fraction - 1.5 * POINTS_PER_MM),
+        str(panel_y + panel_height * map_bottom_fraction - 2.5 * POINTS_PER_MM),
     )
     text.set('font-family', 'Arial')
     text.set('font-size', '7pt')
@@ -461,7 +461,7 @@ def create_publication_plot_3(case_study, plots_directory, output_path=None):
         text = ET.SubElement(output_root, '{' + SVG_NAMESPACE + '}text')
         text.set(
             'x',
-            str(axes_left + 1.5 * POINTS_PER_MM * x_units_per_point),
+            str(axes_left - 0.5 * POINTS_PER_MM * x_units_per_point),
         )
         text.set(
             'y',
