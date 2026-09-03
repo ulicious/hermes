@@ -1,6 +1,7 @@
 import copy
 import os
 import re
+import warnings
 import xml.etree.ElementTree as ET
 
 
@@ -239,12 +240,14 @@ def create_publication_plot_1(case_study, plots_directory, output_path=None):
     panel_heights = natural_heights
     output_height = sum(panel_heights) + panel_gap * (len(panels) - 1)
     if output_height > maximum_height + 1e-9:
-        raise ValueError(
+        warnings.warn(
             'Publication plot 1 is '
             + format(output_height / POINTS_PER_MM, '.2f')
             + ' mm high after removing the white panel margins; maximum is '
             + format(MAXIMUM_HEIGHT_MM, '.1f')
-            + ' mm.'
+            + ' mm. The SVG will still be exported.',
+            RuntimeWarning,
+            stacklevel=2,
         )
 
     output_root = ET.Element('{' + SVG_NAMESPACE + '}svg', {
@@ -334,12 +337,14 @@ def create_publication_plot_2(comparison_id, plots_directory, output_path=None):
     output_height = sum(panel_heights) + panel_gap
     maximum_height = MAXIMUM_HEIGHT_MM * POINTS_PER_MM
     if output_height > maximum_height + 1e-9:
-        raise ValueError(
+        warnings.warn(
             'Publication plot 2 is '
             + format(output_height / POINTS_PER_MM, '.2f')
             + ' mm high; maximum is '
             + format(MAXIMUM_HEIGHT_MM, '.1f')
-            + ' mm.'
+            + ' mm. The SVG will still be exported.',
+            RuntimeWarning,
+            stacklevel=2,
         )
 
     output_root = ET.Element('{' + SVG_NAMESPACE + '}svg', {
