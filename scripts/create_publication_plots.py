@@ -31,8 +31,10 @@ def _create_supply_curve_comparison_sources(
     import shapely
 
     from data_processing.configuration import (
-        load_algorithm_configuration,
-        load_plotting_configuration,
+        CONVERSION_CONFIG,
+        PLOTTING_CONFIG,
+        get_config_path,
+        load_yaml,
     )
     from plotting.get_figures import (
         DEFAULT_PLOT_BOUNDARIES,
@@ -42,10 +44,19 @@ def _create_supply_curve_comparison_sources(
     )
     from plotting.helpers_plotting import plot_comparison_plot
 
-    general_config = load_algorithm_configuration()
-    general_config['project_folder_path'] = PROJECT_FOLDER
-    plotting_config = load_plotting_configuration(general_config)
+    plotting_config_path = get_config_path(PROJECT_FOLDER, PLOTTING_CONFIG)
+    if not os.path.isfile(plotting_config_path):
+        raise FileNotFoundError(
+            'Missing plotting configuration in PROJECT_FOLDER:\n'
+            + plotting_config_path
+        )
+    plotting_config = load_yaml(plotting_config_path)
     plotting_config = dict(plotting_config)
+    plotting_config['_configuration_path'] = plotting_config_path
+    plotting_config['_conversion_config_path'] = get_config_path(
+        PROJECT_FOLDER,
+        CONVERSION_CONFIG,
+    )
     vector_filetypes = plotting_config.get('vector_filetype', ['svg'])
     if isinstance(vector_filetypes, str):
         vector_filetypes = [vector_filetypes]
