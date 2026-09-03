@@ -192,7 +192,7 @@ def _set_compact_colorbar_tick_labels(fig, colorbar, ticks):
     label_transform = (
         blended_transform_factory(colorbar.ax.transAxes, colorbar.ax.transData)
         # Keep the labels clear of the compact colorbar and its outward ticks.
-        + ScaledTranslation(8.64 / 72, 0, fig.dpi_scale_trans)
+        + ScaledTranslation(10.368 / 72, 0, fig.dpi_scale_trans)
     )
     for index, tick in enumerate(ticks):
         if index == 0:
@@ -1735,7 +1735,7 @@ def get_weighted_routes(commodity_data, boundaries, line_styles, color_dictionar
                 compact_cbar = fig.colorbar(
                     sm, cax=compact_cax, orientation='vertical'
                 )
-                compact_cbar.set_label('Quantity [TWh]', rotation=90, labelpad=10.4)
+                compact_cbar.set_label('Quantity [TWh]', rotation=90, labelpad=12.48)
                 compact_ticks = _get_compact_colorbar_ticks(ticks)
                 compact_cbar.set_ticks(compact_ticks)
                 ax.set_position(map_position)
@@ -1936,7 +1936,7 @@ def get_number_figure(data, norm, cmap_chosen, boundaries, destination_location,
                     orientation='vertical',
                     extend='max' if limit_scale else 'neither',
                 )
-                compact_cbar.set_label(unit, rotation=90, labelpad=10.4)
+                compact_cbar.set_label(unit, rotation=90, labelpad=12.48)
                 compact_ticks = []
                 if len(ticks) > 0:
                     compact_ticks = _get_compact_colorbar_ticks(ticks)
