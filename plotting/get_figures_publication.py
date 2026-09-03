@@ -22,6 +22,26 @@ ET.register_namespace('', SVG_NAMESPACE)
 ET.register_namespace('xlink', XLINK_NAMESPACE)
 
 
+def _write_publication_outputs(output_root, output_path):
+    output_path = os.path.abspath(output_path)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    ET.ElementTree(output_root).write(
+        output_path,
+        encoding='utf-8',
+        xml_declaration=True,
+    )
+    try:
+        import cairosvg
+    except ImportError as error:
+        raise RuntimeError(
+            'Creating publication PDFs requires CairoSVG. Install the project '
+            'requirements before running create_publication_plots.py.'
+        ) from error
+    pdf_path = os.path.splitext(output_path)[0] + '.pdf'
+    cairosvg.svg2pdf(url=output_path, write_to=pdf_path)
+    return output_path
+
+
 def _length_in_points(value):
     match = re.fullmatch(
         r'\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*([a-zA-Z]*)\s*',
@@ -314,14 +334,7 @@ def create_publication_plot_1(case_study, plots_directory, output_path=None):
             plots_directory,
             case_study + '_overview_costs_publication.svg',
         )
-    output_path = os.path.abspath(output_path)
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    ET.ElementTree(output_root).write(
-        output_path,
-        encoding='utf-8',
-        xml_declaration=True,
-    )
-    return output_path
+    return _write_publication_outputs(output_root, output_path)
 
 
 def create_publication_plot_2(
@@ -428,14 +441,7 @@ def create_publication_plot_2(
             plots_directory,
             'comparisons_publicaion_' + comparison_id + '.svg',
         )
-    output_path = os.path.abspath(output_path)
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    ET.ElementTree(output_root).write(
-        output_path,
-        encoding='utf-8',
-        xml_declaration=True,
-    )
-    return output_path
+    return _write_publication_outputs(output_root, output_path)
 
 
 def create_publication_plot_3(case_study, plots_directory, output_path=None):
@@ -478,14 +484,7 @@ def create_publication_plot_3(case_study, plots_directory, output_path=None):
             plots_directory,
             'cost_distribution_publication.svg',
         )
-    output_path = os.path.abspath(output_path)
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    ET.ElementTree(output_root).write(
-        output_path,
-        encoding='utf-8',
-        xml_declaration=True,
-    )
-    return output_path
+    return _write_publication_outputs(output_root, output_path)
 
 
 def create_publication_plot_4(
@@ -541,11 +540,4 @@ def create_publication_plot_4(
             plots_directory,
             'supply_curves_comparison_publication_' + country + '_' + comparison_id + '.svg',
         )
-    output_path = os.path.abspath(output_path)
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    ET.ElementTree(output_root).write(
-        output_path,
-        encoding='utf-8',
-        xml_declaration=True,
-    )
-    return output_path
+    return _write_publication_outputs(output_root, output_path)
