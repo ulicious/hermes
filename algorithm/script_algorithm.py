@@ -711,6 +711,10 @@ def run_algorithm(args):
 
                     out_infrastructure_branches['min_costs_pipeline_gas'] = math.inf
                     out_infrastructure_branches['min_costs_pipeline_liquid'] = math.inf
+                    out_infrastructure_branches['pipeline_gas_commodity'] \
+                        = out_infrastructure_branches['current_commodity']
+                    out_infrastructure_branches['pipeline_liquid_commodity'] \
+                        = out_infrastructure_branches['current_commodity']
 
                     for c in data['commodities']['commodity_objects'].keys():
                         c_object = data['commodities']['commodity_objects'][c]
@@ -727,32 +731,39 @@ def run_algorithm(args):
                                 = out_infrastructure_branches.loc[valid_branches_gas, 'current_total_costs']
 
                 else:
-                    min_costs_pipeline_gas, min_costs_pipeline_liquid \
+                    min_costs_pipeline_gas, min_costs_pipeline_liquid, \
+                        pipeline_gas_commodities, pipeline_liquid_commodities \
                         = calculate_minimal_costs_conversion_for_oil_and_gas_infrastructure(data,
                                                                                             out_infrastructure_branches,
                                                                                             cost_column_name='current_total_costs')
                     out_infrastructure_branches['min_costs_pipeline_gas'] = min_costs_pipeline_gas
                     out_infrastructure_branches['min_costs_pipeline_liquid'] = min_costs_pipeline_liquid
+                    out_infrastructure_branches['pipeline_gas_commodity'] = pipeline_gas_commodities
+                    out_infrastructure_branches['pipeline_liquid_commodity'] = pipeline_liquid_commodities
 
                 # now check which branch can potentially use pipelines. If a branch cannot use a pipeline type,
                 # we don't have to assess the pipeline type for this branch
                 out_infrastructure_branches['benchmark'] = out_infrastructure_branches['current_commodity'].map(benchmarks)
+                out_infrastructure_branches['benchmark_pipeline_gas'] \
+                    = out_infrastructure_branches['pipeline_gas_commodity'].map(benchmarks)
+                out_infrastructure_branches['benchmark_pipeline_liquid'] \
+                    = out_infrastructure_branches['pipeline_liquid_commodity'].map(benchmarks)
 
                 no_pipeline_gas_branches \
-                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] > out_infrastructure_branches['benchmark'])
-                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] <= out_infrastructure_branches['benchmark'])].index.tolist()
+                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] > out_infrastructure_branches['benchmark_pipeline_gas'])
+                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] <= out_infrastructure_branches['benchmark_pipeline_liquid'])].index.tolist()
 
                 no_pipeline_liquid_branches \
-                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] <= out_infrastructure_branches['benchmark'])
-                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] > out_infrastructure_branches['benchmark'])].index.tolist()
+                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] <= out_infrastructure_branches['benchmark_pipeline_gas'])
+                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] > out_infrastructure_branches['benchmark_pipeline_liquid'])].index.tolist()
 
                 only_shipping_branches \
-                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] > out_infrastructure_branches['benchmark'])
-                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] > out_infrastructure_branches['benchmark'])].index.tolist()
+                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] > out_infrastructure_branches['benchmark_pipeline_gas'])
+                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] > out_infrastructure_branches['benchmark_pipeline_liquid'])].index.tolist()
 
                 no_limitation \
-                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] <= out_infrastructure_branches['benchmark'])
-                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] <= out_infrastructure_branches['benchmark'])].index.tolist()
+                    = out_infrastructure_branches[(out_infrastructure_branches['min_costs_pipeline_gas'] <= out_infrastructure_branches['benchmark_pipeline_gas'])
+                                              & (out_infrastructure_branches['min_costs_pipeline_liquid'] <= out_infrastructure_branches['benchmark_pipeline_liquid'])].index.tolist()
 
                 # covered_branches = no_pipeline_gas_branches + no_pipeline_liquid_branches + only_shipping_branches + no_limitation
                 only_tolerance_branches = [i for i in out_infrastructure_branches.index if i not in no_limitation]
