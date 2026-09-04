@@ -709,19 +709,23 @@ def calculate_minimal_costs_conversion_for_oil_and_gas_infrastructure(data, bran
     pipeline_gas_columns = [c for c in created_columns if 'Pipeline_Gas' in c]
     pipeline_gas_options = cheapest_options[pipeline_gas_columns]
     pipeline_gas_cheapest_options = pipeline_gas_options.min(axis=1).tolist()
-    pipeline_gas_cheapest_columns = pipeline_gas_options.idxmin(axis=1)
+    pipeline_gas_cheapest_columns = np.asarray(pipeline_gas_columns)[
+        np.argmin(pipeline_gas_options.to_numpy(dtype=float), axis=1)
+    ]
     pipeline_gas_commodities = [
         column_commodities.get(column, cheapest_options.at[index, 'current_commodity'])
-        for index, column in pipeline_gas_cheapest_columns.items()
+        for index, column in zip(cheapest_options.index, pipeline_gas_cheapest_columns)
     ]
 
     pipeline_liquid_columns = [c for c in created_columns if 'Pipeline_Liquid' in c]
     pipeline_liquid_options = cheapest_options[pipeline_liquid_columns]
     pipeline_liquid_cheapest_options = pipeline_liquid_options.min(axis=1).tolist()
-    pipeline_liquid_cheapest_columns = pipeline_liquid_options.idxmin(axis=1)
+    pipeline_liquid_cheapest_columns = np.asarray(pipeline_liquid_columns)[
+        np.argmin(pipeline_liquid_options.to_numpy(dtype=float), axis=1)
+    ]
     pipeline_liquid_commodities = [
         column_commodities.get(column, cheapest_options.at[index, 'current_commodity'])
-        for index, column in pipeline_liquid_cheapest_columns.items()
+        for index, column in zip(cheapest_options.index, pipeline_liquid_cheapest_columns)
     ]
 
     return (pipeline_gas_cheapest_options, pipeline_liquid_cheapest_options,
