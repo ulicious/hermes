@@ -5,6 +5,7 @@ from typing import NamedTuple
 import networkx as nx
 import numpy as np
 import pandas as pd
+import geopandas as gpd
 
 from algorithm.methods_conversion import calculate_conversion_costs, calculate_conversion_costs_increase
 from algorithm.methods_geographic import calc_distance_list_to_list
@@ -297,14 +298,14 @@ def attach_infrastructure_countries(complete_infrastructure, world, target_count
         & candidates['latitude'].between(min_latitude, max_latitude)
     ].copy()
 
-    # Only the usually much smaller bounding-box subset reaches the exact test.
-    from shapely.geometry import Point
-    inside = []
-    for node, row in candidates.iterrows():
-        point = Point(row['longitude'], row['latitude'])
-        if country_geometry.covers(point):
-            inside.append(node)
-    candidates = candidates.loc[inside].copy()
+    # Perform the exact boundary-inclusive country test for all remaining
+    # points at once. This keeps border ports/nodes while avoiding Python-level
+    # point-by-point geometry calls.
+    points = gpd.GeoSeries(
+        gpd.points_from_xy(candidates['longitude'], candidates['latitude']),
+        index=candidates.index,
+        crs=getattr(world, 'crs', None) or 'EPSG:4326')
+    candidates = candidates.loc[points.covered_by(country_geometry)].copy()
     candidates['country'] = target_country
     return pd.concat([explicit, candidates], axis=0)
 

@@ -22,7 +22,7 @@ except ImportError:
     prepare_minimal_mip_case = None
 from data_processing.helpers_geometry import get_destination, get_boundaries_from_config
 from data_processing.helpers_continent_connections import (
-    add_continents_to_pipeline_nodes,
+    add_country_and_continent_to_pipeline_nodes,
     build_continent_connectivity,
     save_continent_connectivity,
 )
@@ -42,7 +42,7 @@ logging.basicConfig(level=logging.INFO)
 time_start = time.time()
 
 PIPELINE_GRAPH_COLUMNS = ['graph', 'node_start', 'node_end', 'distance', 'line']
-PIPELINE_NODE_COLUMNS = ['longitude', 'latitude', 'graph', 'continent']
+PIPELINE_NODE_COLUMNS = ['longitude', 'latitude', 'graph', 'country', 'continent']
 PORT_COLUMNS = ['latitude', 'longitude', 'name', 'country', 'continent',
                 'longitude_on_coastline', 'latitude_on_coastline']
 MINIMAL_DISTANCE_COLUMNS = ['minimal_distance', 'closest_node']
@@ -305,7 +305,8 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
 
         gas_graph = write_csv_with_schema(
             gas_graph, path_processed_data + 'gas_pipeline_graphs.csv', PIPELINE_GRAPH_COLUMNS)
-        gas_nodes = add_continents_to_pipeline_nodes(gas_nodes, path_raw_data=path_raw_data)
+        gas_nodes = add_country_and_continent_to_pipeline_nodes(
+            gas_nodes, path_raw_data=path_raw_data, world=world)
         gas_nodes = write_csv_with_schema(
             gas_nodes, path_processed_data + 'gas_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
 
@@ -326,7 +327,8 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
 
         oil_graph = write_csv_with_schema(
             oil_graph, path_processed_data + 'oil_pipeline_graphs.csv', PIPELINE_GRAPH_COLUMNS)
-        oil_nodes = add_continents_to_pipeline_nodes(oil_nodes, path_raw_data=path_raw_data)
+        oil_nodes = add_country_and_continent_to_pipeline_nodes(
+            oil_nodes, path_raw_data=path_raw_data, world=world)
         oil_nodes = write_csv_with_schema(
             oil_nodes, path_processed_data + 'oil_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
 

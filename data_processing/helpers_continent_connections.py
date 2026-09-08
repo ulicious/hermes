@@ -2,6 +2,7 @@ import json
 import geopandas as gpd
 import pandas as pd
 
+from data_processing.country_names import validate_canonical_country_column
 from data_processing.natural_earth_data import load_world
 
 GEOGRAPHIC_LAND_CONTINENT_CONNECTIONS = {
@@ -17,7 +18,7 @@ GEOGRAPHIC_LAND_CONTINENT_CONNECTIONS = {
 
 
 def _load_world(path_raw_data=None):
-    world = load_world(path_raw_data)[['CONTINENT', 'geometry']].copy()
+    world = load_world(path_raw_data)[['NAME_EN', 'CONTINENT', 'geometry']].copy()
     return world.set_crs('EPSG:4326', allow_override=True)
 
 
@@ -133,6 +134,65 @@ def add_continents_to_pipeline_nodes(node_locations, path_raw_data=None, world=N
         except Exception:
             pass
 
+    return nodes
+
+
+def add_country_and_continent_to_pipeline_nodes(node_locations, path_raw_data=None,
+                                                world=None):
+    """Attach canonical Natural Earth country and continent in vectorized joins."""
+    if node_locations is None:
+        return pd.DataFrame(columns=[
+            'longitude', 'latitude', 'graph', 'country', 'continent'])
+
+    nodes = node_locations.copy()
+    for column in ('country', 'continent'):
+        if column not in nodes.columns:
+            nodes[column] = pd.NA
+    if nodes.empty or not {'longitude', 'latitude'}.issubset(nodes.columns):
+        return nodes
+
+    valid_coordinates = (
+        pd.to_numeric(nodes['longitude'], errors='coerce').notna()
+        & pd.to_numeric(nodes['latitude'], errors='coerce').notna())
+    if not valid_coordinates.any():
+        return nodes
+
+    if world is None:
+        world = _load_world(path_raw_data)
+    else:
+        world = world[['NAME_EN', 'CONTINENT', 'geometry']].copy()
+        world = world.set_crs('EPSG:4326', allow_override=True)
+
+    lookup = nodes.loc[valid_coordinates, ['longitude', 'latitude']].copy()
+    points = gpd.GeoDataFrame(
+        lookup,
+        geometry=gpd.points_from_xy(lookup['longitude'], lookup['latitude']),
+        crs='EPSG:4326')
+    joined = gpd.sjoin(
+        points, world[['NAME_EN', 'CONTINENT', 'geometry']],
+        how='left', predicate='intersects')
+    joined = joined[joined['NAME_EN'].notna()]
+    if not joined.empty:
+        joined = joined[~joined.index.duplicated(keep='first')]
+        nodes.loc[joined.index, 'country'] = joined['NAME_EN'].astype(str)
+        nodes.loc[joined.index, 'continent'] = joined['CONTINENT'].astype(str)
+
+    # Offshore pipeline points do not intersect a land polygon. Assign all of
+    # them together to the nearest Natural Earth country instead of running a
+    # point-by-point fallback.
+    unresolved = lookup.index[nodes.loc[lookup.index, 'country'].isna()]
+    if len(unresolved) > 0:
+        nearest = gpd.sjoin_nearest(
+            points.loc[unresolved].to_crs('EPSG:3857'),
+            world[['NAME_EN', 'CONTINENT', 'geometry']].to_crs('EPSG:3857'),
+            how='left')
+        nearest = nearest[nearest['NAME_EN'].notna()]
+        if not nearest.empty:
+            nearest = nearest[~nearest.index.duplicated(keep='first')]
+            nodes.loc[nearest.index, 'country'] = nearest['NAME_EN'].astype(str)
+            nodes.loc[nearest.index, 'continent'] = nearest['CONTINENT'].astype(str)
+
+    validate_canonical_country_column(nodes, 'country', world, 'pipeline nodes')
     return nodes
 
 

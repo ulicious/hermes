@@ -99,7 +99,7 @@ def prepare_data_and_configuration_dictionary(config_file):
     # load input data
     location_data = pd.read_csv(path_project_folder + 'start_destination_combinations.csv', index_col=0)
 
-    node_columns = ['latitude', 'longitude', 'graph', 'continent']
+    node_columns = ['latitude', 'longitude', 'graph', 'country', 'continent']
     graph_columns = ['graph', 'node_start', 'node_end', 'distance', 'line']
     port_columns = ['latitude', 'longitude', 'name', 'country', 'continent',
                     'longitude_on_coastline', 'latitude_on_coastline']
@@ -133,6 +133,12 @@ def prepare_data_and_configuration_dictionary(config_file):
     validate_canonical_country_column(
         location_data, 'country_start', world, 'start_destination_combinations.csv')
     validate_canonical_country_column(ports, 'country', world, 'processed_data/ports.csv')
+    validate_canonical_country_column(
+        pipeline_gas_node_locations, 'country', world,
+        'processed_data/gas_pipeline_node_locations.csv')
+    validate_canonical_country_column(
+        pipeline_liquid_node_locations, 'country', world,
+        'processed_data/oil_pipeline_node_locations.csv')
 
     final_commodities = config_file['target_commodity']
     strike_prices_commodity = {}
