@@ -46,6 +46,8 @@ if __name__ == '__main__':
     location_data = location_data.drop(_processed_locations(configuration), errors='ignore')
 
     print('Start export-infrastructure branch enumeration')
+    print('Retained routes per node and commodity: '
+          + str(int(config_file.get('number_k_best_routes', 10))))
     started = time.time()
     arguments = zip(np.random.default_rng(42).permutation(location_data.index),
                     itertools.repeat(location_data), itertools.repeat(data),

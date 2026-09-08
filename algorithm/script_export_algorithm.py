@@ -134,8 +134,6 @@ def run_export_algorithm(args):
     if number_k_best_routes < 1:
         raise ValueError('number_k_best_routes must be at least 1.')
     print(str(location_index) + ': Start Processing export infrastructure')
-    print(str(location_index) + ': Retained routes per node and commodity: '
-          + str(number_k_best_routes))
     started = time.time()
     tracker = AlgorithmTracker(location_index, configuration['path_results'])
     preparation_started = time.time()

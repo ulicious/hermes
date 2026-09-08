@@ -315,13 +315,22 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches, con
     if domestic_infrastructure.empty or branches.empty:
         return pd.DataFrame()
 
+    # Distances depend only on the current node, not on a branch's costs,
+    # commodity or history. Calculate each origin-to-infrastructure vector once
+    # and reuse it for every branch located at that node.
+    branches_no_duplicates = branches.drop_duplicates(subset=['current_node'], keep='first')
     distances = calc_distance_list_to_list(
         domestic_infrastructure['latitude'], domestic_infrastructure['longitude'],
-        branches['latitude'], branches['longitude'])
+        branches_no_duplicates['latitude'], branches_no_duplicates['longitude'])
     values = np.asarray(distances).transpose()
+    origin_positions = {
+        node: position
+        for position, node in enumerate(branches_no_duplicates['current_node'])
+    }
     results = {}
-    for column, branch_index in enumerate(branches.index):
+    for branch_index in branches.index:
         branch = branches.loc[branch_index]
+        origin_position = origin_positions[branch['current_node']]
         commodity = branch['current_commodity_object']
         visited = branch['_visited_nodes']
         visited_infrastructure = branch['_visited_infrastructure']
@@ -337,7 +346,7 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches, con
                 node_infrastructure = set()
             if visited_infrastructure.intersection(node_infrastructure):
                 continue
-            direct_distance = float(values[row, column])
+            direct_distance = float(values[origin_position, row])
             options = []
             if (commodity.get_transportation_options_specific_mean_of_transport('Road')
                     and branch['current_transport_mean'] not in
