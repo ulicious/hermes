@@ -322,7 +322,7 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches, con
     distances = calc_distance_list_to_list(
         domestic_infrastructure['latitude'], domestic_infrastructure['longitude'],
         branches_no_duplicates['latitude'], branches_no_duplicates['longitude'])
-    values = np.asarray(distances).transpose()
+    values = np.asarray(distances)
     origin_positions = {
         node: position
         for position, node in enumerate(branches_no_duplicates['current_node'])
