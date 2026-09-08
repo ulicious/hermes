@@ -5,6 +5,7 @@ from shapely.geometry import Polygon, Point, MultiPolygon
 import geopandas as gpd
 
 from data_processing.natural_earth_data import load_states, load_world
+from data_processing.country_names import canonicalize_country_mapping
 
 
 MINIMAL_EXAMPLE_BOUNDS = (35, 71, -21, 45)
@@ -70,6 +71,7 @@ def create_country_state_polygon(country_states, world=None, states=None,
         world = _load_world()
     if states is None:
         states = _load_states()
+    country_states = canonicalize_country_mapping(country_states, world)
 
     first = True
     combined_location = None

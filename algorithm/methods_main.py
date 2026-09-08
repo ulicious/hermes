@@ -15,6 +15,7 @@ from data_processing.helpers_attach_costs import attach_conversion_costs_and_eff
 from data_processing.helpers_geometry import get_destination_information
 from data_processing.natural_earth_data import load_world
 from data_processing.configuration import load_technology_data
+from data_processing.country_names import validate_canonical_country_column
 
 
 def _read_csv_or_empty(path, columns=None, index_col=0, dtype=None):
@@ -129,6 +130,9 @@ def prepare_data_and_configuration_dictionary(config_file):
     coastlines.set_geometry('geometry', inplace=True)
 
     world = load_world(path_raw_data)
+    validate_canonical_country_column(
+        location_data, 'country_start', world, 'start_destination_combinations.csv')
+    validate_canonical_country_column(ports, 'country', world, 'processed_data/ports.csv')
 
     final_commodities = config_file['target_commodity']
     strike_prices_commodity = {}

@@ -26,12 +26,13 @@ from data_processing.helpers_continent_connections import (
     build_continent_connectivity,
     save_continent_connectivity,
 )
-from data_processing.natural_earth_data import validate_natural_earth_data
+from data_processing.natural_earth_data import load_world, validate_natural_earth_data
 from data_processing.configuration import (
     get_raw_data_path,
     load_algorithm_configuration,
     load_technology_data,
 )
+from data_processing.country_names import validate_canonical_country_column
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -224,6 +225,7 @@ infrastructure_enforce_update_of_data = config_file['infrastructure_enforce_upda
 create_mip_data = config_file['create_mip_data']
 
 validate_natural_earth_data(path_raw_data)
+world = load_world(path_raw_data)
 
 destination = get_destination(config_file)  # todo: possible to load the natural earth data instead of using old packagaes
 
@@ -342,10 +344,15 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
             boundaries,
             destination,
             use_minimal_example=use_minimal_example,
+            world=world,
         )
+        validate_canonical_country_column(
+            ports, 'country', world, 'newly processed seaport data')
         ports = write_csv_with_schema(ports, path_processed_data + 'ports.csv', PORT_COLUMNS)
     else:
         ports = read_csv_or_empty(path_processed_data + 'ports.csv', PORT_COLUMNS)
+        validate_canonical_country_column(
+            ports, 'country', world, path_processed_data + 'ports.csv')
 
     if not use_low_storage:
         # calculate distances within networks (shipping and pipeline network)
@@ -376,6 +383,8 @@ if not infrastructure_update_only_conversion_costs_and_efficiency:
 else:
     ensure_processed_infrastructure_files(path_processed_data)
     ports = read_csv_or_empty(path_processed_data + 'ports.csv', PORT_COLUMNS)
+    validate_canonical_country_column(
+        ports, 'country', world, path_processed_data + 'ports.csv')
     gas_nodes = read_csv_or_empty(path_processed_data + 'gas_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
     oil_nodes = read_csv_or_empty(path_processed_data + 'oil_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
     if os.path.exists(path_processed_data + 'landmasses.csv'):

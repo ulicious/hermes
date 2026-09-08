@@ -65,7 +65,9 @@ def read_natural_earth(path_raw_data=None, resolution='10m', category='cultural'
             + '\nRun _run_workflow.py with RUN_SETUP_PROJECT_FOLDER = True to download the versioned Zenodo dataset.'
         )
 
-    return gpd.read_file(shapefile_path)
+    # The bundled Natural Earth DBF has no .cpg sidecar. Its text fields are
+    # UTF-8; declaring the encoding prevents mojibake in names with accents.
+    return gpd.read_file(shapefile_path, encoding='utf-8')
 
 
 def load_world(path_raw_data=None):

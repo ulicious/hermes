@@ -8,7 +8,6 @@ import pandas as pd
 from pandas.errors import PerformanceWarning
 from shapely.geometry import Point
 
-from algorithm.methods_algorithm import postprocessing_branches
 from algorithm.methods_export import (apply_export_conversion,
                                       attach_infrastructure_countries,
                                       create_export_branches_at_start,
@@ -16,6 +15,7 @@ from algorithm.methods_export import (apply_export_conversion,
                                       export_node_results_snapshot,
                                       get_complete_export_infrastructure,
                                       get_start_country,
+                                      materialize_export_branches,
                                       prepare_export_commodities,
                                       prepare_export_infrastructure_branches,
                                       process_export_infrastructure_branches,
@@ -64,7 +64,7 @@ def _complete_generated_branches(branches, previous_branches, branch_number):
     branches.index.name = None
     branch_number += len(branches)
     branches['current_conversion_costs'] = 0
-    branches = postprocessing_branches(branches, previous_branches)
+    branches = materialize_export_branches(branches, previous_branches)
     return branches, branch_number
 
 

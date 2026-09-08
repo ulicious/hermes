@@ -14,6 +14,7 @@ from algorithm.methods_geographic import calc_distance_list_to_single
 from data_processing.helpers_geometry import round_to_quarter
 from data_processing.natural_earth_data import load_world
 from data_processing.configuration import get_raw_data_path
+from data_processing.country_names import canonicalize_country_index
 
 
 def _config_flag(config_file, key):
@@ -672,8 +673,10 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
         levelized_costs_location = pd.read_csv(
             get_raw_data_path(config_file, 'location_data'), index_col=0, sep=';')
 
+    world = load_world(path_raw_data)
     levelized_costs_country = pd.read_csv(
         get_raw_data_path(config_file, 'country_data'), index_col=0)
+    levelized_costs_country = canonicalize_country_index(levelized_costs_country, world)
 
     # add country information to options
     not_shipping_options = [i for i in locations.index if 'H' not in i]
@@ -681,7 +684,6 @@ def attach_conversion_costs_and_efficiency_to_infrastructure(locations, config_f
 
     shipping_options = [i for i in locations.index if 'H' in i]  # harbours have information on country already
 
-    world = load_world(path_raw_data)
     gdf = gpd.GeoDataFrame(not_shipping_options, geometry=gpd.points_from_xy(not_shipping_options.longitude, not_shipping_options.latitude))
     result = gpd.sjoin(gdf, world, how='left')
     not_shipping_options['country'] = result['NAME_EN']

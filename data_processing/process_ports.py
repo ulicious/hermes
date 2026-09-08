@@ -8,10 +8,12 @@ from shapely.ops import nearest_points
 from shapely.geometry import Point, Polygon
 
 import warnings
+from data_processing.country_names import canonicalize_country, build_country_aliases
 warnings.filterwarnings('ignore')
 
 
-def process_ports(ports_file, coastlines, landmasses, boundaries, destination, use_minimal_example=False):
+def process_ports(ports_file, coastlines, landmasses, boundaries, destination,
+                  use_minimal_example=False, world=None):
 
     """
     processes raw ports data to dataframe and connects port to the closest coastline
@@ -33,6 +35,9 @@ def process_ports(ports_file, coastlines, landmasses, boundaries, destination, u
 
     ports.drop_duplicates(subset=['latitude', 'longitude'], keep='first')
 
+    if world is None:
+        raise ValueError('Natural Earth country data is required to process ports.')
+    country_aliases = build_country_aliases(world)
     i = 0
     for port in features:
 
@@ -57,7 +62,9 @@ def process_ports(ports_file, coastlines, landmasses, boundaries, destination, u
         ports.loc[index, 'longitude'] = port['geometry']['coordinates'][0]
         ports.loc[index, 'latitude'] = port['geometry']['coordinates'][1]
         ports.loc[index, 'name'] = port['properties']['name']
-        ports.loc[index, 'country'] = port['properties']['country']
+        raw_country = port['properties']['country']
+        ports.loc[index, 'country'] = canonicalize_country(
+            raw_country, aliases=country_aliases)
         ports.loc[index, 'continent'] = port['properties']['continent']
 
         # add closest point to coastline --> necessary as some ports are not connected to land

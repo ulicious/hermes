@@ -30,6 +30,8 @@ from data_processing.configuration import (
     load_algorithm_configuration,
     load_technology_data,
 )
+from data_processing.country_names import (canonicalize_country_index,
+                                           validate_canonical_country_column)
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -166,11 +168,13 @@ logging.info(
 )
 
 world_surface = Polygon([Point([-180, -90]), Point([-180, 90]), Point([180, 90]), Point([180, -90])])
+world = load_world(path_raw_data)
 
 levelized_costs_location = pd.read_csv(
     get_raw_data_path(config_file, 'location_data'), index_col=0, sep=';')
 levelized_costs_country = pd.read_csv(
     get_raw_data_path(config_file, 'country_data'), index_col=0)
+levelized_costs_country = canonicalize_country_index(levelized_costs_country, world)
 
 techno_economic_data_conversion, _ = load_technology_data(config_file)
 
@@ -178,7 +182,6 @@ if not start_locations_update_only_conversion_costs_and_efficiency:
 
     logging.info('Create new locations')
 
-    world = load_world(path_raw_data)
     states = load_states(path_raw_data)
 
     start_location_information = get_start_location_information(config_file, world=world, states=states)
@@ -418,7 +421,8 @@ if not start_locations_update_only_conversion_costs_and_efficiency:
 
         locations.reset_index(drop=True, inplace=True)
 
-        # remove
+        validate_canonical_country_column(
+            locations, 'country_start', world, 'new start_destination_combinations.csv')
         locations.to_csv(config_file['project_folder_path'] + 'start_destination_combinations.csv')
 
         # make again valid polygons
@@ -428,6 +432,8 @@ else:
     logging.info('Update existing locations')
     # locations = pd.read_excel(config_file['project_folder_path'] + 'start_destination_combinations.xlsx', index_col=0)
     locations = pd.read_csv(config_file['project_folder_path'] + 'start_destination_combinations.csv', index_col=0)
+    validate_canonical_country_column(
+        locations, 'country_start', world, 'start_destination_combinations.csv')
 
     # remove all previous costs
     columns_to_keep = ['longitude', 'latitude', 'country_start', 'continent_start', 'geometry']
@@ -484,6 +490,8 @@ locations = attach_conversion_costs_and_efficiency_to_start_locations(locations,
 columns_to_keep = ['longitude', 'latitude', 'country_start', 'continent_start', 'geometry', 'Hydrogen_Gas_Quantity'] + config_file['available_commodity']
 locations = locations[columns_to_keep]
 
+validate_canonical_country_column(
+    locations, 'country_start', world, 'new start_destination_combinations.csv')
 locations['geometry'] = locations['geometry'].apply(lambda x: x.wkt)
 locations.to_csv(config_file['project_folder_path'] + 'start_destination_combinations.csv')
 
