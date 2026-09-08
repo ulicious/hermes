@@ -10,35 +10,24 @@ from shapely.geometry import Point
 
 from algorithm.methods_algorithm import postprocessing_branches
 from algorithm.methods_export import (apply_export_conversion,
-                                      apply_complete_commodity_benchmark,
-                                      apply_export_local_benchmark,
                                       attach_infrastructure_countries,
                                       create_export_branches_at_start,
-                                      export_local_benchmark_snapshot,
+                                      export_branch_snapshot,
+                                      export_node_results_snapshot,
                                       get_complete_export_infrastructure,
                                       get_start_country,
-                                      prefilter_export_branch_candidates,
                                       prepare_export_commodities,
                                       prepare_export_infrastructure_branches,
-                                      preselect_export_infrastructure_branches,
                                       process_export_infrastructure_branches,
                                       process_export_out_tolerance_branches,
-                                      process_export_zero_distance_branches)
-from algorithm.methods_export import remove_superseded_branch_descendants
+                                      process_export_zero_distance_branches,
+                                      update_export_node_results)
 from algorithm.tracking import AlgorithmTracker, branch_count
 from data_processing.configuration import load_technology_data
 from data_processing.helpers_attach_costs import (
     attach_conversion_costs_and_efficiency_to_infrastructure,
     calculate_conversion_costs_and_efficiencies_for_all_combinations,
 )
-
-
-def _attach_transport_properties(branches, available_transport_means):
-    branches = branches.copy()
-    for transport_mean in available_transport_means:
-        branches[transport_mean + '_applicable'] = branches['current_commodity_object'].apply(
-            lambda commodity: commodity.get_transportation_options_specific_mean_of_transport(transport_mean))
-    return branches
 
 
 def _describe_export_infrastructure(complete_infrastructure):
@@ -87,8 +76,8 @@ def _write_complete_marker(path_results, location_index):
         handle.write('complete')
 
 
-def _target_coverage(local_benchmarks, infrastructure_nodes, target_commodities):
-    covered = {(str(node), str(commodity)) for node, commodity, _ in local_benchmarks}
+def _target_coverage(node_results, infrastructure_nodes, target_commodities):
+    covered = {(str(node), str(commodity)) for node, commodity in node_results}
     missing = {
         commodity: [str(node) for node in infrastructure_nodes
                     if (str(node), str(commodity)) not in covered]
@@ -138,7 +127,7 @@ def _prepare_location(location_index, location_data, data, config_file):
 
 
 def run_export_algorithm(args):
-    """Enumerate routes until they first reach infrastructure outside the start country."""
+    """Enumerate all technically feasible domestic routes without reusing infrastructure."""
     location_index, location_data, common_data, config_file, configuration = args
     print(str(location_index) + ': Start Processing export infrastructure')
     started = time.time()
@@ -162,33 +151,19 @@ def run_export_algorithm(args):
         branches['current_total_costs'], errors='coerce').map(math.isfinite)
     branches = branches.loc[finite_start_costs].copy()
     if branches.empty:
-        export_local_benchmark_snapshot(
+        export_node_results_snapshot(
             {}, configuration['path_results'], location_index, 0,
-            data['commodities']['target_commodities'], stage='final_local_benchmarks')
+            stage='final_node_results')
         _write_complete_marker(configuration['path_results'], location_index)
         tracker.event(phase='location', method='run_export_algorithm', event='stop_no_potential',
                       after=0, runtime_s=time.time() - started)
         return None
 
-    local_benchmarks = {}
-    superseded_branches = set()
+    node_results = {}
     iteration = 0
     while not branches.empty:
         iteration_started = time.time()
         iteration_input_count = branch_count(branches)
-        filter_counts = {
-            'local_benchmark_pre_routing': 0,
-            'descendants_pre_routing': 0,
-            'complete_commodity_pre_routing': 0,
-            'global_descendants_pre_routing': 0,
-            'dominated_infrastructure_entries': 0,
-            'minimal_distance_parents': 0,
-            'early_candidate_rejections': 0,
-            'local_benchmark_post_routing': 0,
-            'descendants_post_routing': 0,
-            'complete_commodity_post_routing': 0,
-            'global_descendants_post_routing': 0,
-        }
         tracker.event(iteration=iteration, phase='iteration', method='run_export_algorithm',
                       event='start', before=iteration_input_count, runtime_s=0.0,
                       details={'branch_number': branch_number})
@@ -200,34 +175,16 @@ def run_export_algorithm(args):
             with tracker.time_block(iteration=iteration, phase='conversion',
                                     method='apply_export_conversion', event='runtime'):
                 converted, branch_number = apply_export_conversion(
-                    convertible, data, branch_number, local_benchmarks,
-                    complete_infrastructure.index)
+                    convertible, data, branch_number)
                 branches = pd.concat([converted, unchanged], ignore_index=False)
-            with tracker.time_block(iteration=iteration, phase='benchmark',
-                                    method='apply_export_local_benchmark_pre_routing', event='runtime'):
-                branches, pruned_count, local_benchmarks, newly_superseded = apply_export_local_benchmark(
-                    branches, local_benchmarks)
-            filter_counts['local_benchmark_pre_routing'] = pruned_count
-            superseded_branches.update(newly_superseded)
-            with tracker.time_block(iteration=iteration, phase='benchmark',
-                                    method='remove_superseded_descendants_pre_routing', event='runtime'):
-                branches, descendant_count, local_benchmarks, superseded_branches = \
-                    remove_superseded_branch_descendants(
-                        branches, local_benchmarks, superseded_branches)
-            filter_counts['descendants_pre_routing'] = descendant_count
-            with tracker.time_block(iteration=iteration, phase='benchmark',
-                                    method='apply_complete_commodity_benchmark_pre_routing', event='runtime'):
-                branches, globally_pruned_ids = apply_complete_commodity_benchmark(
-                    branches, local_benchmarks, complete_infrastructure.index)
-            filter_counts['complete_commodity_pre_routing'] = len(globally_pruned_ids)
-            if globally_pruned_ids:
-                superseded_branches.update(globally_pruned_ids)
-                with tracker.time_block(iteration=iteration, phase='benchmark',
-                                        method='remove_global_descendants_pre_routing', event='runtime'):
-                    branches, global_descendant_count, local_benchmarks, superseded_branches = \
-                        remove_superseded_branch_descendants(
-                            branches, local_benchmarks, superseded_branches)
-                filter_counts['global_descendants_pre_routing'] = global_descendant_count
+            update_export_node_results(
+                node_results, branches, data['commodities']['target_commodities'],
+                complete_infrastructure.index)
+            with tracker.time_block(iteration=iteration, phase='export',
+                                    method='export_conversion_branches', event='runtime'):
+                export_branch_snapshot(
+                    branches, configuration['path_results'], location_index, iteration,
+                    'conversion_branches')
         if branches.empty:
             tracker.event(iteration=iteration, phase='iteration', method='run_export_algorithm',
                           event='stop_no_active_branches', before=iteration_input_count, after=0,
@@ -237,27 +194,19 @@ def run_export_algorithm(args):
 
         with tracker.time_block(iteration=iteration, phase='routing',
                                 method='prepare_routing_inputs', event='runtime'):
-            branches = _attach_transport_properties(branches, config_file['available_transport_means'])
             arrived_by_approach = branches['current_transport_mean'].isin(
                 ['Road', 'New_Pipeline_Gas', 'New_Pipeline_Liquid'])
             infrastructure_inputs = prepare_export_infrastructure_branches(
                 branches[arrived_by_approach], complete_infrastructure)
             approach_inputs = branches[~arrived_by_approach]
         with tracker.time_block(iteration=iteration, phase='routing',
-                                method='preselect_export_infrastructure_branches', event='runtime'):
-            infrastructure_inputs, dominated_entry_count = preselect_export_infrastructure_branches(
-                data, infrastructure_inputs, complete_infrastructure, configuration)
-        filter_counts['dominated_infrastructure_entries'] = dominated_entry_count
-
-        with tracker.time_block(iteration=iteration, phase='routing',
                                 method='process_export_infrastructure_branches', event='runtime'):
             infrastructure_options = process_export_infrastructure_branches(
                 data, infrastructure_inputs, complete_infrastructure, configuration)
         with tracker.time_block(iteration=iteration, phase='routing',
                                 method='process_export_out_tolerance_branches', event='runtime'):
-            approach_options, minimal_distance_pruned_count = process_export_out_tolerance_branches(
-                complete_infrastructure, approach_inputs, configuration, local_benchmarks)
-        filter_counts['minimal_distance_parents'] = minimal_distance_pruned_count
+            approach_options = process_export_out_tolerance_branches(
+                complete_infrastructure, approach_inputs, configuration)
         with tracker.time_block(iteration=iteration, phase='routing',
                                 method='process_export_zero_distance_branches', event='runtime'):
             zero_options = process_export_zero_distance_branches(
@@ -270,51 +219,28 @@ def run_export_algorithm(args):
                                 if not frame.empty]
             candidates = (pd.concat(candidate_frames, ignore_index=True)
                           if candidate_frames else pd.DataFrame())
-        with tracker.time_block(iteration=iteration, phase='benchmark',
-                                method='prefilter_generated_candidates', event='runtime'):
-            candidates, early_rejected_count = prefilter_export_branch_candidates(
-                candidates, local_benchmarks, complete_infrastructure.index)
-        filter_counts['early_candidate_rejections'] = early_rejected_count
         with tracker.time_block(iteration=iteration, phase='routing_finalize',
                                 method='materialize_generated_branches', event='runtime'):
             branches, branch_number = _complete_generated_branches(
                 candidates, branches, branch_number)
-        with tracker.time_block(iteration=iteration, phase='benchmark',
-                                method='apply_export_local_benchmark_post_routing', event='runtime'):
-            branches, pruned_count, local_benchmarks, newly_superseded = apply_export_local_benchmark(
-                branches, local_benchmarks)
-        filter_counts['local_benchmark_post_routing'] = pruned_count
-        superseded_branches.update(newly_superseded)
-        with tracker.time_block(iteration=iteration, phase='benchmark',
-                                method='remove_superseded_descendants_post_routing', event='runtime'):
-            branches, descendant_count, local_benchmarks, superseded_branches = \
-                remove_superseded_branch_descendants(
-                    branches, local_benchmarks, superseded_branches)
-        filter_counts['descendants_post_routing'] = descendant_count
-        with tracker.time_block(iteration=iteration, phase='benchmark',
-                                method='apply_complete_commodity_benchmark_post_routing', event='runtime'):
-            branches, globally_pruned_ids = apply_complete_commodity_benchmark(
-                branches, local_benchmarks, complete_infrastructure.index)
-        filter_counts['complete_commodity_post_routing'] = len(globally_pruned_ids)
-        if globally_pruned_ids:
-            superseded_branches.update(globally_pruned_ids)
-            with tracker.time_block(iteration=iteration, phase='benchmark',
-                                    method='remove_global_descendants_post_routing', event='runtime'):
-                branches, global_descendant_count, local_benchmarks, superseded_branches = \
-                    remove_superseded_branch_descendants(
-                        branches, local_benchmarks, superseded_branches)
-            filter_counts['global_descendants_post_routing'] = global_descendant_count
+        update_export_node_results(
+            node_results, branches, data['commodities']['target_commodities'],
+            complete_infrastructure.index)
         with tracker.time_block(iteration=iteration, phase='export',
-                                method='export_iteration_snapshots', event='runtime'):
-            export_local_benchmark_snapshot(
-                local_benchmarks, configuration['path_results'], location_index, iteration,
-                data['commodities']['target_commodities'])
+                                method='export_transport_branches', event='runtime'):
+            export_branch_snapshot(
+                branches, configuration['path_results'], location_index, iteration,
+                'transport_branches')
+        with tracker.time_block(iteration=iteration, phase='export',
+                                method='export_node_results', event='runtime'):
+            export_node_results_snapshot(
+                node_results, configuration['path_results'], location_index, iteration)
         iteration_runtime = time.time() - iteration_started
         tracker.event(iteration=iteration, phase='iteration', method='run_export_algorithm',
                       event='runtime', before=iteration_input_count,
                       after=branch_count(branches), runtime_s=iteration_runtime,
                       details={'branch_number': branch_number,
-                               'filter_counts': filter_counts})
+                               'generated_candidates': len(candidates)})
         print(str(location_index) + '-' + str(iteration)
               + ': Active branches: ' + str(branch_count(branches))
               + ' | Created: ' + str(branch_number)
@@ -322,18 +248,17 @@ def run_export_algorithm(args):
         iteration += 1
 
     with tracker.time_block(iteration=iteration, phase='export',
-                            method='export_final_local_benchmarks', event='runtime'):
-        export_local_benchmark_snapshot(
-            local_benchmarks, configuration['path_results'], location_index, iteration,
-            data['commodities']['target_commodities'],
-            stage='final_local_benchmarks')
+                            method='export_final_node_results', event='runtime'):
+        export_node_results_snapshot(
+            node_results, configuration['path_results'], location_index, iteration,
+            stage='final_node_results')
     missing_targets = _target_coverage(
-        local_benchmarks, complete_infrastructure.index,
+        node_results, complete_infrastructure.index,
         data['commodities']['target_commodities'])
     expected_states = (len(complete_infrastructure)
                        * len(data['commodities']['target_commodities']))
     missing_states = sum(len(nodes) for nodes in missing_targets.values())
-    print(str(location_index) + ': Target benchmark coverage: '
+    print(str(location_index) + ': Target result coverage: '
           + str(expected_states - missing_states) + '/' + str(expected_states)
           + ' node-commodity combinations')
     if missing_targets:
