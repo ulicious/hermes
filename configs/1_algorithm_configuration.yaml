@@ -63,6 +63,7 @@ destination_countries: {}  # dictionary with country: list of states. If complet
 use_biggest_landmass: True  # True/False; some countries have several not connected shapes (USA: mainland, Alaska, hawaii, ...) --> choose biggest
 origin_continents: []  # [] if all continents are possible, else define continents like ['Europe']  # todo: auch bei Voronoi Zellen implementieren
 target_commodity: ['Hydrogen_Gas', 'Hydrogen_Liquid', 'Ammonia', 'Methane_Gas','Methane_Liquid', 'FTF', 'Methanol']
+number_k_best_routes: 10  # routes retained per infrastructure node and commodity in the export runner
 tolerance_distance: 10000  # [m] distance which defines if transport is necessary to change between infrastructure
 to_final_destination_tolerance: 10000  # [m] distance which allows close infrastructure to be at solution
 max_length_new_segment: 100000  # [m] max distance for new pipelines

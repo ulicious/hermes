@@ -9,6 +9,7 @@ from pandas.errors import PerformanceWarning
 from shapely.geometry import Point
 
 from algorithm.methods_export import (apply_export_conversion,
+                                      apply_export_k_best,
                                       attach_infrastructure_countries,
                                       create_export_branches_at_start,
                                       export_branch_snapshot,
@@ -127,9 +128,14 @@ def _prepare_location(location_index, location_data, data, config_file):
 
 
 def run_export_algorithm(args):
-    """Enumerate all technically feasible domestic routes without reusing infrastructure."""
+    """Enumerate the k cheapest domestic routes per node and commodity."""
     location_index, location_data, common_data, config_file, configuration = args
+    number_k_best_routes = int(config_file.get('number_k_best_routes', 10))
+    if number_k_best_routes < 1:
+        raise ValueError('number_k_best_routes must be at least 1.')
     print(str(location_index) + ': Start Processing export infrastructure')
+    print(str(location_index) + ': Retained routes per node and commodity: '
+          + str(number_k_best_routes))
     started = time.time()
     tracker = AlgorithmTracker(location_index, configuration['path_results'])
     preparation_started = time.time()
@@ -160,6 +166,10 @@ def run_export_algorithm(args):
         return None
 
     node_results = {}
+    k_best_routes = {}
+    invalid_branches = set()
+    branches, _, k_best_routes, invalid_branches = apply_export_k_best(
+        branches, k_best_routes, invalid_branches, number_k_best_routes)
     iteration = 0
     while not branches.empty:
         iteration_started = time.time()
@@ -177,6 +187,13 @@ def run_export_algorithm(args):
                 converted, branch_number = apply_export_conversion(
                     convertible, data, branch_number)
                 branches = pd.concat([converted, unchanged], ignore_index=False)
+            with tracker.time_block(iteration=iteration, phase='pruning',
+                                    method='apply_export_k_best_after_conversion',
+                                    event='runtime'):
+                branches, conversion_pruned, k_best_routes, invalid_branches = \
+                    apply_export_k_best(
+                        branches, k_best_routes, invalid_branches,
+                        number_k_best_routes)
             update_export_node_results(
                 node_results, branches, data['commodities']['target_commodities'],
                 complete_infrastructure.index)
@@ -202,15 +219,17 @@ def run_export_algorithm(args):
         with tracker.time_block(iteration=iteration, phase='routing',
                                 method='process_export_infrastructure_branches', event='runtime'):
             infrastructure_options = process_export_infrastructure_branches(
-                data, infrastructure_inputs, complete_infrastructure, configuration)
+                data, infrastructure_inputs, complete_infrastructure, configuration,
+                number_k_best_routes)
         with tracker.time_block(iteration=iteration, phase='routing',
                                 method='process_export_out_tolerance_branches', event='runtime'):
             approach_options = process_export_out_tolerance_branches(
-                complete_infrastructure, approach_inputs, configuration)
+                complete_infrastructure, approach_inputs, configuration,
+                number_k_best_routes)
         with tracker.time_block(iteration=iteration, phase='routing',
                                 method='process_export_zero_distance_branches', event='runtime'):
             zero_options = process_export_zero_distance_branches(
-                data, branches, complete_infrastructure)
+                data, branches, complete_infrastructure, number_k_best_routes)
 
         with tracker.time_block(iteration=iteration, phase='routing',
                                 method='combine_generated_options', event='runtime'):
@@ -223,6 +242,13 @@ def run_export_algorithm(args):
                                 method='materialize_generated_branches', event='runtime'):
             branches, branch_number = _complete_generated_branches(
                 candidates, branches, branch_number)
+        with tracker.time_block(iteration=iteration, phase='pruning',
+                                method='apply_export_k_best_after_transport',
+                                event='runtime'):
+            branches, transport_pruned, k_best_routes, invalid_branches = \
+                apply_export_k_best(
+                    branches, k_best_routes, invalid_branches,
+                    number_k_best_routes)
         update_export_node_results(
             node_results, branches, data['commodities']['target_commodities'],
             complete_infrastructure.index)
@@ -240,7 +266,12 @@ def run_export_algorithm(args):
                       event='runtime', before=iteration_input_count,
                       after=branch_count(branches), runtime_s=iteration_runtime,
                       details={'branch_number': branch_number,
-                               'generated_candidates': len(candidates)})
+                               'generated_candidates': len(candidates),
+                               'k_best_pruned_after_conversion': (
+                                   conversion_pruned if iteration > 0 else 0),
+                               'k_best_pruned_after_transport': transport_pruned,
+                               'invalid_branches': len(invalid_branches),
+                               'number_k_best_routes': number_k_best_routes})
         print(str(location_index) + '-' + str(iteration)
               + ': Active branches: ' + str(branch_count(branches))
               + ' | Created: ' + str(branch_number)

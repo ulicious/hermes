@@ -68,6 +68,91 @@ def materialize_export_branches(branches, parent_branches):
     return result
 
 
+def _collect_k_best_candidate(candidates, candidate, number_k_best_routes):
+    """Keep only k cheapest not-yet-materialized candidates per node/commodity."""
+    state = (str(candidate['current_node']), str(candidate['current_commodity']))
+    state_candidates = candidates.setdefault(state, [])
+    if len(state_candidates) < number_k_best_routes:
+        state_candidates.append(candidate)
+        return
+    worst_position = max(
+        range(len(state_candidates)),
+        key=lambda position: state_candidates[position]['current_total_costs'])
+    if candidate['current_total_costs'] < state_candidates[worst_position]['current_total_costs']:
+        state_candidates[worst_position] = candidate
+
+
+def _candidate_frame(candidates):
+    return pd.DataFrame([
+        candidate for state_candidates in candidates.values()
+        for candidate in state_candidates
+    ])
+
+
+def _route_contains_invalid(route_step, invalid_branches):
+    while route_step is not None:
+        if route_step.branch_index in invalid_branches:
+            return True
+        route_step = route_step.parent
+    return False
+
+
+def apply_export_k_best(branches, k_best_routes, invalid_branches,
+                        number_k_best_routes):
+    """Keep k cheapest branches per node/commodity and invalidate descendants."""
+    if branches.empty:
+        return branches.copy(), 0, k_best_routes, invalid_branches
+    if number_k_best_routes < 1:
+        raise ValueError('number_k_best_routes must be at least 1.')
+
+    invalid = set(invalid_branches)
+    ordered = branches.assign(
+        _k_best_branch_order=branches['branch_index'].astype(str)).sort_values(
+            ['current_total_costs', '_k_best_branch_order'], kind='stable')
+    ordered.drop(columns=['_k_best_branch_order'], inplace=True)
+    for branch_index, branch in ordered.iterrows():
+        if _route_contains_invalid(branch['_route_step'].parent, invalid):
+            invalid.add(branch_index)
+            continue
+        state = (str(branch['current_node']), str(branch['current_commodity']))
+        ranking = [entry for entry in k_best_routes.get(state, [])
+                   if not _route_contains_invalid(entry['route_step'], invalid)]
+        existing = next((entry for entry in ranking
+                         if entry['branch_index'] == branch_index), None)
+        if existing is not None:
+            k_best_routes[state] = ranking
+            continue
+        entry = {'branch_index': branch_index,
+                 'current_total_costs': branch['current_total_costs'],
+                 'route_step': branch['_route_step']}
+        ranking.append(entry)
+        ranking.sort(key=lambda item: (item['current_total_costs'], item['branch_index']))
+        if len(ranking) > number_k_best_routes:
+            removed = ranking.pop()
+            invalid.add(removed['branch_index'])
+        k_best_routes[state] = ranking
+
+    changed = True
+    while changed:
+        changed = False
+        for state, ranking in list(k_best_routes.items()):
+            valid_ranking = []
+            for entry in ranking:
+                if _route_contains_invalid(entry['route_step'], invalid):
+                    if entry['branch_index'] not in invalid:
+                        invalid.add(entry['branch_index'])
+                        changed = True
+                else:
+                    valid_ranking.append(entry)
+            k_best_routes[state] = valid_ranking
+
+    surviving_mask = branches['_route_step'].map(
+        lambda route_step: not _route_contains_invalid(route_step, invalid))
+    surviving = branches.loc[surviving_mask].copy()
+    return (surviving, int((~surviving_mask).sum()),
+            k_best_routes, invalid)
+
+
 def prepare_export_commodities(config_file, location_data, data):
     """Create target commodities plus intermediates required for conversion."""
     conversion_data, transportation_data = load_technology_data(config_file)
@@ -224,7 +309,8 @@ def attach_infrastructure_countries(complete_infrastructure, world, target_count
     return pd.concat([explicit, candidates], axis=0)
 
 
-def process_export_out_tolerance_branches(domestic_infrastructure, branches, configuration):
+def process_export_out_tolerance_branches(domestic_infrastructure, branches, configuration,
+                                          number_k_best_routes):
     """Create every technically valid road/new-pipeline branch."""
     if domestic_infrastructure.empty or branches.empty:
         return pd.DataFrame()
@@ -233,13 +319,12 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches, con
         domestic_infrastructure['latitude'], domestic_infrastructure['longitude'],
         branches['latitude'], branches['longitude'])
     values = np.asarray(distances).transpose()
-    results = []
+    results = {}
     for column, branch_index in enumerate(branches.index):
         branch = branches.loc[branch_index]
         commodity = branch['current_commodity_object']
         visited = branch['_visited_nodes']
         visited_infrastructure = branch['_visited_infrastructure']
-        branch_options = []
         for row, node in enumerate(domestic_infrastructure.index):
             if node == branch['current_node'] or node in visited:
                 continue
@@ -272,7 +357,7 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches, con
                 routed_distance = (0 if direct_distance <= configuration['tolerance_distance']
                                    else direct_distance * configuration['no_road_multiplier'])
                 transport_costs = routed_distance * specific_costs / 1000
-                branch_options.append({
+                candidate = {
                     'previous_branch': branch_index,
                     'current_node': node,
                     'current_distance': routed_distance,
@@ -286,11 +371,10 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches, con
                     'longitude': domestic_infrastructure.at[node, 'longitude'],
                     'taken_route': (branch['current_node'], transport_mean, routed_distance, node, 1),
                     'total_efficiency': branch['total_efficiency'],
-                })
+                }
+                _collect_k_best_candidate(results, candidate, number_k_best_routes)
 
-        results.extend(branch_options)
-
-    return pd.DataFrame(results)
+    return _candidate_frame(results)
 
 
 def prepare_export_infrastructure_branches(branches, complete_infrastructure):
@@ -310,9 +394,10 @@ def prepare_export_infrastructure_branches(branches, complete_infrastructure):
     return prepared
 
 
-def process_export_zero_distance_branches(data, branches, complete_infrastructure):
+def process_export_zero_distance_branches(data, branches, complete_infrastructure,
+                                          number_k_best_routes):
     """Create co-located infrastructure transfers without costs or target assessment."""
-    results = []
+    results = {}
     tolerance_locations = data.get('in_tolerance_locations', {})
     for branch_index, branch in branches.iterrows():
         visited_nodes = branch['_visited_nodes']
@@ -325,7 +410,7 @@ def process_export_zero_distance_branches(data, branches, complete_infrastructur
             graph = complete_infrastructure.at[node, 'graph']
             if (isinstance(graph, str) and graph in visited_infrastructure):
                 continue
-            results.append({
+            candidate = {
                 'previous_branch': branch_index,
                 'current_node': node,
                 'current_distance': 0,
@@ -339,13 +424,15 @@ def process_export_zero_distance_branches(data, branches, complete_infrastructur
                 'longitude': complete_infrastructure.at[node, 'longitude'],
                 'taken_route': (branch['current_node'], 'Road', 0, node, 1),
                 'total_efficiency': branch['total_efficiency'],
-            })
-    return pd.DataFrame(results)
+            }
+            _collect_k_best_candidate(results, candidate, number_k_best_routes)
+    return _candidate_frame(results)
 
 
-def process_export_infrastructure_branches(data, branches, complete_infrastructure, configuration):
+def process_export_infrastructure_branches(data, branches, complete_infrastructure, configuration,
+                                           number_k_best_routes):
     """Create existing-pipeline continuations; ports are terminal nodes."""
-    results = []
+    results = {}
     for branch_index, branch in branches.iterrows():
         transport_mean = branch['current_transport_mean']
         if transport_mean not in ('Pipeline_Gas', 'Pipeline_Liquid'):
@@ -381,7 +468,7 @@ def process_export_infrastructure_branches(data, branches, complete_infrastructu
             transport_costs = distance / 1000 * specific_costs
             total_costs = branch['current_total_costs'] + transport_costs
             total_efficiency = branch['total_efficiency']
-            results.append({
+            candidate = {
                 'previous_branch': branch_index,
                 'current_node': node,
                 'current_distance': distance,
@@ -395,8 +482,9 @@ def process_export_infrastructure_branches(data, branches, complete_infrastructu
                 'longitude': complete_infrastructure.at[node, 'longitude'],
                 'taken_route': (branch['current_node'], transport_mean, distance, node, route_efficiency),
                 'total_efficiency': total_efficiency,
-            })
-    return pd.DataFrame(results)
+            }
+            _collect_k_best_candidate(results, candidate, number_k_best_routes)
+    return _candidate_frame(results)
 
 
 def export_branch_snapshot(branches, path_results, location_index, iteration, stage):
