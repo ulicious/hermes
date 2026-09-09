@@ -13,6 +13,7 @@ from algorithm.methods_export import (apply_export_conversion,
                                       attach_infrastructure_countries,
                                       create_export_branches_at_start,
                                       export_branch_snapshot,
+                                      export_k_best_routes_snapshot,
                                       export_node_results_snapshot,
                                       get_complete_export_infrastructure,
                                       get_start_country,
@@ -131,6 +132,8 @@ def run_export_algorithm(args):
     """Enumerate the k cheapest domestic routes per node and commodity."""
     location_index, location_data, common_data, config_file, configuration = args
     number_k_best_routes = int(config_file.get('number_k_best_routes', 10))
+    export_intermediate_branches = bool(config_file.get(
+        'export_intermediate_branches', False))
     if number_k_best_routes < 1:
         raise ValueError('number_k_best_routes must be at least 1.')
     print(str(location_index) + ': Start Processing export infrastructure')
@@ -158,7 +161,7 @@ def run_export_algorithm(args):
     if branches.empty:
         export_node_results_snapshot(
             {}, configuration['path_results'], location_index, 0,
-            stage='final_node_results', k_best_routes={})
+            stage='final_nodes', k_best_routes={})
         _write_complete_marker(configuration['path_results'], location_index)
         tracker.event(phase='location', method='run_export_algorithm', event='stop_no_potential',
                       after=0, runtime_s=time.time() - started)
@@ -196,11 +199,12 @@ def run_export_algorithm(args):
             update_export_node_results(
                 node_results, branches, data['commodities']['target_commodities'],
                 complete_infrastructure.index)
-            with tracker.time_block(iteration=iteration, phase='export',
-                                    method='export_conversion_branches', event='runtime'):
-                export_branch_snapshot(
-                    branches, configuration['path_results'], location_index, iteration,
-                    'conversion_branches')
+            if export_intermediate_branches:
+                with tracker.time_block(iteration=iteration, phase='export',
+                                        method='export_conversion_branches', event='runtime'):
+                    export_branch_snapshot(
+                        branches, configuration['path_results'], location_index, iteration,
+                        'conversion_branches')
         if branches.empty:
             tracker.event(iteration=iteration, phase='iteration', method='run_export_algorithm',
                           event='stop_no_active_branches', before=iteration_input_count, after=0,
@@ -251,15 +255,16 @@ def run_export_algorithm(args):
         update_export_node_results(
             node_results, branches, data['commodities']['target_commodities'],
             complete_infrastructure.index)
-        with tracker.time_block(iteration=iteration, phase='export',
-                                method='export_transport_branches', event='runtime'):
-            export_branch_snapshot(
-                branches, configuration['path_results'], location_index, iteration,
-                'transport_branches')
-        with tracker.time_block(iteration=iteration, phase='export',
-                                method='export_node_results', event='runtime'):
-            export_node_results_snapshot(
-                node_results, configuration['path_results'], location_index, iteration)
+        if export_intermediate_branches:
+            with tracker.time_block(iteration=iteration, phase='export',
+                                    method='export_transport_branches', event='runtime'):
+                export_branch_snapshot(
+                    branches, configuration['path_results'], location_index, iteration,
+                    'transport_branches')
+            with tracker.time_block(iteration=iteration, phase='export',
+                                    method='export_node_results', event='runtime'):
+                export_node_results_snapshot(
+                    node_results, configuration['path_results'], location_index, iteration)
         iteration_runtime = time.time() - iteration_started
         tracker.event(iteration=iteration, phase='iteration', method='run_export_algorithm',
                       event='runtime', before=iteration_input_count,
@@ -281,8 +286,13 @@ def run_export_algorithm(args):
                             method='export_final_node_results', event='runtime'):
         export_node_results_snapshot(
             node_results, configuration['path_results'], location_index, iteration,
-            stage='final_node_results', k_best_routes=k_best_routes,
+            stage='final_nodes', k_best_routes=k_best_routes,
             invalid_branches=invalid_branches)
+    with tracker.time_block(iteration=iteration, phase='export',
+                            method='export_final_routes', event='runtime'):
+        export_k_best_routes_snapshot(
+            node_results, k_best_routes, invalid_branches,
+            configuration['path_results'], location_index, iteration)
     missing_targets = _target_coverage(
         node_results, complete_infrastructure.index,
         data['commodities']['target_commodities'])

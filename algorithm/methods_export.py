@@ -646,6 +646,29 @@ def export_node_results_snapshot(node_results, path_results, location_index, ite
         snapshot, path_results, location_index, iteration, stage)
 
 
+def export_k_best_routes_snapshot(node_results, k_best_routes, invalid_branches,
+                                  path_results, location_index, iteration,
+                                  stage='final_routes'):
+    """Export complete histories for retained routes reaching final node states."""
+    invalid = invalid_branches or set()
+    rows = []
+    for node, commodity in sorted(node_results):
+        ranking = sorted(
+            (entry for entry in k_best_routes.get((node, commodity), [])
+             if not _route_contains_invalid(entry['route_step'], invalid)),
+            key=lambda entry: (entry['current_total_costs'], entry['branch_index']))
+        for entry in ranking:
+            rows.append({
+                'branch_index': entry['branch_index'],
+                'current_node': node,
+                'current_commodity': commodity,
+                'current_total_costs': entry['current_total_costs'],
+                '_route_step': entry['route_step'],
+            })
+    return export_branch_snapshot(
+        pd.DataFrame(rows), path_results, location_index, iteration, stage)
+
+
 def apply_export_conversion(branches, data, branch_number):
     """Create every technically feasible conversion branch without cost pruning."""
     if branches.empty:
