@@ -78,6 +78,31 @@ def _write_complete_marker(path_results, location_index):
         handle.write('complete')
 
 
+def _clear_export_snapshots(path_results, location_index):
+    """Remove snapshots from an earlier incomplete run for this location."""
+    folder = os.path.join(path_results, 'export_infrastructure_branches', str(location_index))
+    if not os.path.isdir(folder):
+        return
+    suffixes = ('_conversion_branches.csv', '_transport_branches.csv',
+                '_node_results.csv', '_final_node_results.csv',
+                '_final_nodes.csv', '_final_routes.csv')
+    for filename in os.listdir(folder):
+        if filename.endswith(suffixes):
+            os.remove(os.path.join(folder, filename))
+
+
+def _remove_intermediate_export_snapshots(path_results, location_index):
+    """Remove only per-iteration exports after final outputs were written."""
+    folder = os.path.join(path_results, 'export_infrastructure_branches', str(location_index))
+    if not os.path.isdir(folder):
+        return
+    suffixes = ('_conversion_branches.csv', '_transport_branches.csv',
+                '_node_results.csv')
+    for filename in os.listdir(folder):
+        if filename.endswith(suffixes):
+            os.remove(os.path.join(folder, filename))
+
+
 def _target_coverage(node_results, infrastructure_nodes, target_commodities):
     covered = {(str(node), str(commodity)) for node, commodity in node_results}
     missing = {
@@ -138,6 +163,8 @@ def run_export_algorithm(args):
         raise ValueError('number_k_best_routes must be at least 1.')
     print(str(location_index) + ': Start Processing export infrastructure')
     started = time.time()
+    if not export_intermediate_branches:
+        _clear_export_snapshots(configuration['path_results'], location_index)
     tracker = AlgorithmTracker(location_index, configuration['path_results'],
                                tracking_folder='export_infrastructure_tracking')
     preparation_started = time.time()
@@ -293,6 +320,9 @@ def run_export_algorithm(args):
         export_k_best_routes_snapshot(
             node_results, k_best_routes, invalid_branches,
             configuration['path_results'], location_index, iteration)
+    if not export_intermediate_branches:
+        _remove_intermediate_export_snapshots(
+            configuration['path_results'], location_index)
     missing_targets = _target_coverage(
         node_results, complete_infrastructure.index,
         data['commodities']['target_commodities'])
