@@ -244,7 +244,41 @@ def _filter_infrastructure_by_reachable_set(infrastructure_index, complete_infra
 
 
 def _build_reachable_distance_blocks(complete_infrastructure, infrastructure_index, branches_no_duplicates,
-                                     branches, data):
+                                     branches, data, _group_networks=True):
+    # Split before allocating distances: a large network must not be paired with
+    # its own exit nodes. Validate against history, matching the later mask.
+    if _group_networks and 'all_previous_infrastructure' in branches.columns:
+        groups = {}
+        for branch_index, history in branches['all_previous_infrastructure'].items():
+            network = None
+            for infrastructure in reversed(history):
+                if infrastructure in data.get('Pipeline_Gas', {}):
+                    network = ('Pipeline_Gas', infrastructure)
+                    break
+                if infrastructure in data.get('Pipeline_Liquid', {}):
+                    network = ('Pipeline_Liquid', infrastructure)
+                    break
+            groups.setdefault(network, []).append(branch_index)
+
+        blocks = []
+        for network, branch_indices in groups.items():
+            group = branches.loc[branch_indices]
+            targets = infrastructure_index
+            if network is not None:
+                mode, graph = network
+                excluded = data[mode][graph]['NodeLocations'].index
+                targets = pd.Index(targets).difference(excluded, sort=False)
+            if len(targets) == 0:
+                continue
+            group_blocks = _build_reachable_distance_blocks(
+                complete_infrastructure, targets,
+                group.drop_duplicates(subset=['current_node'], keep='first'),
+                group, data, _group_networks=False)
+            for block in group_blocks:
+                block['branch_indices'] = group.index
+            blocks.extend(group_blocks)
+        return blocks
+
     if (
         'continent' not in complete_infrastructure.columns
         or 'current_continent' not in branches.columns
@@ -952,6 +986,8 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
             for c in branches['current_commodity'].unique():
                 c_branches = branches[branches['current_commodity'] == c]
+                if 'branch_indices' in distance_block:
+                    c_branches = c_branches.loc[c_branches.index.intersection(distance_block['branch_indices'])]
                 if c_branches.empty:
                     continue
 
