@@ -45,6 +45,8 @@ if __name__ == '__main__':
     _prepare_result_folders(config_file, configuration)
     location_data = location_data.drop(_processed_locations(configuration), errors='ignore')
 
+    # location_data = location_data.loc[[5869], :]
+
     print('Start export-infrastructure branch enumeration')
     print('Retained routes per node and commodity: '
           + str(int(config_file.get('number_k_best_routes', 10))))
