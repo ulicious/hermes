@@ -244,41 +244,7 @@ def _filter_infrastructure_by_reachable_set(infrastructure_index, complete_infra
 
 
 def _build_reachable_distance_blocks(complete_infrastructure, infrastructure_index, branches_no_duplicates,
-                                     branches, data, _group_networks=True):
-    # Split before allocating distances: a large network must not be paired with
-    # its own exit nodes. Validate against history, matching the later mask.
-    if _group_networks and 'all_previous_infrastructure' in branches.columns:
-        groups = {}
-        for branch_index, history in branches['all_previous_infrastructure'].items():
-            network = None
-            for infrastructure in reversed(history):
-                if infrastructure in data.get('Pipeline_Gas', {}):
-                    network = ('Pipeline_Gas', infrastructure)
-                    break
-                if infrastructure in data.get('Pipeline_Liquid', {}):
-                    network = ('Pipeline_Liquid', infrastructure)
-                    break
-            groups.setdefault(network, []).append(branch_index)
-
-        blocks = []
-        for network, branch_indices in groups.items():
-            group = branches.loc[branch_indices]
-            targets = infrastructure_index
-            if network is not None:
-                mode, graph = network
-                excluded = data[mode][graph]['NodeLocations'].index
-                targets = pd.Index(targets).difference(excluded, sort=False)
-            if len(targets) == 0:
-                continue
-            group_blocks = _build_reachable_distance_blocks(
-                complete_infrastructure, targets,
-                group.drop_duplicates(subset=['current_node'], keep='first'),
-                group, data, _group_networks=False)
-            for block in group_blocks:
-                block['branch_indices'] = group.index
-            blocks.extend(group_blocks)
-        return blocks
-
+                                     branches, data):
     if (
         'continent' not in complete_infrastructure.columns
         or 'current_continent' not in branches.columns
@@ -326,16 +292,6 @@ def _build_reachable_distance_blocks(complete_infrastructure, infrastructure_ind
         })
 
     return distance_blocks
-
-
-def _expand_distance_block_to_branches(distance_block, branches):
-    """Reuse node distances without collapsing branches with different histories."""
-    if 'branch_indices' in distance_block:
-        branches = branches.loc[branches.index.intersection(distance_block['branch_indices'])]
-    lookup = {node: position for position, node in enumerate(distance_block['column_nodes'])}
-    branch_meta = branches.loc[branches['current_node'].isin(lookup)]
-    positions = [lookup[node] for node in branch_meta['current_node']]
-    return distance_block['values'][:, positions], branch_meta
 
 
 def _apply_reachable_continent_mask(mask, row_index, column_index, branches, complete_infrastructure, data):
@@ -996,19 +952,22 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
             for c in branches['current_commodity'].unique():
                 c_branches = branches[branches['current_commodity'] == c]
-                if 'branch_indices' in distance_block:
-                    c_branches = c_branches.loc[c_branches.index.intersection(distance_block['branch_indices'])]
                 if c_branches.empty:
                     continue
 
                 commodity_object = data['commodities']['commodity_objects'][c]
 
-                # One distance column per branch, including co-located branches
-                # with different histories and therefore different allowed targets.
-                distance_values, branch_meta = _expand_distance_block_to_branches(distance_block, c_branches)
-                if branch_meta.empty:
+                # exchange current_node columns with corresponding branch names
+                node_to_branch = dict(zip(c_branches['current_node'], c_branches.index))
+                block_column_lookup = {node: position for position, node in enumerate(block_column_nodes)}
+                columns_to_keep = [n for n in block_column_nodes if n in node_to_branch]
+                if not columns_to_keep:
                     continue
-                column_index = branch_meta.index.to_numpy(dtype=object)
+
+                column_positions = [block_column_lookup[n] for n in columns_to_keep]
+                column_index = np.asarray([node_to_branch[n] for n in columns_to_keep], dtype=object)
+                distance_values = block_values[:, column_positions]
+                branch_meta = c_branches.loc[column_index]
 
                 # some locations are within tolerance. These are processed separately as we don't need transportation
                 in_tolerance_before = np.ones(distance_values.shape, dtype=bool)
