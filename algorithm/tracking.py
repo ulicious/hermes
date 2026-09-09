@@ -38,11 +38,11 @@ def branch_count(branches):
 
 
 class AlgorithmTracker:
-    def __init__(self, location, path_results, enabled=True):
+    def __init__(self, location, path_results, enabled=True, tracking_folder='algorithm_tracking'):
         self.location = location
         self.enabled = enabled
         self.start_time = time.perf_counter()
-        self.path_tracking = os.path.join(path_results, 'algorithm_tracking')
+        self.path_tracking = os.path.join(path_results, tracking_folder)
         self.path_file = os.path.join(self.path_tracking, f'{location}_tracking.jsonl')
 
         if self.enabled:

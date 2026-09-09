@@ -135,7 +135,8 @@ def run_export_algorithm(args):
         raise ValueError('number_k_best_routes must be at least 1.')
     print(str(location_index) + ': Start Processing export infrastructure')
     started = time.time()
-    tracker = AlgorithmTracker(location_index, configuration['path_results'])
+    tracker = AlgorithmTracker(location_index, configuration['path_results'],
+                               tracking_folder='export_infrastructure_tracking')
     preparation_started = time.time()
     data, complete_infrastructure, branches, branch_number = \
         _prepare_location(location_index, location_data, common_data, config_file)
@@ -157,7 +158,7 @@ def run_export_algorithm(args):
     if branches.empty:
         export_node_results_snapshot(
             {}, configuration['path_results'], location_index, 0,
-            stage='final_node_results')
+            stage='final_node_results', k_best_routes={})
         _write_complete_marker(configuration['path_results'], location_index)
         tracker.event(phase='location', method='run_export_algorithm', event='stop_no_potential',
                       after=0, runtime_s=time.time() - started)
@@ -280,7 +281,8 @@ def run_export_algorithm(args):
                             method='export_final_node_results', event='runtime'):
         export_node_results_snapshot(
             node_results, configuration['path_results'], location_index, iteration,
-            stage='final_node_results')
+            stage='final_node_results', k_best_routes=k_best_routes,
+            invalid_branches=invalid_branches)
     missing_targets = _target_coverage(
         node_results, complete_infrastructure.index,
         data['commodities']['target_commodities'])

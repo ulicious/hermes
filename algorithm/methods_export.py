@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 from typing import NamedTuple
 
@@ -78,8 +79,11 @@ def _collect_k_best_candidate(candidates, candidate, number_k_best_routes):
         return
     worst_position = max(
         range(len(state_candidates)),
-        key=lambda position: state_candidates[position]['current_total_costs'])
-    if candidate['current_total_costs'] < state_candidates[worst_position]['current_total_costs']:
+        key=lambda position: (state_candidates[position]['current_total_costs'],
+                              state_candidates[position].get('_candidate_order', ())))
+    if (candidate['current_total_costs'], candidate.get('_candidate_order', ())) < (
+            state_candidates[worst_position]['current_total_costs'],
+            state_candidates[worst_position].get('_candidate_order', ())):
         state_candidates[worst_position] = candidate
 
 
@@ -312,79 +316,104 @@ def attach_infrastructure_countries(complete_infrastructure, world, target_count
 
 def process_export_out_tolerance_branches(domestic_infrastructure, branches, configuration,
                                           number_k_best_routes):
-    """Create every technically valid road/new-pipeline branch."""
+    """Mask visited networks and distances before building road/pipeline candidates."""
     if domestic_infrastructure.empty or branches.empty:
         return pd.DataFrame()
 
-    # Distances depend only on the current node, not on a branch's costs,
-    # commodity or history. Calculate each origin-to-infrastructure vector once
-    # and reuse it for every branch located at that node.
-    branches_no_duplicates = branches.drop_duplicates(subset=['current_node'], keep='first')
-    distances = calc_distance_list_to_list(
-        domestic_infrastructure['latitude'], domestic_infrastructure['longitude'],
-        branches_no_duplicates['latitude'], branches_no_duplicates['longitude'])
-    values = np.asarray(distances)
-    origin_positions = {
-        node: position
-        for position, node in enumerate(branches_no_duplicates['current_node'])
-    }
-    results = {}
-    for branch_index in branches.index:
-        branch = branches.loc[branch_index]
-        origin_position = origin_positions[branch['current_node']]
-        commodity = branch['current_commodity_object']
-        visited = branch['_visited_nodes']
-        visited_infrastructure = branch['_visited_infrastructure']
-        for row, node in enumerate(domestic_infrastructure.index):
-            if node == branch['current_node'] or node in visited:
-                continue
-            node_infrastructure = domestic_infrastructure.at[node, 'graph']
-            if isinstance(node_infrastructure, str):
-                node_infrastructure = {node_infrastructure}
-            elif isinstance(node_infrastructure, (list, tuple, set)):
-                node_infrastructure = set(node_infrastructure)
-            else:
-                node_infrastructure = set()
-            if visited_infrastructure.intersection(node_infrastructure):
-                continue
-            direct_distance = float(values[origin_position, row])
-            options = []
-            if (commodity.get_transportation_options_specific_mean_of_transport('Road')
-                    and branch['current_transport_mean'] not in
-                    ['Road', 'New_Pipeline_Gas', 'New_Pipeline_Liquid']
-                    and direct_distance <= (configuration['max_length_road']
-                                            / configuration['no_road_multiplier'])):
-                options.append(('Road', commodity.get_transportation_costs_specific_mean_of_transport('Road')))
-            for transport_mean in ('New_Pipeline_Gas', 'New_Pipeline_Liquid'):
-                if (commodity.get_transportation_options_specific_mean_of_transport(transport_mean)
-                        and branch['current_transport_mean'] not in
-                        ['Road', 'New_Pipeline_Gas', 'New_Pipeline_Liquid']
-                        and direct_distance <= (configuration['max_length_new_segment']
-                                                / configuration['no_road_multiplier'])):
-                    options.append((transport_mean,
-                                    commodity.get_transportation_costs_specific_mean_of_transport(transport_mean)))
-            for transport_mean, specific_costs in options:
-                routed_distance = (0 if direct_distance <= configuration['tolerance_distance']
-                                   else direct_distance * configuration['no_road_multiplier'])
-                transport_costs = routed_distance * specific_costs / 1000
-                candidate = {
-                    'previous_branch': branch_index,
-                    'current_node': node,
-                    'current_distance': routed_distance,
-                    'current_transport_mean': transport_mean,
-                    'current_infrastructure': None,
-                    'current_commodity': branch['current_commodity'],
-                    'current_commodity_object': commodity,
-                    'current_transportation_costs': transport_costs,
-                    'current_total_costs': branch['current_total_costs'] + transport_costs,
-                    'latitude': domestic_infrastructure.at[node, 'latitude'],
-                    'longitude': domestic_infrastructure.at[node, 'longitude'],
-                    'taken_route': (branch['current_node'], transport_mean, routed_distance, node, 1),
-                    'total_efficiency': branch['total_efficiency'],
-                }
-                _collect_k_best_candidate(results, candidate, number_k_best_routes)
+    # Normalize network membership once, not once per branch/target pair.
+    network_rows = {}
+    for position, graph in enumerate(domestic_infrastructure['graph']):
+        graphs = [graph] if isinstance(graph, str) else (
+            graph if isinstance(graph, (list, tuple, set)) else [])
+        for network in graphs:
+            network_rows.setdefault(network, []).append(position)
+    groups = {}
+    for position, history in enumerate(branches['_visited_infrastructure']):
+        groups.setdefault(frozenset(history), []).append(position)
 
-    return _candidate_frame(results)
+    transport_means = ('Road', 'New_Pipeline_Gas', 'New_Pipeline_Liquid')
+    results = {}
+    for history, branch_positions in groups.items():
+        target_mask = np.ones(len(domestic_infrastructure), dtype=bool)
+        for network in history:
+            target_mask[network_rows.get(network, [])] = False
+        targets = domestic_infrastructure.iloc[np.flatnonzero(target_mask)]
+        if targets.empty:
+            continue
+        group = branches.iloc[branch_positions]
+        # Group histories BEFORE deduplicating origins. Branches remain intact.
+        origins = group.drop_duplicates(subset=['current_node'], keep='first')
+        # Bound temporary distance matrices to about one million cells.
+        block_size = max(1, 1_000_000 // len(targets))
+        for start in range(0, len(origins), block_size):
+            origin_block = origins.iloc[start:start + block_size]
+            values = np.asarray(calc_distance_list_to_list(
+                targets['latitude'], targets['longitude'],
+                origin_block['latitude'], origin_block['longitude']))
+            origin_lookup = {node: position for position, node in
+                             enumerate(origin_block['current_node'])}
+            # Range masks are evaluated for entire distance blocks in NumPy.
+            limits = [configuration['max_length_road'],
+                      configuration['max_length_new_segment'],
+                      configuration['max_length_new_segment']]
+            range_masks = [values <= limit / configuration['no_road_multiplier']
+                           for limit in limits]
+            for branch_position in branch_positions:
+                branch = branches.iloc[branch_position]
+                if branch['current_node'] not in origin_lookup:
+                    continue
+                if branch['current_transport_mean'] in transport_means:
+                    continue
+                branch_index = branches.index[branch_position]
+                origin_position = origin_lookup[branch['current_node']]
+                commodity = branch['current_commodity_object']
+                # Individual visited nodes can differ even within a history group.
+                allowed = np.ones(len(targets), dtype=bool)
+                visited_positions = targets.index.get_indexer(
+                    list(branch['_visited_nodes'] | {branch['current_node']}))
+                allowed[visited_positions[visited_positions >= 0]] = False
+                masks = np.column_stack([
+                    range_masks[mode_position][origin_position] & allowed
+                    if commodity.get_transportation_options_specific_mean_of_transport(mode)
+                    else np.zeros(len(targets), dtype=bool)
+                    for mode_position, mode in enumerate(transport_means)])
+                target_positions, mode_positions = np.nonzero(masks)
+                costs = {
+                    mode: commodity.get_transportation_costs_specific_mean_of_transport(mode)
+                    for mode in transport_means
+                    if commodity.get_transportation_options_specific_mean_of_transport(mode)}
+                # Python only visits valid pairs, never every target per branch.
+                for row, mode_position in zip(target_positions, mode_positions):
+                    node = targets.index[row]
+                    direct_distance = float(values[origin_position, row])
+                    transport_mean = transport_means[mode_position]
+                    specific_costs = costs[transport_mean]
+                    routed_distance = (0 if direct_distance <= configuration['tolerance_distance']
+                                       else direct_distance * configuration['no_road_multiplier'])
+                    transport_costs = routed_distance * specific_costs / 1000
+                    candidate = {
+                        'previous_branch': branch_index,
+                        'current_node': node,
+                        'current_distance': routed_distance,
+                        'current_transport_mean': transport_mean,
+                        'current_infrastructure': None,
+                        'current_commodity': branch['current_commodity'],
+                        'current_commodity_object': commodity,
+                        'current_transportation_costs': transport_costs,
+                        'current_total_costs': branch['current_total_costs'] + transport_costs,
+                        'latitude': targets.at[node, 'latitude'],
+                        'longitude': targets.at[node, 'longitude'],
+                        'taken_route': (branch['current_node'], transport_mean, routed_distance, node, 1),
+                        'total_efficiency': branch['total_efficiency'],
+                        # Group traversal must not decide which equal-cost route wins.
+                        '_candidate_order': (branch_position, int(mode_position)),
+                    }
+                    _collect_k_best_candidate(results, candidate, number_k_best_routes)
+
+    result = _candidate_frame(results)
+    if not result.empty:
+        result.drop(columns=['_candidate_order'], inplace=True)
+    return result
 
 
 def prepare_export_infrastructure_branches(branches, complete_infrastructure):
@@ -581,8 +610,19 @@ def update_export_node_results(node_results, branches, target_commodities,
 
 
 def export_node_results_snapshot(node_results, path_results, location_index, iteration,
-                                 stage='node_results'):
+                                 stage='node_results', k_best_routes=None, invalid_branches=None):
     """Write passive minimum-cost results without branch histories."""
+    if k_best_routes is not None:
+        invalid = invalid_branches if invalid_branches is not None else set()
+        branch_ids = {}
+        for node, commodity in sorted(node_results):
+            ranking = sorted(
+                (entry for entry in k_best_routes.get((node, commodity), [])
+                 if not _route_contains_invalid(entry['route_step'], invalid)),
+                key=lambda entry: (entry['current_total_costs'], entry['branch_index']))
+            branch_ids[(node, commodity)] = json.dumps(
+                [str(entry['branch_index']) for entry in ranking])
+
     rows = [{
         'current_node': node,
         'current_commodity': commodity,
@@ -592,6 +632,9 @@ def export_node_results_snapshot(node_results, path_results, location_index, ite
     snapshot = pd.DataFrame(rows, columns=[
         'current_node', 'current_commodity', 'current_total_costs',
         'total_efficiency'])
+    if k_best_routes is not None:
+        snapshot['k_best_branch_ids'] = [
+            branch_ids[(row['current_node'], row['current_commodity'])] for row in rows]
     if not snapshot.empty:
         snapshot.sort_values(
             ['current_total_costs'], inplace=True, kind='stable')
