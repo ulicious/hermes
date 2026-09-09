@@ -328,6 +328,16 @@ def _build_reachable_distance_blocks(complete_infrastructure, infrastructure_ind
     return distance_blocks
 
 
+def _expand_distance_block_to_branches(distance_block, branches):
+    """Reuse node distances without collapsing branches with different histories."""
+    if 'branch_indices' in distance_block:
+        branches = branches.loc[branches.index.intersection(distance_block['branch_indices'])]
+    lookup = {node: position for position, node in enumerate(distance_block['column_nodes'])}
+    branch_meta = branches.loc[branches['current_node'].isin(lookup)]
+    positions = [lookup[node] for node in branch_meta['current_node']]
+    return distance_block['values'][:, positions], branch_meta
+
+
 def _apply_reachable_continent_mask(mask, row_index, column_index, branches, complete_infrastructure, data):
     if (
         mask.size == 0
@@ -993,17 +1003,12 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
 
                 commodity_object = data['commodities']['commodity_objects'][c]
 
-                # exchange current_node columns with corresponding branch names
-                node_to_branch = dict(zip(c_branches['current_node'], c_branches.index))
-                block_column_lookup = {node: position for position, node in enumerate(block_column_nodes)}
-                columns_to_keep = [n for n in block_column_nodes if n in node_to_branch]
-                if not columns_to_keep:
+                # One distance column per branch, including co-located branches
+                # with different histories and therefore different allowed targets.
+                distance_values, branch_meta = _expand_distance_block_to_branches(distance_block, c_branches)
+                if branch_meta.empty:
                     continue
-
-                column_positions = [block_column_lookup[n] for n in columns_to_keep]
-                column_index = np.asarray([node_to_branch[n] for n in columns_to_keep], dtype=object)
-                distance_values = block_values[:, column_positions]
-                branch_meta = c_branches.loc[column_index]
+                column_index = branch_meta.index.to_numpy(dtype=object)
 
                 # some locations are within tolerance. These are processed separately as we don't need transportation
                 in_tolerance_before = np.ones(distance_values.shape, dtype=bool)
