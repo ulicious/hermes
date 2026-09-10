@@ -6,6 +6,7 @@ from itertools import combinations
 
 import networkx as nx
 import pandas as pd
+from tqdm import tqdm
 
 BORDER_NODE_COLUMNS = [
     'pipeline_type', 'graph', 'country', 'node', 'neighbor_country',
@@ -55,7 +56,7 @@ def _append_route(rows, pipeline_type, graph_id, origin, destination,
 
 
 def calculate_pipeline_border_routes(network_graph_data, nodes, pipeline_type,
-                                      number_k_best_routes):
+                                      number_k_best_routes, show_progress=False):
     """Return border nodes and k best full-network cross-country routes.
 
     A border node is an endpoint of an edge whose other endpoint belongs to a
@@ -109,13 +110,23 @@ def calculate_pipeline_border_routes(network_graph_data, nodes, pipeline_type,
                      neighbor_node=start, cross_border_edge_id=str(edge_id)),
             ))
 
-        for origin, destination in combinations(sorted(border_nodes), 2):
+        cross_country_pairs = [
+            (origin, destination) for origin, destination in combinations(sorted(border_nodes), 2)
+            if border_nodes[origin] != border_nodes[destination]
+        ]
+        if show_progress:
+            print(
+                f'[{pipeline_type}] Network {graph_id}: {len(border_nodes)} border nodes · '
+                f'{len(cross_country_pairs)} cross-country combinations', flush=True)
+        iterator = tqdm(
+            cross_country_pairs,
+            desc=f'{pipeline_type} network {graph_id}',
+            unit='combination',
+            disable=not show_progress,
+        )
+        for origin, destination in iterator:
             origin_country = border_nodes[origin]
             destination_country = border_nodes[destination]
-            # Internal country-to-country summaries are deliberately omitted.
-            # Transit countries are retained only as part of a cross-country path.
-            if origin_country == destination_country:
-                continue
             try:
                 paths = nx.shortest_simple_paths(
                     graph, origin, destination, weight='distance')
@@ -130,6 +141,8 @@ def calculate_pipeline_border_routes(network_graph_data, nodes, pipeline_type,
                         break
             except nx.NetworkXNoPath:
                 continue
+        if show_progress:
+            print(f'[{pipeline_type}] Network {graph_id}: completed', flush=True)
 
     border_nodes = pd.DataFrame(border_rows, columns=BORDER_NODE_COLUMNS)
     routes = pd.DataFrame(route_rows, columns=ROUTE_COLUMNS)
@@ -146,13 +159,16 @@ def calculate_pipeline_border_routes(network_graph_data, nodes, pipeline_type,
 
 
 def export_pipeline_border_routes(gas_graph, gas_nodes, oil_graph, oil_nodes,
-                                  output_folder, number_k_best_routes):
+                                  output_folder, number_k_best_routes, show_progress=False):
     """Calculate and persist gas and liquid-pipeline border-route datasets."""
     border_frames, route_frames = [], []
     for pipeline_type, graph, nodes in (
             ('gas', gas_graph, gas_nodes), ('oil', oil_graph, oil_nodes)):
+        if show_progress:
+            print(f'[{pipeline_type}] Start pipeline border-route calculation', flush=True)
         border_nodes, routes = calculate_pipeline_border_routes(
-            graph, nodes, pipeline_type, number_k_best_routes)
+            graph, nodes, pipeline_type, number_k_best_routes,
+            show_progress=show_progress)
         border_frames.append(border_nodes)
         route_frames.append(routes)
     nonempty_borders = [frame for frame in border_frames if not frame.empty]
