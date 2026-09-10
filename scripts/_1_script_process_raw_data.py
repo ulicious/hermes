@@ -14,6 +14,7 @@ from data_processing.process_network_data_to_network_objects import \
     process_network_data_to_network_objects_with_additional_connection_points
 from data_processing.process_ports import process_ports
 from data_processing.calculate_inner_distances import get_distances_within_networks, get_distances_of_closest_infrastructure, calculate_searoute_distances
+from data_processing.pipeline_border_routes import export_pipeline_border_routes
 from data_processing.helpers_attach_costs import attach_conversion_costs_and_efficiency_to_infrastructure, calculate_conversion_costs_and_efficiencies_for_all_combinations
 from data_processing.process_mip_data import prepare_global_mip_data
 try:
@@ -389,6 +390,8 @@ else:
         ports, 'country', world, path_processed_data + 'ports.csv')
     gas_nodes = read_csv_or_empty(path_processed_data + 'gas_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
     oil_nodes = read_csv_or_empty(path_processed_data + 'oil_pipeline_node_locations.csv', PIPELINE_NODE_COLUMNS)
+    gas_graph = read_csv_or_empty(path_processed_data + 'gas_pipeline_graphs.csv', PIPELINE_GRAPH_COLUMNS)
+    oil_graph = read_csv_or_empty(path_processed_data + 'oil_pipeline_graphs.csv', PIPELINE_GRAPH_COLUMNS)
     if os.path.exists(path_processed_data + 'landmasses.csv'):
         landmasses = pd.read_csv(path_processed_data + 'landmasses.csv')
         landmasses = gpd.GeoDataFrame(geometry=landmasses['geometry'].apply(shapely.wkt.loads))
@@ -396,6 +399,14 @@ else:
         landmasses = gpd.GeoDataFrame(geometry=[])
 
     options = pd.concat([gas_nodes, oil_nodes, ports])
+
+if config_file.get('calculate_k_best_pipeline_border_routes', False):
+    logging.info('Calculate k-best routes between pipeline border nodes')
+    border_nodes, border_routes = export_pipeline_border_routes(
+        gas_graph, gas_nodes, oil_graph, oil_nodes, path_processed_data.rstrip('/'),
+        int(config_file['number_k_best_routes']))
+    logging.info('Exported %s border nodes and %s directed pipeline routes',
+                 len(border_nodes), len(border_routes))
 
 # calculate conversion costs at each location
 logging.info('Calculate conversion costs and efficiency')

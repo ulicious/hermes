@@ -77,6 +77,7 @@ BOOLEAN_CONFIG_KEYS = [
     'high_temp_heat_available_at_start',
     'infrastructure_enforce_update_of_data',
     'infrastructure_update_only_conversion_costs_and_efficiency',
+    'calculate_k_best_pipeline_border_routes',
     'low_temp_heat_available_at_ports',
     'mid_temp_heat_available_at_ports',
     'high_temp_heat_available_at_ports',
