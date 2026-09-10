@@ -400,13 +400,18 @@ else:
 
     options = pd.concat([gas_nodes, oil_nodes, ports])
 
-if config_file.get('calculate_k_best_pipeline_border_routes', False):
+border_route_files_exist = all(os.path.exists(path_processed_data + filename) for filename in (
+    'pipeline_border_nodes.csv', 'pipeline_border_routes.csv'))
+if (config_file.get('calculate_k_best_pipeline_border_routes', False)
+        and (infrastructure_enforce_update_of_data or not border_route_files_exist)):
     logging.info('Calculate k-best routes between pipeline border nodes')
     border_nodes, border_routes = export_pipeline_border_routes(
         gas_graph, gas_nodes, oil_graph, oil_nodes, path_processed_data.rstrip('/'),
         int(config_file['number_k_best_routes']))
     logging.info('Exported %s border nodes and %s directed pipeline routes',
                  len(border_nodes), len(border_routes))
+elif config_file.get('calculate_k_best_pipeline_border_routes', False):
+    logging.info('Reuse existing k-best pipeline border routes')
 
 # calculate conversion costs at each location
 logging.info('Calculate conversion costs and efficiency')
