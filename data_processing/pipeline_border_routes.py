@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import json
 from itertools import combinations
-from multiprocessing import get_context
 
 import networkx as nx
 import pandas as pd
+from joblib import Parallel, delayed
 from tqdm import tqdm
 
 BORDER_NODE_COLUMNS = [
@@ -18,12 +18,6 @@ ROUTE_COLUMNS = [
     'origin_node', 'destination_node', 'rank', 'distance_m', 'nodes_json',
     'edge_ids_json', 'countries_json', 'bidirectional',
 ]
-_WORKER_GRAPHS = {}
-_WORKER_COUNTRIES = {}
-_WORKER_PIPELINE_TYPE = ''
-_WORKER_K = 1
-
-
 def _country(value):
     if pd.isna(value):
         return None
@@ -115,21 +109,6 @@ def _calculate_pair(graph, node_countries, pipeline_type, graph_id, origin,
     return graph_id, route_rows
 
 
-def _initialize_worker(graphs, node_countries, pipeline_type, number_k_best_routes):
-    global _WORKER_GRAPHS, _WORKER_COUNTRIES, _WORKER_PIPELINE_TYPE, _WORKER_K
-    _WORKER_GRAPHS = graphs
-    _WORKER_COUNTRIES = node_countries
-    _WORKER_PIPELINE_TYPE = pipeline_type
-    _WORKER_K = number_k_best_routes
-
-
-def _calculate_pair_worker(task):
-    graph_id, origin, destination, origin_country, destination_country = task
-    return _calculate_pair(
-        _WORKER_GRAPHS[graph_id], _WORKER_COUNTRIES, _WORKER_PIPELINE_TYPE,
-        graph_id, origin, destination, origin_country, destination_country,
-        _WORKER_K)
-
 
 def calculate_pipeline_border_routes(network_graph_data, nodes, pipeline_type,
                                       number_k_best_routes, number_workers=1,
@@ -168,34 +147,29 @@ def calculate_pipeline_border_routes(network_graph_data, nodes, pipeline_type,
 
     route_rows, complete_by_graph = [], {graph_id: 0 for graph_id in graphs}
     workers = min(int(number_workers), len(tasks)) if tasks else 1
+    def calculate_task(task):
+        graph_id, origin, destination, origin_country, destination_country = task
+        return _calculate_pair(
+            graphs[graph_id], node_countries, pipeline_type, graph_id, origin,
+            destination, origin_country, destination_country,
+            number_k_best_routes)
+
+    iterator = tqdm(tasks, total=len(tasks), desc=f'{pipeline_type} border combinations',
+                    unit='combination', disable=not show_progress)
     if workers > 1:
-        # The spawn context is safe on Windows.  Graphs are supplied once per
-        # worker through the initializer rather than once per combination.
-        context = get_context('spawn')
-        with context.Pool(
-                processes=workers, initializer=_initialize_worker,
-                initargs=(graphs, node_countries, pipeline_type, number_k_best_routes)) as pool:
-            iterator = tqdm(
-                pool.imap_unordered(_calculate_pair_worker, tasks, chunksize=1),
-                total=len(tasks), desc=f'{pipeline_type} border combinations',
-                unit='combination', disable=not show_progress)
-            for graph_id, rows in iterator:
-                route_rows.extend(rows)
-                complete_by_graph[graph_id] += 1
-                if show_progress and complete_by_graph[graph_id] == total_by_graph[graph_id]:
-                    print(f'[{pipeline_type}] Network {graph_id}: completed', flush=True)
+        # Match the processing functions used elsewhere in this project. joblib
+        # is safe when this function is called from a top-level workflow script
+        # on both Linux and Windows.
+        calculated_routes = Parallel(n_jobs=workers)(
+            delayed(calculate_task)(task) for task in iterator)
     else:
-        iterator = tqdm(tasks, total=len(tasks), desc=f'{pipeline_type} border combinations',
-                        unit='combination', disable=not show_progress)
-        for graph_id, origin, destination, origin_country, destination_country in iterator:
-            _, rows = _calculate_pair(
-                graphs[graph_id], node_countries, pipeline_type, graph_id, origin,
-                destination, origin_country, destination_country,
-                number_k_best_routes)
-            route_rows.extend(rows)
-            complete_by_graph[graph_id] += 1
-            if show_progress and complete_by_graph[graph_id] == total_by_graph[graph_id]:
-                print(f'[{pipeline_type}] Network {graph_id}: completed', flush=True)
+        calculated_routes = [calculate_task(task) for task in iterator]
+
+    for graph_id, rows in calculated_routes:
+        route_rows.extend(rows)
+        complete_by_graph[graph_id] += 1
+        if show_progress and complete_by_graph[graph_id] == total_by_graph[graph_id]:
+            print(f'[{pipeline_type}] Network {graph_id}: completed', flush=True)
 
     border_nodes = pd.DataFrame(border_rows, columns=BORDER_NODE_COLUMNS)
     routes = pd.DataFrame(route_rows, columns=ROUTE_COLUMNS)
