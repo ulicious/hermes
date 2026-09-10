@@ -407,7 +407,8 @@ if (config_file.get('calculate_k_best_pipeline_border_routes', False)
     logging.info('Calculate k-best routes between pipeline border nodes')
     border_nodes, border_routes = export_pipeline_border_routes(
         gas_graph, gas_nodes, oil_graph, oil_nodes, path_processed_data.rstrip('/'),
-        int(config_file['number_k_best_routes']), show_progress=True)
+        int(config_file['number_k_best_routes']), number_workers=max(1, num_cores),
+        show_progress=True)
     logging.info('Exported %s border nodes and %s directed pipeline routes',
                  len(border_nodes), len(border_routes))
 elif config_file.get('calculate_k_best_pipeline_border_routes', False):

@@ -54,7 +54,7 @@ mid_temp_heat_available_at_pipelines: False
 high_temp_heat_available_at_pipelines: False
 minimal_distance_between_pipeline_connection_points: 50000  # [m] max distance between to connection points in pipeline (will be overwritten if minimal_example is applied)
 gap_distance: 20000  # [m] If distance between two networks is below gap_distance, then networks will be connected
-calculate_k_best_pipeline_border_routes: False  # export k shortest internal routes between country-border pipeline nodes
+calculate_k_best_pipeline_border_routes: False  # export k shortest cross-country routes between pipeline border nodes
 
 ## DESTINATION
 # algorithm assumptions and settings + parameters and assumptions for start
