@@ -68,6 +68,11 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
         = calc_distance_list_to_single(complete_infrastructure['latitude'], complete_infrastructure['longitude'],
                                        starting_location.y, starting_location.x)
 
+    start_polygon_nodes = complete_infrastructure.index.intersection(
+        data['start'].get('polygon_nodes', ())) if configuration.get(
+            'zero_distance_to_infrastructure_in_start_polygon', False) else pd.Index([])
+    complete_infrastructure.loc[start_polygon_nodes, 'distance_to_start'] = 0
+
     if isinstance(destination_location, Point):
         complete_infrastructure['distance_to_destination'] \
             = calc_distance_list_to_single(complete_infrastructure['latitude'], complete_infrastructure['longitude'],
@@ -174,6 +179,9 @@ def check_if_benchmark_possible(data, configuration, complete_infrastructure):
         complete_infrastructure.loc[distance_to_start, 'reachable_from_start'] = reachable_from_start
         complete_infrastructure.loc[distance_to_destination, 'reachable_from_destination'] = reachable_from_destination
 
+    # No approach transport is needed, including across disconnected polygon parts.
+    # Apply after land checks and independently of the 1000-candidate cutoff.
+    complete_infrastructure.loc[start_polygon_nodes, 'reachable_from_start'] = True
     return complete_infrastructure
 
 
@@ -289,6 +297,11 @@ def find_shipping_benchmark_solution(data, configuration, all_options, shipping_
 
         shipping_options.loc[valid_options, 'pipeline_liquid_transportation_costs_from_start'] \
             = shipping_options.loc[valid_options, 'distance_to_start'] / 1000 * transportation_costs['New_Pipeline_Liquid'] * no_road_multiplier
+
+    if configuration.get('zero_distance_to_infrastructure_in_start_polygon', False):
+        free_start_ports = shipping_options.index.intersection(
+            data['start'].get('polygon_nodes', ()))
+        shipping_options.loc[free_start_ports, 'road_transportation_costs_from_start'] = 0
 
     # calculate costs of land transport from second port to destination
     shipping_options['road_transportation_costs_to_destination'] = math.inf
@@ -1007,7 +1020,14 @@ def find_pipeline_solution(data, configuration, complete_infrastructure, pipelin
     if distance_start_to_pipeline <= in_tolerance_distance:
         distance_start_to_pipeline = 0
 
-    if (distance_start_to_pipeline * no_road_multiplier <= max_length_new_segment) & build_new_infrastructure:
+    if (configuration.get('zero_distance_to_infrastructure_in_start_polygon', False)
+            and node_start_g_start in data['start'].get('polygon_nodes', ())):
+        min_value = pipeline_commodity.get_production_costs()
+        costs.extend([min_value, 0])
+        used_transport_means.append('Road')
+        used_commodities.append(pipeline_commodity.get_name())
+
+    elif (distance_start_to_pipeline * no_road_multiplier <= max_length_new_segment) & build_new_infrastructure:
         min_value = pipeline_commodity.get_production_costs()
         costs.append(min_value)
 

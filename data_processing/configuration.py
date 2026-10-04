@@ -63,6 +63,7 @@ LEGACY_CONFIG_FILENAMES = [
 ]
 
 BOOLEAN_CONFIG_KEYS = [
+    'zero_distance_to_infrastructure_in_start_polygon',
     'use_minimal_example',
     'use_low_storage',
     'use_low_memory',

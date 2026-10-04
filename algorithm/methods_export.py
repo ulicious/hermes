@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 
+from algorithm.methods_start import apply_start_polygon_distances
 from algorithm.methods_conversion import calculate_conversion_costs, calculate_conversion_costs_increase
 from algorithm.methods_geographic import calc_distance_list_to_list
 from algorithm.object_commodity import create_commodity_objects
@@ -61,18 +62,25 @@ def materialize_export_branches(branches, parent_branches):
         starting_latitudes.append(parent['starting_latitude'])
         starting_longitudes.append(parent['starting_longitude'])
         previous_commodities.append(parent['current_commodity'])
+    starting_commodities = []
+    for _, branch in result.iterrows():
+        parent = parent_branches.loc[branch['previous_branch']]
+        starting_commodities.append(parent.get('starting_commodity',
+                                                parent['current_commodity']))
     result['_route_step'] = route_steps
     result['_visited_nodes'] = visited_nodes
     result['_visited_infrastructure'] = visited_infrastructure
     result['starting_latitude'] = starting_latitudes
     result['starting_longitude'] = starting_longitudes
     result['previous_commodity'] = previous_commodities
+    result['starting_commodity'] = starting_commodities
     return result
 
 
 def _collect_k_best_candidate(candidates, candidate, number_k_best_routes):
-    """Keep only k cheapest not-yet-materialized candidates per node/commodity."""
-    state = (str(candidate['current_node']), str(candidate['current_commodity']))
+    """Keep k cheapest candidates per node, target commodity and start commodity."""
+    state = (str(candidate['current_node']), str(candidate['current_commodity']),
+             str(candidate.get('starting_commodity', candidate['current_commodity'])))
     state_candidates = candidates.setdefault(state, [])
     if len(state_candidates) < number_k_best_routes:
         state_candidates.append(candidate)
@@ -104,7 +112,7 @@ def _route_contains_invalid(route_step, invalid_branches):
 
 def apply_export_k_best(branches, k_best_routes, invalid_branches,
                         number_k_best_routes):
-    """Keep k cheapest branches per node/commodity and invalidate descendants."""
+    """Keep k cheapest branches per node/commodity/start commodity and invalidate descendants."""
     if branches.empty:
         return branches.copy(), 0, k_best_routes, invalid_branches
     if number_k_best_routes < 1:
@@ -119,7 +127,8 @@ def apply_export_k_best(branches, k_best_routes, invalid_branches,
         if _route_contains_invalid(branch['_route_step'].parent, invalid):
             invalid.add(branch_index)
             continue
-        state = (str(branch['current_node']), str(branch['current_commodity']))
+        state = (str(branch['current_node']), str(branch['current_commodity']),
+                 str(branch.get('starting_commodity', branch['current_commodity'])))
         ranking = [entry for entry in k_best_routes.get(state, [])
                    if not _route_contains_invalid(entry['route_step'], invalid)]
         existing = next((entry for entry in ranking
@@ -219,6 +228,7 @@ def create_export_branches_at_start(data):
             'longitude': location.x,
             'previous_branch': None,
             'current_commodity': name,
+            'starting_commodity': name,
             'current_commodity_object': commodity,
             'current_total_costs': production_costs,
             'current_transportation_costs': 0,
@@ -315,7 +325,8 @@ def attach_infrastructure_countries(complete_infrastructure, world, target_count
 
 
 def process_export_out_tolerance_branches(domestic_infrastructure, branches, configuration,
-                                          number_k_best_routes):
+                                          number_k_best_routes, *, iteration=None,
+                                          start_polygon_nodes=()):
     """Mask visited networks and distances before building road/pipeline candidates."""
     if domestic_infrastructure.empty or branches.empty:
         return pd.DataFrame()
@@ -350,6 +361,9 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches, con
             values = np.asarray(calc_distance_list_to_list(
                 targets['latitude'], targets['longitude'],
                 origin_block['latitude'], origin_block['longitude']))
+            values = apply_start_polygon_distances(
+                values, targets.index, origin_block['current_node'], configuration,
+                start_polygon_nodes, iteration)
             origin_lookup = {node: position for position, node in
                              enumerate(origin_block['current_node'])}
             # Range masks are evaluated for entire distance blocks in NumPy.
@@ -372,11 +386,16 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches, con
                 visited_positions = targets.index.get_indexer(
                     list(branch['_visited_nodes'] | {branch['current_node']}))
                 allowed[visited_positions[visited_positions >= 0]] = False
+                free_start_targets = (allowed & targets.index.isin(start_polygon_nodes)
+                                      if iteration == 0 and branch['current_node'] == 'Start'
+                                      and configuration.get('zero_distance_to_infrastructure_in_start_polygon', False)
+                                      else np.zeros(len(targets), dtype=bool))
                 masks = np.column_stack([
                     range_masks[mode_position][origin_position] & allowed
                     if commodity.get_transportation_options_specific_mean_of_transport(mode)
                     else np.zeros(len(targets), dtype=bool)
                     for mode_position, mode in enumerate(transport_means)])
+                masks[:, 0] |= free_start_targets
                 target_positions, mode_positions = np.nonzero(masks)
                 costs = {
                     mode: commodity.get_transportation_costs_specific_mean_of_transport(mode)
@@ -387,7 +406,7 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches, con
                     node = targets.index[row]
                     direct_distance = float(values[origin_position, row])
                     transport_mean = transport_means[mode_position]
-                    specific_costs = costs[transport_mean]
+                    specific_costs = costs.get(transport_mean, 0.0)
                     routed_distance = (0 if direct_distance <= configuration['tolerance_distance']
                                        else direct_distance * configuration['no_road_multiplier'])
                     transport_costs = routed_distance * specific_costs / 1000
@@ -598,7 +617,8 @@ def update_export_node_results(node_results, branches, target_commodities,
         & branches['current_node'].astype(str).isin(nodes)
     ]
     for _, branch in relevant.iterrows():
-        key = (str(branch['current_node']), str(branch['current_commodity']))
+        key = (str(branch['current_node']), str(branch['current_commodity']),
+               str(branch.get('starting_commodity', branch['current_commodity'])))
         costs = branch['current_total_costs']
         previous = node_results.get(key)
         if previous is None or costs < previous['current_total_costs']:
@@ -615,33 +635,35 @@ def export_node_results_snapshot(node_results, path_results, location_index, ite
     if k_best_routes is not None:
         invalid = invalid_branches if invalid_branches is not None else set()
         branch_ids = {}
-        for node, commodity in sorted(node_results):
+        for node, commodity, starting_commodity in sorted(node_results):
             ranking = sorted(
-                (entry for entry in k_best_routes.get((node, commodity), [])
+                (entry for entry in k_best_routes.get((node, commodity, starting_commodity), [])
                  if not _route_contains_invalid(entry['route_step'], invalid)),
                 key=lambda entry: (entry['current_total_costs'], entry['branch_index']))
-            branch_ids[(node, commodity)] = json.dumps(
+            branch_ids[(node, commodity, starting_commodity)] = json.dumps(
                 [str(entry['branch_index']) for entry in ranking])
 
     rows = [{
         'current_node': node,
         'current_commodity': commodity,
+        'starting_commodity': starting_commodity,
         'current_total_costs': result['current_total_costs'],
         'total_efficiency': result['total_efficiency'],
-    } for (node, commodity), result in node_results.items()]
+    } for (node, commodity, starting_commodity), result in node_results.items()]
     snapshot = pd.DataFrame(rows, columns=[
-        'current_node', 'current_commodity', 'current_total_costs',
+        'current_node', 'current_commodity', 'starting_commodity', 'current_total_costs',
         'total_efficiency'])
     if k_best_routes is not None:
         snapshot['k_best_branch_ids'] = [
-            branch_ids[(row['current_node'], row['current_commodity'])] for row in rows]
+            branch_ids[(row['current_node'], row['current_commodity'],
+                        row['starting_commodity'])] for row in rows]
     if not snapshot.empty:
         snapshot.sort_values(
             ['current_total_costs'], inplace=True, kind='stable')
         snapshot.drop_duplicates(
-            subset=['current_node', 'current_commodity'], keep='first', inplace=True)
+            subset=['current_node', 'current_commodity', 'starting_commodity'], keep='first', inplace=True)
         snapshot.sort_values(
-            ['current_node', 'current_commodity'], inplace=True, kind='stable')
+            ['current_node', 'current_commodity', 'starting_commodity'], inplace=True, kind='stable')
     return export_branch_snapshot(
         snapshot, path_results, location_index, iteration, stage)
 
@@ -652,9 +674,9 @@ def export_k_best_routes_snapshot(node_results, k_best_routes, invalid_branches,
     """Export complete histories for retained routes reaching final node states."""
     invalid = invalid_branches or set()
     rows = []
-    for node, commodity in sorted(node_results):
+    for node, commodity, starting_commodity in sorted(node_results):
         ranking = sorted(
-            (entry for entry in k_best_routes.get((node, commodity), [])
+            (entry for entry in k_best_routes.get((node, commodity, starting_commodity), [])
              if not _route_contains_invalid(entry['route_step'], invalid)),
             key=lambda entry: (entry['current_total_costs'], entry['branch_index']))
         for entry in ranking:
@@ -662,6 +684,7 @@ def export_k_best_routes_snapshot(node_results, k_best_routes, invalid_branches,
                 'branch_index': entry['branch_index'],
                 'current_node': node,
                 'current_commodity': commodity,
+                'starting_commodity': starting_commodity,
                 'current_total_costs': entry['current_total_costs'],
                 '_route_step': entry['route_step'],
             })

@@ -235,7 +235,9 @@ def prepare_data_and_configuration_dictionary(config_file):
     data = process_network_data(data, 'Pipeline_Liquid', pipeline_liquid_node_locations, pipeline_liquid_graphs)
 
     # get assumptions
-    configuration = {'destination_type': config_file['destination_type'],
+    configuration = {'zero_distance_to_infrastructure_in_start_polygon': config_file.get(
+                         'zero_distance_to_infrastructure_in_start_polygon', False),
+                     'destination_type': config_file['destination_type'],
                      'tolerance_distance': config_file['tolerance_distance'],
                      'to_final_destination_tolerance': config_file['to_final_destination_tolerance'],
                      'no_road_multiplier': config_file['no_road_multiplier'],

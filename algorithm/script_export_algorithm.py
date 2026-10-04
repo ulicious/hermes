@@ -8,6 +8,7 @@ import pandas as pd
 from pandas.errors import PerformanceWarning
 from shapely.geometry import Point
 
+from algorithm.methods_start import get_start_polygon_nodes
 from algorithm.methods_export import (apply_export_conversion,
                                       apply_export_k_best,
                                       attach_infrastructure_countries,
@@ -104,7 +105,8 @@ def _remove_intermediate_export_snapshots(path_results, location_index):
 
 
 def _target_coverage(node_results, infrastructure_nodes, target_commodities):
-    covered = {(str(node), str(commodity)) for node, commodity in node_results}
+    covered = {(str(node), str(commodity))
+               for node, commodity, _starting_commodity in node_results}
     missing = {
         commodity: [str(node) for node in infrastructure_nodes
                     if (str(node), str(commodity)) not in covered]
@@ -127,6 +129,9 @@ def _prepare_location(location_index, location_data, data, config_file):
     complete_infrastructure = get_complete_export_infrastructure(data)
     complete_infrastructure = attach_infrastructure_countries(
         complete_infrastructure, data.get('world'), target_country=start_country)
+
+    data['start']['polygon_nodes'] = get_start_polygon_nodes(
+        location_data, complete_infrastructure, config_file)
 
     technology_conversion, _ = load_technology_data(config_file)
     # These shared preparation methods emit a CRS warning for the one-row start
@@ -255,7 +260,8 @@ def run_export_algorithm(args):
                                 method='process_export_out_tolerance_branches', event='runtime'):
             approach_options = process_export_out_tolerance_branches(
                 complete_infrastructure, approach_inputs, configuration,
-                number_k_best_routes)
+                number_k_best_routes, iteration=iteration,
+                start_polygon_nodes=data['start']['polygon_nodes'])
         with tracker.time_block(iteration=iteration, phase='routing',
                                 method='process_export_zero_distance_branches', event='runtime'):
             zero_options = process_export_zero_distance_branches(

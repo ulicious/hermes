@@ -29,6 +29,7 @@ start_location_minimal_longitude: -180
 start_location_maximal_longitude: 180
 start_location_countries: {}  # dictionary with country: list of states (e.g. {'Germany: []} if all Germany. Used if start_location_area_type = 'countries'
 location_creation_type: 'uniform'  # uniformly distributed within boundaries or randomly distributed
+zero_distance_to_infrastructure_in_start_polygon: False  # only in iteration 0: infrastructure inside/on the start polygon has zero approach distance
 use_voronoi_cells: True  # based on locations, onshore area is divided into voronoi cells
 weight_hydrogen_costs_by_quantity: True  # if True then the value of the voronoi cell is based on the by quantity weighted costs per era 5 cell
 each_country_at_least_one_location: False  # makes sure that each country is represented at least by one start location

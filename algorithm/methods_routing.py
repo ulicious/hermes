@@ -10,6 +10,7 @@ import networkx as nx
 
 from shapely.geometry import Point
 
+from algorithm.methods_start import apply_start_polygon_distances
 from algorithm.methods_geographic import calc_distance_list_to_single, calc_distance_list_to_list
 from algorithm.methods_cost_approximations import calculate_cheapest_option_to_closest_infrastructure, \
     calculate_cheapest_option_to_final_destination
@@ -679,7 +680,9 @@ def process_out_tolerance_branches(complete_infrastructure, branches, configurat
         branches_to_keep_road = []
         branches_to_keep_new = []
 
-        distance_values = np.asarray(distances).transpose()
+        distance_values = apply_start_polygon_distances(
+            distances, reduced_infrastructure_index, branches['current_node'],
+            configuration, data['start'].get('polygon_nodes', ()), iteration).transpose()
         reduced_infrastructure_index = np.asarray(reduced_infrastructure_index, dtype=object)
         road_values = distance_values.copy()
         road_mask = np.zeros(distance_values.shape, dtype=bool)

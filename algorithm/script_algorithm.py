@@ -7,6 +7,7 @@ import pandas as pd
 
 from shapely.geometry import Point
 
+from algorithm.methods_start import get_start_polygon_nodes
 from algorithm.methods_benchmark import check_if_benchmark_possible
 from algorithm.methods_routing import process_out_tolerance_branches, process_in_tolerance_branches_high_memory,\
     process_in_tolerance_branches_low_memory, get_complete_infrastructure, create_branches_from_in_tolerance_locations
@@ -315,6 +316,9 @@ def run_algorithm(args):
             return None
 
         data['destination']['infrastructure'] = infrastructure_at_destination
+
+    data['start']['polygon_nodes'] = get_start_polygon_nodes(
+        location_data, complete_infrastructure, configuration)
 
     complete_infrastructure = check_if_benchmark_possible(data, configuration, complete_infrastructure)
 
