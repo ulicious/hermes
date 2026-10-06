@@ -545,7 +545,8 @@ def process_export_infrastructure_branches(data, branches, complete_infrastructu
     return _candidate_frame(results)
 
 
-def export_branch_snapshot(branches, path_results, location_index, iteration, stage):
+def export_branch_snapshot(branches, path_results, location_index, iteration, stage,
+                           export_columns=None):
     """Atomically stream a complete snapshot reconstructed from parent chains."""
     folder = os.path.join(path_results, 'export_infrastructure_branches', str(location_index))
     os.makedirs(folder, exist_ok=True)
@@ -555,7 +556,10 @@ def export_branch_snapshot(branches, path_results, location_index, iteration, st
     os.close(handle)
     try:
         if '_route_step' not in branches.columns:
-            branches.to_csv(temporary, index=False)
+            snapshot = branches
+            if export_columns is not None:
+                snapshot = snapshot.reindex(columns=export_columns)
+            snapshot.to_csv(temporary, index=False)
         else:
             first_chunk = True
             chunk_size = 10000
@@ -569,6 +573,8 @@ def export_branch_snapshot(branches, path_results, location_index, iteration, st
                                     '_visited_infrastructure',
                                     'current_commodity_object'],
                            errors='ignore', inplace=True)
+                if export_columns is not None:
+                    chunk = chunk.reindex(columns=export_columns)
                 chunk.to_csv(temporary, mode='w' if first_chunk else 'a',
                              header=first_chunk, index=False)
                 first_chunk = False
@@ -688,8 +694,13 @@ def export_k_best_routes_snapshot(node_results, k_best_routes, invalid_branches,
                 'current_total_costs': entry['current_total_costs'],
                 '_route_step': entry['route_step'],
             })
+    export_columns = [
+        'branch_index', 'current_total_costs', 'taken_routes',
+        'current_node', 'current_commodity', 'starting_commodity',
+    ]
     return export_branch_snapshot(
-        pd.DataFrame(rows), path_results, location_index, iteration, stage)
+        pd.DataFrame(rows), path_results, location_index, iteration, stage,
+        export_columns=export_columns)
 
 
 def apply_export_conversion(branches, data, branch_number):
