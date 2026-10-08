@@ -51,6 +51,7 @@ def materialize_export_branches(branches, parent_branches):
     starting_latitudes = []
     starting_longitudes = []
     previous_commodities = []
+    starting_commodities = []
     for _, branch in result.iterrows():
         parent = parent_branches.loc[branch['previous_branch']]
         route_steps.append(_make_export_route_step(branch, parent['_route_step']))
@@ -62,11 +63,7 @@ def materialize_export_branches(branches, parent_branches):
         starting_latitudes.append(parent['starting_latitude'])
         starting_longitudes.append(parent['starting_longitude'])
         previous_commodities.append(parent['current_commodity'])
-    starting_commodities = []
-    for _, branch in result.iterrows():
-        parent = parent_branches.loc[branch['previous_branch']]
-        starting_commodities.append(parent.get('starting_commodity',
-                                                parent['current_commodity']))
+        starting_commodities.append(parent['starting_commodity'])
     result['_route_step'] = route_steps
     result['_visited_nodes'] = visited_nodes
     result['_visited_infrastructure'] = visited_infrastructure
@@ -80,7 +77,7 @@ def materialize_export_branches(branches, parent_branches):
 def _collect_k_best_candidate(candidates, candidate, number_k_best_routes):
     """Keep k cheapest candidates per node, target commodity and start commodity."""
     state = (str(candidate['current_node']), str(candidate['current_commodity']),
-             str(candidate.get('starting_commodity', candidate['current_commodity'])))
+             str(candidate['starting_commodity']))
     state_candidates = candidates.setdefault(state, [])
     if len(state_candidates) < number_k_best_routes:
         state_candidates.append(candidate)
@@ -128,7 +125,7 @@ def apply_export_k_best(branches, k_best_routes, invalid_branches,
             invalid.add(branch_index)
             continue
         state = (str(branch['current_node']), str(branch['current_commodity']),
-                 str(branch.get('starting_commodity', branch['current_commodity'])))
+                 str(branch['starting_commodity']))
         ranking = [entry for entry in k_best_routes.get(state, [])
                    if not _route_contains_invalid(entry['route_step'], invalid)]
         existing = next((entry for entry in ranking
@@ -417,6 +414,7 @@ def process_export_out_tolerance_branches(domestic_infrastructure, branches, con
                         'current_transport_mean': transport_mean,
                         'current_infrastructure': None,
                         'current_commodity': branch['current_commodity'],
+                        'starting_commodity': branch['starting_commodity'],
                         'current_commodity_object': commodity,
                         'current_transportation_costs': transport_costs,
                         'current_total_costs': branch['current_total_costs'] + transport_costs,
@@ -475,6 +473,7 @@ def process_export_zero_distance_branches(data, branches, complete_infrastructur
                 'current_transport_mean': 'Road',
                 'current_infrastructure': None,
                 'current_commodity': branch['current_commodity'],
+                'starting_commodity': branch['starting_commodity'],
                 'current_commodity_object': branch['current_commodity_object'],
                 'current_transportation_costs': 0,
                 'current_total_costs': branch['current_total_costs'],
@@ -533,6 +532,7 @@ def process_export_infrastructure_branches(data, branches, complete_infrastructu
                 'current_transport_mean': transport_mean,
                 'current_infrastructure': infrastructure_id,
                 'current_commodity': branch['current_commodity'],
+                'starting_commodity': branch['starting_commodity'],
                 'current_commodity_object': commodity,
                 'current_transportation_costs': transport_costs,
                 'current_total_costs': total_costs,
@@ -624,7 +624,7 @@ def update_export_node_results(node_results, branches, target_commodities,
     ]
     for _, branch in relevant.iterrows():
         key = (str(branch['current_node']), str(branch['current_commodity']),
-               str(branch.get('starting_commodity', branch['current_commodity'])))
+               str(branch['starting_commodity']))
         costs = branch['current_total_costs']
         previous = node_results.get(key)
         if previous is None or costs < previous['current_total_costs']:

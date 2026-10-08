@@ -104,15 +104,18 @@ def _remove_intermediate_export_snapshots(path_results, location_index):
             os.remove(os.path.join(folder, filename))
 
 
-def _target_coverage(node_results, infrastructure_nodes, target_commodities):
-    covered = {(str(node), str(commodity))
-               for node, commodity, _starting_commodity in node_results}
+def _target_coverage(node_results, infrastructure_nodes, target_commodities,
+                     starting_commodities):
+    covered = {(str(node), str(commodity), str(starting_commodity))
+               for node, commodity, starting_commodity in node_results}
     missing = {
-        commodity: [str(node) for node in infrastructure_nodes
-                    if (str(node), str(commodity)) not in covered]
+        (starting_commodity, commodity): [
+            str(node) for node in infrastructure_nodes
+            if (str(node), str(commodity), str(starting_commodity)) not in covered]
+        for starting_commodity in starting_commodities
         for commodity in target_commodities
     }
-    return {commodity: nodes for commodity, nodes in missing.items() if nodes}
+    return {combination: nodes for combination, nodes in missing.items() if nodes}
 
 
 def _prepare_location(location_index, location_data, data, config_file):
@@ -159,7 +162,7 @@ def _prepare_location(location_index, location_data, data, config_file):
 
 
 def run_export_algorithm(args):
-    """Enumerate the k cheapest domestic routes per node and commodity."""
+    """Enumerate k cheapest domestic routes per node, end and start commodity."""
     location_index, location_data, common_data, config_file, configuration = args
     number_k_best_routes = int(config_file.get('number_k_best_routes', 10))
     export_intermediate_branches = bool(config_file.get(
@@ -190,6 +193,7 @@ def run_export_algorithm(args):
     finite_start_costs = pd.to_numeric(
         branches['current_total_costs'], errors='coerce').map(math.isfinite)
     branches = branches.loc[finite_start_costs].copy()
+    starting_commodities = branches['starting_commodity'].unique().tolist()
     if branches.empty:
         export_node_results_snapshot(
             {}, configuration['path_results'], location_index, 0,
@@ -331,18 +335,19 @@ def run_export_algorithm(args):
             configuration['path_results'], location_index)
     missing_targets = _target_coverage(
         node_results, complete_infrastructure.index,
-        data['commodities']['target_commodities'])
+        data['commodities']['target_commodities'], starting_commodities)
     expected_states = (len(complete_infrastructure)
-                       * len(data['commodities']['target_commodities']))
+                       * len(data['commodities']['target_commodities'])
+                       * len(starting_commodities))
     missing_states = sum(len(nodes) for nodes in missing_targets.values())
     print(str(location_index) + ': Target result coverage: '
           + str(expected_states - missing_states) + '/' + str(expected_states)
-          + ' node-commodity combinations')
+          + ' node-start-end-commodity combinations')
     if missing_targets:
         print(str(location_index) + ': Missing target combinations '
               + '(technically unreachable unless routing coverage is incomplete): '
-              + ', '.join(commodity + '=' + str(len(nodes))
-                          for commodity, nodes in missing_targets.items()))
+              + ', '.join(starting_commodity + '->' + commodity + '=' + str(len(nodes))
+                          for (starting_commodity, commodity), nodes in missing_targets.items()))
     _write_complete_marker(configuration['path_results'], location_index)
     tracker.event(phase='location', method='run_export_algorithm', event='end',
                   runtime_s=time.time() - started,
@@ -350,9 +355,9 @@ def run_export_algorithm(args):
                            'target_states_expected': expected_states,
                            'target_states_covered': expected_states - missing_states,
                            'target_states_missing': missing_states,
-                           'missing_target_states_by_commodity': {
-                               commodity: len(nodes)
-                               for commodity, nodes in missing_targets.items()
+                           'missing_target_states_by_start_end_commodity': {
+                               starting_commodity + '->' + commodity: len(nodes)
+                               for (starting_commodity, commodity), nodes in missing_targets.items()
                            }})
     print(str(location_index) + ': finished export enumeration in '
           + str(math.ceil((time.time() - started) / 60)) + ' minutes.')

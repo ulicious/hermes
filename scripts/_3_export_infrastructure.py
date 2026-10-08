@@ -48,7 +48,7 @@ if __name__ == '__main__':
     # location_data = location_data.loc[[5869], :]
 
     print('Start export-infrastructure branch enumeration')
-    print('Retained routes per node and commodity: '
+    print('Retained routes per node, start commodity and end commodity: '
           + str(int(config_file.get('number_k_best_routes', 10))))
     started = time.time()
     arguments = zip(np.random.default_rng(42).permutation(location_data.index),
