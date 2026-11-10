@@ -24,7 +24,10 @@ while :doc:`parameters` documents the available configuration.
 
 Citation
 ========
-Soon
+Langenmayr, U., Schuler, J., Slednev, V. & Fichtner, W.
+Mapping future energy journeys through modeling the global transport of
+synthetic energy carriers. *Nat. Commun.* **17**, 11500 (2026).
+https://doi.org/10.1038/s41467-026-78710-7
 
 Big thanks to:
 ==============
