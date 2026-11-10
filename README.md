@@ -176,7 +176,7 @@ The optional MIP workflow additionally requires generated MIP data and a compati
 
 ## Citation
 
-Citation information is not yet available.
+Langenmayr, U., Schuler, J., Slednev, V. & Fichtner, W. Mapping future energy journeys through modeling the global transport of synthetic energy carriers. *Nat. Commun.* **17**, 11500 (2026). [https://doi.org/10.1038/s41467-026-78710-7](https://doi.org/10.1038/s41467-026-78710-7)
 
 ## Acknowledgements
 
