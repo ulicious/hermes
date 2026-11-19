@@ -24,6 +24,16 @@ from data_processing.configuration import (
 
 time_start = time.time()
 
+
+def _get_num_cores(config_file):
+    if config_file['use_low_memory']:
+        return 1
+
+    requested = config_file['number_cores']
+    available = max(1, multiprocessing.cpu_count() - 1)
+    return available if requested == 'max' else max(1, min(requested, available))
+
+
 # script to process results
 # load configuration file
 config_file = load_algorithm_configuration()
@@ -318,7 +328,7 @@ for folder in results_to_process:
         data.loc[affected_index, 'commodity'] = '> ' + str(i + 50) + ' € MWh$^{-1}$'
 
         create_weighted_routing_data_script(data, complete_infrastructure, infrastructure_data, path_processed_results,
-                                            folder, config_file['number_cores'], column_to_sort='commodity')
+                                            folder, _get_num_cores(config_file), column_to_sort='commodity')
 
 
 if time.time() - time_start < 60:

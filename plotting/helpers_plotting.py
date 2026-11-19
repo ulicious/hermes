@@ -3,6 +3,7 @@ import math
 import itertools
 import ast
 import os
+import multiprocessing
 
 import pandas as pd
 import geopandas as gpd
@@ -230,6 +231,11 @@ def get_complete_infrastructure(data, final_destination):
 
 def create_weighted_routing_data_script(data, complete_infrastructure, infrastructure_data, path_processed_results,
                                         folder, number_workers, column_to_sort=None):
+    available_workers = max(1, multiprocessing.cpu_count() - 1)
+    if number_workers == 'max':
+        number_workers = available_workers
+    else:
+        number_workers = max(1, min(number_workers, available_workers))
 
     if column_to_sort is None:
 
