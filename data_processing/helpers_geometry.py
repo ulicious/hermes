@@ -30,6 +30,13 @@ def _unique_preserve_order(values):
     return list(dict.fromkeys(values))
 
 
+def _largest_landmass(geometry):
+    """Return the largest component of a multipart geometry."""
+    if isinstance(geometry, MultiPolygon):
+        return max(geometry.geoms, key=lambda component: component.area)
+    return geometry
+
+
 def create_rectangle(minimal_latitude, maximal_latitude, minimal_longitude, maximal_longitude):
     """Create a rectangular lon/lat polygon from latitude and longitude bounds."""
     return Polygon([Point([minimal_longitude, minimal_latitude]),
@@ -73,7 +80,6 @@ def create_country_state_polygon(country_states, world=None, states=None,
         states = _load_states()
     country_states = canonicalize_country_mapping(country_states, world)
 
-    first = True
     combined_location = None
     selected_countries = []
     selected_continents = []
@@ -86,6 +92,7 @@ def create_country_state_polygon(country_states, world=None, states=None,
         selected_countries.append(country)
         selected_continents += country_data['CONTINENT'].dropna().tolist()
 
+        country_location = None
         if country_states[country]:
             for state in sorted(country_states[country]):
                 state_data = states[states['name'] == state]
@@ -93,17 +100,18 @@ def create_country_state_polygon(country_states, world=None, states=None,
                     raise ValueError('State not found in Natural Earth data: ' + str(state))
 
                 geom = state_data['geometry'].values[0]
-                combined_location = geom if first else combined_location.union(geom)
-                first = False
+                country_location = (geom if country_location is None
+                                    else country_location.union(geom))
         else:
-            geom = country_data['geometry'].values[0]
-            combined_location = geom if first else combined_location.union(geom)
-            first = False
+            country_location = country_data['geometry'].values[0]
+
+        if use_biggest_landmass:
+            country_location = _largest_landmass(country_location)
+
+        combined_location = (country_location if combined_location is None
+                             else combined_location.union(country_location))
 
     combined_location = combined_location.buffer(0)
-
-    if use_biggest_landmass and len(country_states) == 1 and isinstance(combined_location, MultiPolygon):
-        combined_location = max(combined_location.geoms, key=lambda geom: geom.area)
 
     return {'location': combined_location,
             'countries': _unique_preserve_order(selected_countries),
